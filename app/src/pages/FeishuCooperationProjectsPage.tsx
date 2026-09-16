@@ -139,7 +139,7 @@ export function FeishuCooperationProjectsPage({
         actions={canManage ? <>
           <Button variant="secondary" icon={<Settings2 size={17} />} onClick={() => setConfigOpen(true)}>配置同步范围</Button>
           <Button variant="secondary" icon={<Plus size={17} />} onClick={openCreate}>手动添加</Button>
-          <Button icon={<RefreshCw className={syncing ? 'is-spinning' : ''} size={17} />} disabled={syncing || !typeAllowlist.length} disabledReason={!typeAllowlist.length ? '请先配置项目类型白名单。' : undefined} onClick={onSync}>{syncing ? '同步中' : '同步飞书'}</Button>
+          <Button icon={<RefreshCw className={syncing ? 'is-spinning' : ''} size={17} />} disabled={syncing || !typeAllowlist.length} disabledReason={!typeAllowlist.length ? '请先配置项目类型白名单。' : undefined} onClick={onSync}>{syncing ? '状态更新中' : '项目状态更新'}</Button>
         </> : undefined}
       />
 

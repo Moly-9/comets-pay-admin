@@ -32,7 +32,7 @@ describe('FeishuCooperationProjectsPage', () => {
     expect(html).toContain('项目发起人');
     expect(html).toContain('海外达人合作');
     expect(html).toContain('请先配置项目类型');
-    expect(html).toContain('同步飞书');
+    expect(html).toContain('项目状态更新');
     expect(html).not.toContain('全部项目状态');
     expect(html).not.toContain('<th>项目状态</th>');
     expect(html).not.toContain('data-label="项目状态"');
