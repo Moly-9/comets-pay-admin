@@ -30,8 +30,7 @@ import {
 } from '../components/InvoiceReviewWorkspace';
 import type { ContractRecord } from '../contracts';
 import {
-  currentInvoiceContractMatchReview,
-  evaluateInvoiceContractMatch,
+  resolveGeneratedInvoiceContractMatch,
 } from '../invoice/invoiceContractMatching';
 import {
   getInvoiceContractReference,
@@ -183,19 +182,19 @@ function buildReviewChecks(
       },
       {
         id: 'party',
-        label: '收款主体',
+        label: 'From',
         contractValue: model.creatorName || model.from.legalName,
         invoiceValue: model.from.legalName || '待补充',
         passed: Boolean(model.from.legalName),
-        note: 'Invoice From与项目合同Publisher一致',
+        note: 'Invoice From 与项目合同 From 一致',
       },
       {
         id: 'bill-to',
-        label: '付款主体 / Bill To',
+        label: 'Bill To',
         contractValue: model.billTo.name,
         invoiceValue: model.billTo.name,
         passed: Boolean(model.billTo.name),
-        note: '付款主体一致',
+        note: 'Bill To 一致',
       },
       {
         id: 'amount',
@@ -251,27 +250,27 @@ function buildReviewChecks(
     },
     {
       id: 'party',
-      label: '收款主体',
-      contractValue: contractPublisher || '合同 Publisher 缺失',
+      label: 'From',
+      contractValue: contractPublisher || '合同 From 缺失',
       invoiceValue: invoicePublisher || '待补充',
       passed: Boolean(contractPublisher && invoicePublisher)
         && !partyIssue
         && sameText(contractPublisher, invoicePublisher),
       note: !linkedContract
-        ? '未找到关联合同，不能通过达人名称推断合同 Publisher'
+        ? '未找到关联合同，不能通过达人名称推断合同 From'
         : partyIssue
-          ? payout.issue ?? '收款主体需复核'
+          ? payout.issue ?? 'From 需复核'
           : contractPublisher && invoicePublisher && sameText(contractPublisher, invoicePublisher)
-            ? 'Invoice From与合同Publisher一致'
-            : 'Invoice From与合同Publisher不一致',
+            ? 'Invoice From 与合同 From 一致'
+            : 'Invoice From 与合同 From 不一致',
     },
     {
       id: 'bill-to',
-      label: '付款主体 / Bill To',
+      label: 'Bill To',
       contractValue: model.billTo.name,
       invoiceValue: model.billTo.name,
       passed: Boolean(model.billTo.name),
-      note: '付款主体一致',
+      note: 'Bill To 一致',
     },
     {
       id: 'amount',
@@ -402,19 +401,10 @@ export function InvoiceDetailPage({
     : source.kind === 'project'
       ? source.provider
       : '尚未指定付款渠道';
-  const selectedContracts = useMemo(() => contracts.filter((contract) => (
-    Boolean(contract.contractId && model.contractIds?.includes(contract.contractId))
-  )), [contracts, model.contractIds]);
-  const storedContractMatchReview = generatedRecord
-    ? currentInvoiceContractMatchReview(generatedRecord)
-    : undefined;
-  const contractMatch = useMemo(() => generatedRecord
-    ? evaluateInvoiceContractMatch(
-        selectedContracts,
-        model,
-        storedContractMatchReview?.reason ?? '',
-      )
-    : null, [generatedRecord, model, selectedContracts, storedContractMatchReview?.reason]);
+  const contractMatchReadiness = useMemo(() => generatedRecord
+    ? resolveGeneratedInvoiceContractMatch(generatedRecord, contracts)
+    : null, [contracts, generatedRecord]);
+  const contractMatch = contractMatchReadiness?.match ?? null;
   const checks = useMemo<InvoiceReviewCheck[]>(() => contractMatch
     ? contractMatch.checks.map((check) => ({
         id: check.field.toLowerCase(),
@@ -428,9 +418,9 @@ export function InvoiceDetailPage({
   const passedCount = checks.filter((check) => check.passed).length;
   const allPassed = checks.length > 0 && passedCount === checks.length;
   const signedForMediaReview = hasInvoiceSignatureEvidence(payout, generatedRecord);
-  const contractMatchEnforced = Boolean(storedContractMatchReview);
+  const contractMatchEnforced = Boolean(generatedRecord);
   const mediaApprovalReady = signedForMediaReview
-    && (!contractMatchEnforced || Boolean(contractMatch?.canProceed));
+    && (!contractMatchEnforced || Boolean(contractMatchReadiness?.canProceed));
   const availableActions = invoiceReviewStatus && managementView?.tab !== 'signature'
     ? getInvoiceDetailReviewActions(invoiceReviewStatus, {
         manage: canManageInvoice,
@@ -457,7 +447,7 @@ export function InvoiceDetailPage({
     : null;
   const navigationTarget = managementView?.status === 'OA审批中'
     ? 'REQUEST'
-    : managementView?.status === '已通过'
+    : managementView?.status === '待发起请款'
       ? 'PROJECT'
       : managementView && ['付款中', '已付款'].includes(managementView.status)
         ? 'PAYMENT'
@@ -601,6 +591,12 @@ export function InvoiceDetailPage({
               ? '查看付款进度'
               : canExecutePayout ? '处理付款' : '查看付款详情'
         : '';
+  const showNavigationAction = Boolean(navigationTarget && payout)
+    && !(
+      navigationTarget === 'PAYMENT'
+      && payout?.status === '等待付款'
+      && canExecutePayout
+    );
 
   const statusHint = invoiceReviewStatus === '草稿'
     ? 'Invoice 尚未发布，可继续编辑或撤销；发布后将通知达人签署'
@@ -710,19 +706,6 @@ export function InvoiceDetailPage({
   const reviewHistory = payout?.invoiceReviewHistory ?? [];
   const latestReviewEvent = reviewHistory[reviewHistory.length - 1];
   const invoiceHistorySummary = [
-    { label: 'Invoice 版本', value: `V${payout?.invoiceVersion ?? generatedRecord?.version ?? 1}` },
-    {
-      label: '签署轮次',
-      value: payout?.invoiceSignatureRound ? `第 ${payout.invoiceSignatureRound} 轮` : '第 0 轮',
-    },
-    {
-      label: '项目审批轮次',
-      value: request?.approval?.round || payout?.requestApprovalRound
-        ? `第 ${request?.approval?.round ?? payout?.requestApprovalRound} 轮`
-        : '未发起',
-    },
-    { label: '付款清单版本', value: payout?.paymentListVersion ? `V${payout.paymentListVersion}` : '未生成' },
-    { label: '最近签署时间', value: payout?.invoiceSignedAt ? formatReviewTime(payout.invoiceSignedAt) : '待签署' },
     { label: '达人反馈', value: payout?.creatorFeedback?.reason ?? '无待处理反馈' },
   ];
   const currentTask = (() => {
@@ -789,8 +772,8 @@ export function InvoiceDetailPage({
     };
   })();
   const workspaceBlockingReasons = [
-    ...(primaryAction === 'APPROVE_MEDIA' && contractMatchEnforced && !contractMatch?.canProceed
-      ? ['合同与 Invoice 存在未处理的阻断项']
+    ...(primaryAction === 'APPROVE_MEDIA' && contractMatchEnforced && !contractMatchReadiness?.canProceed
+      ? [contractMatchReadiness?.blockingMessage ?? '合同与 Invoice 存在未处理的阻断项']
       : []),
     ...(!primaryAction && !allPassed ? [`${checks.length - passedCount} 项资料需要关注`] : []),
   ];
@@ -907,17 +890,17 @@ export function InvoiceDetailPage({
         } : undefined}
         summaryFields={summaryFields}
         contractChecks={workspaceContractChecks}
-        contractMismatchReview={storedContractMatchReview?.reason ? {
-          reason: storedContractMatchReview.reason,
+        contractMismatchReview={contractMatchReadiness?.reviewMatches && contractMatchReadiness.effectiveReason ? {
+          reason: contractMatchReadiness.effectiveReason,
           meta: [
             '生成 Invoice 时填写',
-            storedContractMatchReview.actorName ?? '操作人未记录',
-            storedContractMatchReview.reviewedAt
-              ? formatReviewTime(storedContractMatchReview.reviewedAt)
+            contractMatchReadiness.review?.actorName ?? '操作人未记录',
+            contractMatchReadiness.review?.reviewedAt
+              ? formatReviewTime(contractMatchReadiness.review.reviewedAt)
               : '时间未记录',
           ].join(' · '),
         } : undefined}
-        noContract={Boolean(generatedRecord && selectedContracts.length === 0)}
+        noContract={Boolean(generatedRecord && !(model.contractIds?.length))}
         accountRows={workspaceAccountRows}
         accountTitle="达人填写的付款信息"
         accountDescription="生成 Invoice 时选择并冻结的达人付款信息 · 当前仅为前端原型展示，待接入付款账户接口后展示完整字段"
@@ -966,7 +949,7 @@ export function InvoiceDetailPage({
             {managementReturnContext && canManageInvoice && payout && editContext ? (
               <Button onClick={() => onEditInvoice?.(payout, editContext)}>修改并重新发起</Button>
             ) : null}
-            {navigationTarget && payout ? <Button onClick={runNavigationAction}>{navigationActionLabel}</Button> : null}
+            {showNavigationAction ? <Button onClick={runNavigationAction}>{navigationActionLabel}</Button> : null}
           </>
         )}
       />

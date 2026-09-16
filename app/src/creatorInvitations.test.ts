@@ -15,6 +15,7 @@ import {
   parseCreatorInvitationWorkbook,
   resolveCreatorInvitationStatus,
   saveCreatorInvitationRecords,
+  summarizeActiveCreatorInvitations,
   validateCreatorInvitationFile,
   type CreatorInvitationRecord,
 } from './creatorInvitations';
@@ -239,5 +240,49 @@ describe('creator invitation records', () => {
       status: 'VERIFICATION_REQUESTED',
       now: new Date('2026-09-10T00:00:00.000Z'),
     })).toHaveLength(1);
+  });
+
+  it('按邮箱去重统计邀请中记录，并支持复合状态筛选', () => {
+    const now = new Date('2026-09-10T00:00:00.000Z');
+    const records = [
+      storedInvitation(),
+      storedInvitation({
+        id: 'cinv-duplicate-email',
+        email: ' PENDING@example.com ',
+        sentAt: '2026-09-02T00:00:00.000Z',
+        status: 'VERIFICATION_REQUESTED',
+      }),
+      storedInvitation({
+        id: 'cinv-registering',
+        email: 'registering@example.com',
+        status: 'REGISTERING',
+      }),
+      storedInvitation({
+        id: 'cinv-completed',
+        email: 'completed@example.com',
+        status: 'COMPLETED',
+      }),
+      storedInvitation({
+        id: 'cinv-expired-active-status',
+        email: 'expired@example.com',
+        status: 'SENT',
+        expiresAt: '2026-09-09T00:00:00.000Z',
+      }),
+    ];
+
+    expect(summarizeActiveCreatorInvitations(records, now)).toEqual({
+      total: 2,
+      sent: 0,
+      onboarding: 2,
+    });
+    expect(filterCreatorInvitationRecords(records, {
+      search: '',
+      status: 'ACTIVE',
+      now,
+    }).map((record) => record.id)).toEqual([
+      'cinv-duplicate-email',
+      'cinv-existing',
+      'cinv-registering',
+    ]);
   });
 });

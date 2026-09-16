@@ -333,7 +333,7 @@ export const validateInvoiceBatchRow = (
   if (!creator) {
     conflictIssues.push('达人档案不存在');
   } else {
-    if (!creator.contact.legalName.trim()) issues.push('缺少达人真实姓名');
+    if (!creator.contact.legalName.trim()) issues.push('缺少达人真实姓名 / 公司名称');
     if (!creator.contact.address.trim()) issues.push('缺少达人联系地址');
     if (!creator.contact.phone.trim()) issues.push('缺少达人联系电话');
     if (!creator.contact.email.trim() || !/^\S+@\S+\.\S+$/.test(creator.contact.email)) {

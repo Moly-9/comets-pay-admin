@@ -35,7 +35,14 @@ export type NavPage =
   | 'system-settings'
   | 'notifications';
 
-export type RequestProjectStatusFilter = 'all' | 'approving' | 'approved' | 'paid';
+export type RequestProjectStatusFilter =
+  | 'all'
+  | 'approving'
+  | 'approved'
+  | 'awaiting-payment'
+  | 'processing'
+  | 'paid'
+  | 'failed';
 
 export type NavOptions = {
   requestStatusFilter?: RequestProjectStatusFilter;
@@ -246,11 +253,23 @@ export type CreatorInvoiceContact = {
   email: string;
 };
 
+export type CreatorSocialVerificationScreenshot = {
+  id: string;
+  fileName: string;
+  imageUrl: string;
+  uploadedAt: string;
+};
+
 export type CreatorSocialAccount = {
   id: string;
   platform: string;
   handle: string;
   profileUrl: string;
+  /**
+   * 达人在入驻流程中上传的平台后台截图。
+   * 历史档案可能缺少该字段，管理端仅做只读展示。
+   */
+  verificationScreenshots?: CreatorSocialVerificationScreenshot[];
 };
 
 export type CreatorProfile = {
@@ -404,6 +423,7 @@ export type InvoicePaymentAccountDifference = {
 export type InvoiceContractMatchReview = {
   version: number;
   contractIds: ContractId[];
+  fingerprint?: string;
   result: 'MATCHED' | 'NOT_APPLICABLE' | 'BLOCKED' | 'APPROVED_WITH_REASON' | 'REASON_REQUIRED';
   issues: InvoiceContractMatchIssue[];
   reason?: string;
@@ -521,7 +541,7 @@ export type InvoiceBatchDraftRow = Omit<InvoiceBatchRow, 'generated'> & {
 
 export type InvoiceCreationDraftBase = {
   draftId: string;
-  schemaVersion: '1.0';
+  schemaVersion: '1.0' | '2.0';
   createdByAccount: string;
   createdByName: string;
   createdAt: string;
@@ -553,6 +573,7 @@ export type InvoiceBatchDraft = InvoiceCreationDraftBase & {
   invoiceDate: string;
   selectedBillingEntityId: string;
   currency: InvoiceCurrency;
+  selectedCreatorIds: CreatorId[];
   selectedEngagementIds: EngagementId[];
   sharedDescriptions: Array<Pick<InvoiceBatchLineItem, 'templateKey' | 'description'>>;
   rows: InvoiceBatchDraftRow[];
@@ -642,6 +663,10 @@ export type PaymentAttemptSnapshot = Readonly<{
   transferFeeCurrency?: InvoiceCurrency;
   actualPaidAmount?: number;
   actualPaidCurrency?: InvoiceCurrency;
+  /** 渠道确认的实际冲退金额；底层保存正数，资金流展示时转为负数。 */
+  refundAmount?: number;
+  refundCurrency?: InvoiceCurrency;
+  refundedAt?: string;
   recipientReceivedAmount?: number;
   recipientReceivedCurrency?: InvoiceCurrency;
   errorCode?: string;
@@ -707,7 +732,7 @@ export type PaymentFailureRecovery = {
 
 export type Payout = {
   id: string;
-  /** 用户可见的当前付款尝试编号；重新付款时生成新编号，历史编号保存在 paymentAttempts。 */
+  /** 用户可见的业务付款明细编号；重新付款时继续沿用。 */
   paymentCode?: string;
   paymentRequestProjectId?: PaymentRequestProjectId;
   creator: string;
@@ -737,6 +762,10 @@ export type Payout = {
   transferFeeCurrency?: InvoiceCurrency;
   actualPaidAmount?: number;
   actualPaidCurrency?: InvoiceCurrency;
+  /** 当前失败付款对应的渠道冲退结果。 */
+  refundAmount?: number;
+  refundCurrency?: InvoiceCurrency;
+  refundedAt?: string;
   recipientReceivedAmount?: number;
   recipientReceivedCurrency?: InvoiceCurrency;
   postTransactionBalance?: number;

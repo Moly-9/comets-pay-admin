@@ -3,8 +3,12 @@ import { describe, expect, it } from 'vitest';
 import type { CreatorId, EngagementId, ProjectId } from '../businessWorkflow';
 import { INITIAL_CREATORS } from '../pages/OperationalPages';
 import {
+  exportInvoiceBatchGlobalCreatorTemplate,
   exportInvoiceBatchCreatorTemplate,
+  importInvoiceBatchGlobalCreatorTemplate,
   importInvoiceBatchCreatorTemplate,
+  matchInvoiceBatchGlobalCreatorRows,
+  matchInvoiceBatchGlobalCreatorTokens,
   matchInvoiceBatchCreatorRows,
   matchInvoiceBatchCreatorTokens,
   mergeInvoiceBatchCreatorSelection,
@@ -42,7 +46,56 @@ const workbookBuffer = async (
   return new Uint8Array(buffer as ArrayBuffer).buffer;
 };
 
+const globalWorkbookBuffer = async (rows: Array<[string, string, string]>) => {
+  const blob = await exportInvoiceBatchGlobalCreatorTemplate();
+  const workbook = new Workbook();
+  await workbook.xlsx.load(await blob.arrayBuffer());
+  const sheet = workbook.getWorksheet('达人名单')!;
+  rows.forEach((values, index) => {
+    sheet.getRow(index + 2).values = [...values];
+  });
+  const buffer = await workbook.xlsx.writeBuffer();
+  return new Uint8Array(buffer as ArrayBuffer).buffer;
+};
+
 describe('Invoice batch creator workbook', () => {
+  it('uses a project-independent global template and rejects mixing it with project templates', async () => {
+    const globalBuffer = await globalWorkbookBuffer([
+      [creators[0].handle, '', ''],
+      ['', creators[3].name, ''],
+    ]);
+    const imported = await importInvoiceBatchGlobalCreatorTemplate(globalBuffer);
+    const matched = matchInvoiceBatchGlobalCreatorRows({ rows: imported.rows, creators });
+
+    expect(imported).toMatchObject({ fatal: false, issues: [] });
+    expect(matched.matches.map((match) => match.creatorId)).toEqual([
+      creators[0].id,
+      creators[3].id,
+    ]);
+    expect(matched.issues.some((issue) => issue.code === 'NOT_IN_PROJECT')).toBe(false);
+
+    const workbook = new Workbook();
+    await workbook.xlsx.load(globalBuffer);
+    const metadata = new Map<string, string>();
+    workbook.getWorksheet('_metadata')!.eachRow((row) => {
+      metadata.set(String(row.getCell(1).value), String(row.getCell(2).value));
+    });
+    expect(metadata.get('schema_version')).toBe('2.0');
+    expect(metadata.get('template_purpose')).toBe('INVOICE_BATCH_GLOBAL_CREATOR_SELECTION');
+    expect(metadata.has('project_id')).toBe(false);
+
+    const rejectedByProjectImporter = await importInvoiceBatchCreatorTemplate(globalBuffer, projectId);
+    expect(rejectedByProjectImporter.fatal).toBe(true);
+    expect(rejectedByProjectImporter.issues.map((issue) => issue.code)).toEqual(expect.arrayContaining([
+      'UNSUPPORTED_VERSION',
+      'INVALID_TEMPLATE',
+    ]));
+
+    const projectBuffer = await workbookBuffer([[creators[0].handle, '', '']]);
+    const rejectedByGlobalImporter = await importInvoiceBatchGlobalCreatorTemplate(projectBuffer);
+    expect(rejectedByGlobalImporter).toMatchObject({ fatal: true });
+  });
+
   it('exports the exact three visible headers and imports any one identifier', async () => {
     const first = creators[0];
     const second = creators[1];
@@ -158,6 +211,16 @@ describe('Invoice batch creator workbook', () => {
 });
 
 describe('Invoice batch creator text import', () => {
+  it('matches global creator input without requiring a project relationship', () => {
+    const result = matchInvoiceBatchGlobalCreatorTokens({
+      tokens: [creators[3].handle],
+      creators,
+    });
+
+    expect(result.matches.map((match) => match.creatorId)).toEqual([creators[3].id]);
+    expect(result.issues).toEqual([]);
+  });
+
   it('splits all supported delimiters and matches stable ID, handle, channel URL and display name', () => {
     const tokens = parseInvoiceBatchCreatorTokens(
       `${creators[0].id}，${creators[1].handle}；${creators[2].socialAccounts[0].profileUrl}?from=paste|${creators[2].name}`,

@@ -24,6 +24,7 @@ const createTestBatch = (
 ): PaymentBatchRecord => ({
   paymentBatchId: `payment_batch_${paymentBatchCode}` as PaymentBatchRecord['paymentBatchId'],
   paymentBatchCode,
+  purpose: 'NORMAL',
   paymentOrderCode: 'PAY-TEST-001',
   paymentAttemptNumber: 1,
   request: {
@@ -105,6 +106,19 @@ describe('payment batch filters and selection', () => {
       end: '2026-07-16T16:41',
       provider: 'Airwallex',
     })).toEqual([]);
+
+    const purposeRows = TEST_BATCH_ROWS.map((row, index) => ({
+      ...row,
+      purpose: index === 0 ? 'RETRY' as const : row.purpose,
+    }));
+    expect(filterPaymentBatchRows(purposeRows, {
+      search: '',
+      start: '',
+      end: '',
+      provider: 'all',
+      purpose: 'RETRY',
+      status: '已付款',
+    }).map((row) => row.id)).toEqual(['BAT-20260716-007']);
   });
 
   it('auto-corrects crossed date ranges from the boundary the user changed', () => {
@@ -148,13 +162,15 @@ describe('payment batch filters and selection', () => {
     );
     expect(html.match(/type="datetime-local"/g)).toHaveLength(2);
     expect(html).toContain('全部付款渠道');
+    expect(html).toContain('aria-label="批次用途筛选"');
+    expect(html).toContain('>全部批次用途</span>');
     expect(html).toContain('aria-label="付款状态筛选"');
     expect(html).toContain('>全部付款状态</span>');
-    expect(html).toContain('付款人 / 付款时间');
+    expect(html).toContain('付款人 / 时间');
     expect(html).not.toContain('创建人 / 时间');
-    expect(html).toContain('<th>批次号</th><th>关联项目</th><th>付款渠道</th><th>笔数</th><th>付款金额</th><th>手续费金额</th><th>实际付款金额</th>');
-    expect(html).toContain('<strong title="测试项目">测试项目</strong><small title="PRJ-TEST-001">PRJ-TEST-001</small>');
-    expect(html).toContain('<th class="payment-batch-status-cell">状态</th>');
+    expect(html).toContain('<th>批次号</th><th>批次用途</th><th>请款项目编号</th><th>付款渠道</th><th>付款主体</th><th>项目名称</th><th>请款金额及币种</th>');
+    expect(html).toContain('<td class="payment-batch-project-cell" title="测试项目"><strong>测试项目</strong></td>');
+    expect(html).toContain('<th class="payment-batch-status-cell">付款状态</th>');
     expect(html).toContain('<th class="action-cell payment-batch-action-cell">操作</th>');
     expect(html).toContain('aria-label="付款批次导出"');
     expect(html).toContain('payment-batch-export-button is-confirmation');
@@ -187,6 +203,28 @@ describe('payment batch filters and selection', () => {
     expect(basePayout.status).toBe('已付款');
   });
 
+  it('exposes the source batch for reversal rows', () => {
+    const source = TEST_BATCHES[0];
+    const reversal = {
+      ...source,
+      paymentBatchId: 'payment_batch_reversal_test' as PaymentBatchRecord['paymentBatchId'],
+      paymentBatchCode: 'BAT-REVERSAL-TEST',
+      purpose: 'REVERSAL' as const,
+      sourcePaymentBatchId: source.paymentBatchId,
+      sourcePaymentBatchCode: source.paymentBatchCode,
+    };
+
+    expect(paymentBatchRows([reversal])[0]).toMatchObject({
+      purpose: 'REVERSAL',
+      sourcePaymentBatchCode: source.paymentBatchCode,
+    });
+
+    const html = renderToStaticMarkup(
+      <BatchesPage batches={[reversal]} onNewBatch={vi.fn()} notify={vi.fn()} canCreateBatch />,
+    );
+    expect(html).toContain('>冲退付款</span><small class="cell-subtext" title="BAT-20260716-007">来源批次 BAT-20260716-007</small>');
+  });
+
   it('exports the current request-project status with a frozen snapshot fallback', () => {
     const source = TEST_BATCHES[0];
     const currentRequest = {
@@ -202,8 +240,9 @@ describe('payment batch filters and selection', () => {
 
   it('summarizes only the current batch attempt and marks processing results as pending', () => {
     expect(TEST_BATCH_ROWS[0]).toMatchObject({
-      cooperationProjectCode: 'PRJ-TEST-001',
-      cooperationProjectName: '测试项目',
+      purpose: 'NORMAL',
+      requestCode: 'REQ-TEST-001',
+      projectName: '测试项目',
       paymentAmount: 'USD 1,000',
       transferFeeAmount: 'USD 2.5',
       actualPaidAmount: 'USD 1,002.5',

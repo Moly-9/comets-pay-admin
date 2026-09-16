@@ -199,20 +199,194 @@ const parseEnglishDate = (value: string) => {
 
 export const normalizeContractDate = (raw: string) => {
   const value = cleanValue(raw).replace(/[.]/g, '-');
-  const iso = value.match(/\b(20\d{2})[-/年](\d{1,2})[-/月](\d{1,2})(?:日)?\b/);
+  const iso = value.match(/(20\d{2})[-/年](\d{1,2})[-/月](\d{1,2})(?:日)?/);
   if (iso) return `${iso[1]}-${iso[2].padStart(2, '0')}-${iso[3].padStart(2, '0')}`;
   const english = value.match(/\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+20\d{2}\b/i);
   return english ? parseEnglishDate(english[0]) : '';
 };
 
 export const normalizeCampaignPeriod = (raw: string) => {
-  const separators = /\s+(?:to|through|until|至|到|—|–)\s+/i;
-  const parts = cleanValue(raw).split(separators);
+  const value = cleanValue(raw);
+  const dateMatches = [
+    ...value.matchAll(/20\d{2}[-/年]\d{1,2}[-/月]\d{1,2}(?:日)?/g),
+    ...value.matchAll(/\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+20\d{2}\b/gi),
+  ].sort((left, right) => (left.index ?? 0) - (right.index ?? 0));
+  if (dateMatches.length >= 2) {
+    return {
+      startDate: normalizeContractDate(dateMatches[0][0]),
+      endDate: normalizeContractDate(dateMatches[dateMatches.length - 1][0]),
+    };
+  }
+  const separators = /\s*(?:to|through|until|至|到|—|–)\s*/i;
+  const parts = value.split(separators);
   if (parts.length < 2) return { startDate: '', endDate: '' };
   return {
     startDate: normalizeContractDate(parts[0]),
     endDate: normalizeContractDate(parts.slice(1).join(' ')),
   };
+};
+
+type ContractExpiryValue = {
+  startDate: string;
+  endDate: string;
+  isLongTerm: boolean;
+};
+
+const isLongTermContractText = (value: string) => (
+  /\b(?:perpetual|indefinite|no\s+fixed\s+(?:end|term)|long[-\s]?term)\b|长期有效|永久有效|无固定期限/i.test(value)
+);
+
+const legacyCampaignPeriodExpiry = (
+  normalizedValue: unknown,
+  rawValue: string,
+): ContractExpiryValue => {
+  const normalized = normalizedValue && typeof normalizedValue === 'object'
+    ? normalizedValue as { startDate?: unknown; endDate?: unknown; isLongTerm?: unknown }
+    : {};
+  if (normalized.isLongTerm === true || isLongTermContractText(rawValue)) {
+    return { startDate: '', endDate: '', isLongTerm: true };
+  }
+  const parsedPeriod = normalizeCampaignPeriod(rawValue);
+  const normalizedStart = String(normalized.startDate ?? '').trim();
+  const normalizedEnd = String(normalized.endDate ?? '').trim();
+  return {
+    startDate: normalizeContractDate(normalizedStart) || parsedPeriod.startDate,
+    endDate: normalizeContractDate(normalizedEnd)
+      || parsedPeriod.endDate
+      || (!parsedPeriod.startDate ? normalizeContractDate(rawValue) : ''),
+    isLongTerm: false,
+  };
+};
+
+const contractExpiryRawValue = (value: ContractExpiryValue) => (
+  value.isLongTerm
+    ? '长期有效'
+    : value.startDate && value.endDate
+      ? `${value.startDate} 至 ${value.endDate}`
+      : value.startDate || value.endDate
+);
+
+const contractDateDayNumber = (value: string) => {
+  const match = /^(20\d{2})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const timestamp = Date.UTC(year, month - 1, day);
+  const parsed = new Date(timestamp);
+  if (
+    parsed.getUTCFullYear() !== year
+    || parsed.getUTCMonth() !== month - 1
+    || parsed.getUTCDate() !== day
+  ) return null;
+  return timestamp / (24 * 60 * 60 * 1000);
+};
+
+export const contractExpiryRangeValidationMessage = (normalizedValue: unknown) => {
+  if (!normalizedValue || typeof normalizedValue !== 'object') return '请选择开始日期和结束日期。';
+  const value = normalizedValue as Partial<ContractExpiryValue>;
+  const startDay = contractDateDayNumber(value.startDate?.trim() ?? '');
+  const endDay = contractDateDayNumber(value.endDate?.trim() ?? '');
+  if (startDay === null || endDay === null) return '请选择开始日期和结束日期。';
+  if (endDay < startDay) return '结束日期不能早于开始日期。';
+  return '';
+};
+
+export const isContractExpiryRangeValid = (normalizedValue: unknown) => (
+  !contractExpiryRangeValidationMessage(normalizedValue)
+);
+
+const legacyCampaignCandidateAsExpiry = (
+  candidate: ContractFieldCandidate,
+): ContractFieldCandidate => {
+  const expiry = legacyCampaignPeriodExpiry(candidate.normalizedValue, candidate.rawValue);
+  return {
+    ...candidate,
+    rawValue: contractExpiryRawValue(expiry),
+    normalizedValue: expiry,
+  };
+};
+
+const normalizeExistingContractExpiryField = (
+  field: ContractRecognitionField,
+): ContractRecognitionField => {
+  const expiry = legacyCampaignPeriodExpiry(
+    field.normalizedValue,
+    field.editedValue?.trim() || field.rawValue,
+  );
+  const rawValue = contractExpiryRawValue(expiry);
+  const validForNewUpload = isContractExpiryRangeValid(expiry);
+  return {
+    ...field,
+    rawValue,
+    editedValue: field.editedValue === undefined ? undefined : rawValue,
+    normalizedValue: expiry,
+    status: field.status === 'confirmed' && validForNewUpload
+      ? 'confirmed'
+      : validForNewUpload
+        ? field.status
+        : 'missing',
+    candidates: field.candidates.map(legacyCampaignCandidateAsExpiry),
+  };
+};
+
+/**
+ * Adapts historical Campaign Period recognition snapshots to the current expiry-only field.
+ * The original source text and location remain attached to the converted field and candidates.
+ */
+export const normalizeContractRecognitionFields = (
+  fields: ContractRecognitionField[],
+): ContractRecognitionField[] => {
+  const currentExpiry = fields.find((field) => field.fieldKey === 'contractExpiry');
+  const legacyPeriod = fields.find((field) => field.fieldKey === 'campaignPeriod');
+  const expiry = legacyPeriod
+    ? legacyCampaignPeriodExpiry(
+        legacyPeriod.normalizedValue,
+        legacyPeriod.editedValue?.trim() || legacyPeriod.rawValue,
+      )
+    : null;
+  const rawValue = expiry ? contractExpiryRawValue(expiry) : '';
+  const converted: ContractRecognitionField | null = legacyPeriod && !currentExpiry
+    ? {
+        ...legacyPeriod,
+        fieldKey: 'contractExpiry',
+        label: CONTRACT_FIELD_LABELS.contractExpiry,
+        rawValue,
+        editedValue: legacyPeriod.editedValue === undefined ? undefined : rawValue,
+        normalizedValue: expiry,
+        status: expiry && isContractExpiryRangeValid(expiry) ? legacyPeriod.status : 'missing',
+        candidates: legacyPeriod.candidates
+          .map(legacyCampaignCandidateAsExpiry)
+          .filter((candidate) => Boolean(candidate.rawValue)),
+        group: legacyPeriod.group === 'legacy' ? 'summary' : legacyPeriod.group,
+      }
+    : null;
+  const normalized = fields.flatMap((field) => (
+    field.fieldKey === 'campaignPeriod'
+      ? converted ? [converted] : []
+      : [field.fieldKey === 'contractExpiry' ? normalizeExistingContractExpiryField(field) : field]
+  ));
+  if (!normalized.length || normalized.some((field) => field.fieldKey === 'signatureStatus')) {
+    return normalized;
+  }
+  return [
+    ...normalized,
+    {
+      fieldKey: 'signatureStatus',
+      label: CONTRACT_FIELD_LABELS.signatureStatus,
+      rawValue: '',
+      normalizedValue: null,
+      source: null,
+      confidence: 0,
+      status: 'missing',
+      candidates: [],
+      origin: 'document',
+      group: 'summary',
+      applicable: true,
+      requiredForConfirmation: true,
+      readOnly: false,
+    },
+  ];
 };
 
 export const normalizeMoney = (raw: string) => {
@@ -306,7 +480,11 @@ const resultFromCandidates = (
     normalizedValue: selected.normalizedValue,
     source: selected.source,
     confidence: selected.confidence,
-    status: distinctValues.size > 1 ? 'conflict' : 'detected',
+    status: distinctValues.size > 1
+      ? 'conflict'
+      : fieldKey === 'contractExpiry' && !isContractExpiryRangeValid(selected.normalizedValue)
+        ? 'missing'
+        : 'detected',
     candidates: sorted,
   };
 };
@@ -441,32 +619,41 @@ const contractExpiryCandidates = (documents: ParsedContractDocument[]) => {
   const explicit = candidatesForAliases(
     documents,
     ALIASES.contractExpiry.aliases,
-    (raw) => ({ endDate: normalizeContractDate(raw), isLongTerm: false }),
+    (raw) => {
+      const period = normalizeCampaignPeriod(raw);
+      return {
+        startDate: period.startDate,
+        endDate: period.endDate || normalizeContractDate(raw),
+        isLongTerm: false,
+      };
+    },
     0.95,
   ).filter((candidate) => Boolean((candidate.normalizedValue as { endDate?: string }).endDate));
   const ranges = campaignCandidates(documents)
-    .filter((candidate) => Boolean((candidate.normalizedValue as { endDate?: string }).endDate))
+    .filter((candidate) => {
+      const value = candidate.normalizedValue as { startDate?: string; endDate?: string };
+      return Boolean(value.startDate || value.endDate);
+    })
     .map((candidate) => ({
       ...candidate,
-      rawValue: (candidate.normalizedValue as { endDate: string }).endDate,
+      rawValue: contractExpiryRawValue({
+        startDate: (candidate.normalizedValue as { startDate?: string }).startDate ?? '',
+        endDate: (candidate.normalizedValue as { endDate?: string }).endDate ?? '',
+        isLongTerm: false,
+      }),
       normalizedValue: {
-        endDate: (candidate.normalizedValue as { endDate: string }).endDate,
+        startDate: (candidate.normalizedValue as { startDate?: string }).startDate ?? '',
+        endDate: (candidate.normalizedValue as { endDate?: string }).endDate ?? '',
         isLongTerm: false,
       },
     }));
-  const longTerm = documents.flatMap((document) => (
-    document.parseStatus !== 'parsed'
-      ? []
-      : document.blocks
-        .filter((block) => /\b(?:perpetual|indefinite|no\s+fixed\s+(?:end|term)|long[-\s]?term)\b|长期有效|永久有效|无固定期限/i.test(block.text))
-        .map((block) => ({
-          rawValue: '长期有效',
-          normalizedValue: { endDate: '', isLongTerm: true },
-          source: sourceFor(document, block),
-          confidence: 0.9,
-        } satisfies ContractFieldCandidate))
-  ));
-  return [...explicit, ...ranges, ...longTerm];
+  const completeRangeDocumentIds = new Set(ranges
+    .filter((candidate) => isContractExpiryRangeValid(candidate.normalizedValue))
+    .map((candidate) => candidate.source.documentId));
+  return [
+    ...ranges,
+    ...explicit.filter((candidate) => !completeRangeDocumentIds.has(candidate.source.documentId)),
+  ];
 };
 
 const totalFeeCandidates = (documents: ParsedContractDocument[]) => {
@@ -641,10 +828,34 @@ export const recognitionFieldDisplayValue = (field: ContractRecognitionField) =>
     return (field.normalizedValue as { signed?: boolean }).signed ? '已签署' : '未签署';
   }
   if (field.fieldKey === 'contractExpiry' && field.normalizedValue && typeof field.normalizedValue === 'object') {
-    const value = field.normalizedValue as { endDate?: string; isLongTerm?: boolean };
-    return value.isLongTerm ? '长期有效' : value.endDate || field.rawValue;
+    const value = field.normalizedValue as Partial<ContractExpiryValue>;
+    if (value.isLongTerm) return '长期有效';
+    if (value.startDate && value.endDate) return `${value.startDate} 至 ${value.endDate}`;
+    return value.startDate || value.endDate || field.rawValue;
   }
   return field.rawValue;
+};
+
+export const editContractExpiryRange = (
+  field: ContractRecognitionField,
+  startDate: string,
+  endDate: string,
+): ContractRecognitionField => {
+  if (field.fieldKey !== 'contractExpiry' || field.status === 'confirmed' || field.readOnly) return field;
+  const normalizedValue: ContractExpiryValue = {
+    startDate: normalizeContractDate(startDate),
+    endDate: normalizeContractDate(endDate),
+    isLongTerm: false,
+  };
+  const rawValue = contractExpiryRawValue(normalizedValue);
+  return {
+    ...field,
+    rawValue,
+    normalizedValue,
+    editedValue: rawValue,
+    confidence: 1,
+    status: isContractExpiryRangeValid(normalizedValue) ? 'detected' : 'missing',
+  };
 };
 
 export const editRecognitionField = (
@@ -656,9 +867,10 @@ export const editRecognitionField = (
   const normalizedValue = field.fieldKey === 'signatureStatus'
     ? { signed: editedValue === 'SIGNED', signedAt: undefined }
     : field.fieldKey === 'contractExpiry'
-      ? /长期|perpetual|indefinite|long[-\s]?term/i.test(editedValue)
-        ? { endDate: '', isLongTerm: true }
-        : { endDate: normalizeContractDate(editedValue), isLongTerm: false }
+      ? {
+          ...normalizeCampaignPeriod(editedValue),
+          isLongTerm: false,
+        }
       : field.fieldKey === 'campaignPeriod'
         ? normalizeCampaignPeriod(editedValue)
         : field.fieldKey === 'effectiveDate'
@@ -690,8 +902,7 @@ export const editRecognitionField = (
         : ''
     : editedValue;
   const validValue = field.fieldKey !== 'contractExpiry'
-    || Boolean((normalizedValue as { endDate?: string; isLongTerm?: boolean }).endDate)
-    || Boolean((normalizedValue as { endDate?: string; isLongTerm?: boolean }).isLongTerm);
+    || isContractExpiryRangeValid(normalizedValue);
   return {
     ...field,
     rawValue,
@@ -709,6 +920,7 @@ export const confirmRecognitionField = (
   field: ContractRecognitionField,
 ): ContractRecognitionField => (
   field.rawValue.trim()
+    && (field.fieldKey !== 'contractExpiry' || isContractExpiryRangeValid(field.normalizedValue))
     ? { ...field, status: 'confirmed', confidence: 1 }
     : field
 );
@@ -718,7 +930,10 @@ export const canConfirmRecognitionFields = (
   fieldKeys: readonly ContractFieldKey[],
 ) => fieldKeys.length > 0 && fieldKeys.every((fieldKey) => {
   const field = fields.find((item) => item.fieldKey === fieldKey);
-  return Boolean(field?.rawValue.trim()) && field?.status !== 'missing' && field?.status !== 'conflict';
+  return Boolean(field?.rawValue.trim())
+    && field?.status !== 'missing'
+    && field?.status !== 'conflict'
+    && (fieldKey !== 'contractExpiry' || isContractExpiryRangeValid(field?.normalizedValue));
 });
 
 export const confirmRecognitionFields = (

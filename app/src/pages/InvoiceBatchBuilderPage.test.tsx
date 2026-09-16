@@ -51,7 +51,8 @@ describe('InvoiceBatchBuilderPage layout', () => {
     const amountSource = tableSource.slice(amountStart, amountEnd);
 
     expect(source).toContain('const INVOICE_BATCH_CREATOR_PAGE_SIZE = 15');
-    expect(source).toContain('usePagination(filteredProjectReferences');
+    expect(source).toContain('usePagination(filteredCreators');
+    expect(source).toContain('}, isDirty && hasPendingDraft);');
     expect(source).toContain('creatorPagination.pageItems.map');
     expect(source).toContain('ariaLabel="达人档案分页"');
     expect(source).toContain('已选结果跨页保留');
@@ -115,6 +116,12 @@ describe('InvoiceBatchBuilderPage layout', () => {
     expect(html).toContain('data-batch-section="common"');
     expect(html).toContain('data-batch-section="validation"');
     expect(html).toContain('data-batch-section="results"');
+    expect(html.indexOf('data-batch-section="creators"')).toBeLessThan(
+      html.indexOf('data-batch-section="project"'),
+    );
+    expect(html).toContain('placeholder="请先选择达人"');
+    expect(html).toContain('aria-label="批量 Invoice 项目"');
+    expect(html).toMatch(/aria-label="批量 Invoice 项目"[^>]*disabled/);
     expect(html).toContain('aria-label="批量 Invoice 校验汇总"');
     expect(html).toContain('<dt>已选择达人</dt>');
     expect(html).toContain('<dt>可生成invoice</dt>');

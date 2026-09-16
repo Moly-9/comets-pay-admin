@@ -267,6 +267,7 @@ describe('Airwallex payment-list workbook', () => {
     await workbook.xlsx.load(await blob.arrayBuffer());
     const sheet = workbook.getWorksheet(PAYPAL_PAYMENT_LIST_SHEET)!;
     expect((sheet.getRow(1).values as unknown[]).slice(1)).toEqual(PAYPAL_PAYMENT_LIST_HEADERS);
+    expect(sheet.getCell('D1').value).toBe('Real Name / Company Name');
     expect(sheet.getCell('F2').value).toBe('creator@example.test');
     expect(sheet.getCell('H2').value).toBe(3400);
   });

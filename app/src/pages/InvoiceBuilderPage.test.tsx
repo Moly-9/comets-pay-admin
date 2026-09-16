@@ -66,6 +66,8 @@ describe('InvoiceBuilderPage create mode', () => {
 
     expect(html).toContain('role="combobox"');
     expect(html).toContain('aria-label="合作达人"');
+    expect(html.indexOf('aria-label="合作达人"')).toBeLessThan(html.indexOf('aria-label="合作项目"'));
+    expect(html).toMatch(/aria-label="合作项目"[^>]*disabled/);
     expect(html).toContain('搜索达人名称、频道 ID、频道链接…');
     expect(html).toContain('aria-label="付款方式（根据付款账户自动确定）"');
     expect(html).toContain('value="待选择付款账户"');

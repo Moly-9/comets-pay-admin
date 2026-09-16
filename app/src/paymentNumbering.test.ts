@@ -59,7 +59,7 @@ describe('payment business numbering', () => {
     expect(new Set(payoutCodes).size).toBe(payoutCodes.length);
   });
 
-  it('assigns a new PMT code to the successful retry batch', () => {
+  it('keeps PAY and PMT stable across retry and reversal batches', () => {
     const batches = createInitialPaymentBatches({
       payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
       requests: INITIAL_COMPLETE_REQUEST_RESOURCES.requests,
@@ -69,7 +69,7 @@ describe('payment business numbering', () => {
     });
     const orderCodes = batches.map((batch) => batch.paymentOrderCode);
     orderCodes.forEach((code) => expect(isPaymentBusinessCode(code, 'PAY')).toBe(true));
-    expect(new Set(orderCodes).size).toBe(orderCodes.length);
+    expect(new Set(batches.map((batch) => batch.paymentBatchCode)).size).toBe(batches.length);
     batches.flatMap((batch) => batch.items).forEach((item) => (
       expect(isPaymentBusinessCode(item.paymentCode, 'PMT')).toBe(true)
     ));
@@ -77,8 +77,13 @@ describe('payment business numbering', () => {
     const original = batches.find((batch) => batch.paymentBatchId === PAYMENT_BATCH_RETRY_DEMO.originalBatchId);
     const retry = batches.find((batch) => batch.paymentBatchId === PAYMENT_BATCH_RETRY_DEMO.retryBatchId);
     const originalFailed = original?.items.find((item) => item.paymentStatus === '付款失败');
-    expect(retry?.paymentOrderCode).not.toBe(original?.paymentOrderCode);
-    expect(retry?.items[0].paymentCode).toBe(PAYMENT_BATCH_RETRY_DEMO.retryPaymentCode);
-    expect(retry?.items[0].paymentCode).not.toBe(originalFailed?.paymentCode);
+    expect(retry?.purpose).toBe('RETRY');
+    expect(retry?.paymentOrderCode).toBe(original?.paymentOrderCode);
+    expect(retry?.items[0].paymentCode).toBe(originalFailed?.paymentCode);
+    const reversal = batches.find((batch) => (
+      batch.purpose === 'REVERSAL' && batch.sourcePaymentBatchId === original?.paymentBatchId
+    ));
+    expect(reversal?.paymentOrderCode).toBe(original?.paymentOrderCode);
+    expect(reversal?.items[0].paymentCode).toBe(originalFailed?.paymentCode);
   });
 });

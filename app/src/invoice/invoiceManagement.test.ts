@@ -3,6 +3,7 @@ import type { RequestApprovalState } from '../businessWorkflow';
 import type { PaymentRequestProjectLike } from '../paymentRequestProjects';
 import type { Payout } from '../types';
 import {
+  INVOICE_MANAGEMENT_STATUSES_BY_TAB,
   filterInvoiceManagementRows,
   getInvoiceManagementReturnContext,
   getInvoiceManagementView,
@@ -62,7 +63,7 @@ const managementRow = (overrides: Partial<InvoiceManagementRow> = {}): InvoiceMa
   projectName: 'Test Project',
   invoiceNumber: 'INV-TEST',
   provider: 'Airwallex',
-  status: '已通过',
+  status: '待发起请款',
   currency: 'USD',
   amount: 100,
   actionLabel: '查看详情',
@@ -155,11 +156,17 @@ describe('Invoice management presentation', () => {
   });
 
   it('uses the expected management groups without an approval tab', () => {
+    expect(INVOICE_MANAGEMENT_STATUSES_BY_TAB.approved).toEqual([
+      '待发起请款',
+      'OA审批中',
+      '付款中',
+      '已付款',
+    ]);
     expect(getInvoiceManagementView(payout('草稿'))).toMatchObject({ tab: 'signature', status: '待发布' });
     expect(getInvoiceManagementView(payout('待签署'))).toMatchObject({ tab: 'signature', status: '待签署' });
     expect(getInvoiceManagementView(payout('待媒介审核'))).toMatchObject({ tab: 'review', status: '待审核' });
-    expect(getInvoiceManagementView(payout('已通过'))).toMatchObject({ tab: 'approved', status: '已通过' });
-    expect(getInvoiceManagementView(payout('已退回'))).toMatchObject({ tab: 'approved', status: '已通过' });
+    expect(getInvoiceManagementView(payout('已通过'))).toMatchObject({ tab: 'approved', status: '待发起请款' });
+    expect(getInvoiceManagementView(payout('已退回'))).toMatchObject({ tab: 'approved', status: '待发起请款' });
   });
 
   it('routes an unsigned legacy review state back to the signature group', () => {
@@ -196,7 +203,7 @@ describe('Invoice management presentation', () => {
     expect(getInvoiceManagementView(
       payout('已通过'),
       request('RETURNED_TO_MEDIA_REVIEW', 'RETURNED'),
-    )).toMatchObject({ tab: 'approved', status: '已通过' });
+    )).toMatchObject({ tab: 'approved', status: '待发起请款' });
   });
 
   it('returns only a finance-scoped Invoice-content detail', () => {

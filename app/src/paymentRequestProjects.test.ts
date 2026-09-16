@@ -289,6 +289,24 @@ describe('media payment request document resolution', () => {
     ]);
   });
 
+  it('keeps the existing Invoice until it is removed before another one is selected', () => {
+    const firstInvoice = invoice();
+    const secondInvoice = invoice({
+      id: 'INV-SECOND',
+      invoiceId: 'invoice_002' as InvoiceId,
+    });
+    const result = addInvoiceToPaymentRequestSelection({
+      invoice: secondInvoice,
+      invoices: [firstInvoice, secondInvoice],
+      contracts: [],
+      selectedInvoiceIds: [firstInvoice.invoiceId],
+      selectedContractIds: [],
+    });
+
+    expect(result.invoiceIds).toEqual([firstInvoice.invoiceId]);
+    expect(result.autoLinkedContractIds).toEqual([]);
+  });
+
   it('normalizes legacy single-invoice links and de-duplicates invoice ids', () => {
     const legacy = normalizePaymentRequestCreatorLink({
       creatorId,
@@ -541,7 +559,7 @@ describe('media payment request submission validation', () => {
     expect(item.validationIssues).toContain('手续费承担方未确认');
   });
 
-  it('sums multiple invoices for one creator and rejects duplicate or extra payment rows', () => {
+  it('preserves historical multi-Invoice totals but rejects them on resubmission', () => {
     const second = invoice({
       id: 'INV-20260807-000002',
       invoiceId: 'invoice_002' as InvoiceId,
@@ -553,6 +571,12 @@ describe('media payment request submission validation', () => {
     });
     const multiLink = { ...link, invoiceIds: [link.invoiceIds[0], second.invoiceId] };
     expect(paymentRequestAmountLabel([multiLink], [invoice(), second])).toBe('USD 150');
+    expect(paymentRequestSubmissionIssues({
+      creatorLinks: [multiLink],
+      invoices: [invoice(), second],
+      paymentLists: [paymentList()],
+      paymentRequestProjectId,
+    })).toContain(`达人 ${creatorId} 在一次请款中只能关联一份 Invoice`);
 
     const duplicateList = paymentList();
     duplicateList.items = [duplicateList.items[0], { ...duplicateList.items[0], id: 'item-duplicate' }];
@@ -871,6 +895,17 @@ describe('media payment request list presentation', () => {
     expect(result.visible.map((request) => request.id)).toEqual(['request-2']);
   });
 
+  it('supports filtering requests that do not have an assigned PM', () => {
+    const unassigned = { ...requests[0], id: 'request-unassigned', pm: '' };
+    const result = filterPaymentRequestList({
+      requests: [...requests, unassigned],
+      search: '',
+      filters: { ...createEmptyPaymentRequestListFilters(), pms: ['__UNASSIGNED__'] },
+    });
+
+    expect(result.visible.map((request) => request.id)).toEqual(['request-unassigned']);
+  });
+
   it('keeps the first approval submission time across later approval rounds', () => {
     const request = {
       approval: {
@@ -955,9 +990,37 @@ describe('media payment request list presentation', () => {
     expect(result.visible.map((request) => request.id)).toEqual(['request-3']);
   });
 
-  it('only allows adding creators while the request remains a draft', () => {
+  it('allows adding creators to drafts and approval-chain returns only', () => {
+    const approvalReturn = {
+      status: 'RETURNED_TO_MEDIA_REVIEW',
+      round: 1,
+      history: [{
+        round: 1,
+        stage: 'FINANCE',
+        action: 'RETURN',
+        actorAccount: 'finance',
+        actorName: '财务',
+        actorRole: '财务',
+        fromStatus: 'PENDING_FINANCE',
+        toStatus: 'RETURNED_TO_MEDIA_REVIEW',
+        reason: '需要修改',
+        occurredAt: '2026-08-07T10:00:00.000Z',
+      }],
+      submittedAt: '2026-08-07T09:00:00.000Z',
+      returnedFromStage: 'FINANCE',
+      resumeStatus: 'PENDING_FINANCE',
+      returnReason: '需要修改',
+      updatedAt: '2026-08-07T10:00:00.000Z',
+    } satisfies RequestApprovalState;
+    const executionReturn = {
+      ...approvalReturn,
+      history: [{ ...approvalReturn.history[0], fromStatus: 'APPROVED' }],
+    } satisfies RequestApprovalState;
+
     expect(canAddCreatorToPaymentRequest({ id: 'draft', lifecycle: 'DRAFT' })).toBe(true);
     expect(canAddCreatorToPaymentRequest({ id: 'returned', lifecycle: 'RETURNED' })).toBe(false);
+    expect(canAddCreatorToPaymentRequest({ id: 'approval-return', lifecycle: 'RETURNED', approval: approvalReturn })).toBe(true);
+    expect(canAddCreatorToPaymentRequest({ id: 'execution-return', lifecycle: 'RETURNED', approval: executionReturn })).toBe(false);
     expect(canAddCreatorToPaymentRequest({ id: 'submitted', lifecycle: 'SUBMITTED' })).toBe(false);
   });
 });
@@ -998,13 +1061,16 @@ describe('payment request module status presentation', () => {
     expect(requestProjectStatusFor({ lifecycle: 'COMPLETED' })).toBe('已付款');
   });
 
-  it('moves an approved request through payment execution to paid', () => {
+  it('moves an approved request through mutually exclusive payment execution states', () => {
     const paymentRequestProjectId = 'request-status-payment' as PaymentRequestProjectId;
     const request = { lifecycle: 'APPROVED' as const, paymentRequestProjectId };
     const payoutFor = (status: Payout['status']) => ({ paymentRequestProjectId, status });
 
     expect(requestProjectStatusFor(request, [payoutFor('等待付款')])).toBe('正在付款');
     expect(requestProjectStatusFor(request, [payoutFor('付款处理中')])).toBe('付款处理中');
+    expect(requestProjectStatusFor(request, [payoutFor('已付款'), payoutFor('付款处理中')])).toBe('付款处理中');
+    expect(requestProjectStatusFor(request, [payoutFor('已付款'), payoutFor('付款失败')])).toBe('部分失败');
+    expect(requestProjectStatusFor(request, [payoutFor('付款失败'), payoutFor('付款失败')])).toBe('全部失败');
     expect(requestProjectStatusFor(request, [payoutFor('已付款')])).toBe('已付款');
   });
 
@@ -1049,6 +1115,19 @@ describe('payment request module status presentation', () => {
 
   it('keeps the partial payment failure status available to My Projects filters', () => {
     expect(myProjectStatusFor({ lifecycle: 'RETURNED', status: '部分打款失败' })).toBe('部分打款失败');
+  });
+
+  it('separates payment failure returns from ordinary approval returns', () => {
+    const paymentRequestProjectId = 'request-returned-failure' as PaymentRequestProjectId;
+    const payoutFor = (status: Payout['status']) => ({ paymentRequestProjectId, status });
+
+    expect(requestProjectStatusFor({ lifecycle: 'RETURNED', status: '待补资料', paymentRequestProjectId }, [
+      payoutFor('付款失败'),
+      payoutFor('已付款'),
+    ])).toBe('部分失败');
+    expect(requestProjectStatusFor({ lifecycle: 'RETURNED', status: '部分打款失败' })).toBe('部分失败');
+    expect(requestProjectStatusFor({ lifecycle: 'RETURNED', status: '全部失败' })).toBe('全部失败');
+    expect(requestProjectStatusFor({ lifecycle: 'RETURNED', status: '待补资料' })).toBe('已退回');
   });
 });
 

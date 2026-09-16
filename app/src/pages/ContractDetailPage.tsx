@@ -29,8 +29,11 @@ import { ContractTemplateFieldEditor } from '../components/ContractTemplateField
 import {
   canConfirmRecognitionFields,
   confirmRecognitionFields,
+  contractExpiryRangeValidationMessage,
+  editContractExpiryRange,
   editRecognitionField,
-  normalizeCampaignPeriod,
+  isContractExpiryRangeValid,
+  normalizeContractRecognitionFields,
   recognitionFieldDisplayValue,
   reopenRecognitionFields,
 } from '../contractRecognition';
@@ -54,12 +57,20 @@ import {
   getContractValidity,
   isFrameworkContract,
   isIoContract,
+  projectConfirmedRecognitionDraft,
   sendContractForSignature,
+  type ContractSignaturePaymentInformation,
   type ContractType,
   type ContractRecognizedAccountSnapshot,
   type ContractRecord,
   type ContractUploadInput,
 } from '../contracts';
+import {
+  createContractSignatureRequest,
+  sendContractSignatureRequest,
+  simulateDocuSignContractSend,
+  type ContractSignatureSender,
+} from '../contractSignature';
 import { contractDocumentFilename } from '../documentFilenames';
 import { resolveSystemUser } from '../data';
 import type { ContractId } from '../businessWorkflow';
@@ -118,15 +129,15 @@ const SUMMARY_FIELDS_BY_TYPE: Record<ContractType, ContractDetailField[]> = {
     { key: 'contractNumber', label: '合同编号' },
     { key: 'projectBrand', label: 'Project Name' },
     { key: 'platformChannel', label: '平台 / 频道（可选）' },
-    { key: 'campaignEnd', label: '到期时间' },
-    { key: 'campaignPeriod', label: 'Campaign Period' },
+    { key: 'campaignEnd', label: '合同有效期' },
+    { key: 'signatureStatus', label: '签署状态' },
   ],
   FRAMEWORK: [
     { key: 'advertiser', label: 'Advertiser' },
     { key: 'publisher', label: 'Publisher' },
     { key: 'contractNumber', label: '合同编号' },
-    { key: 'campaignEnd', label: '到期时间' },
-    { key: 'campaignPeriod', label: 'Campaign Period' },
+    { key: 'campaignEnd', label: '合同有效期' },
+    { key: 'signatureStatus', label: '签署状态' },
   ],
   IO: [
     { key: 'advertiser', label: 'Advertiser' },
@@ -134,8 +145,8 @@ const SUMMARY_FIELDS_BY_TYPE: Record<ContractType, ContractDetailField[]> = {
     { key: 'contractNumber', label: '合同编号' },
     { key: 'projectBrand', label: 'Project Name' },
     { key: 'platformChannel', label: '平台 / 频道（可选）' },
-    { key: 'campaignEnd', label: '到期时间' },
-    { key: 'campaignPeriod', label: 'Campaign Period' },
+    { key: 'campaignEnd', label: '合同有效期' },
+    { key: 'signatureStatus', label: '签署状态' },
   ],
 };
 
@@ -169,26 +180,24 @@ const DETAIL_FIELD_LABELS: Partial<Record<ContractFieldKey, string>> = Object.fr
 ) as Partial<Record<ContractFieldKey, string>>;
 
 export const contractExpiryDisplayValue = (
-  contract: Pick<ContractRecord, 'campaignEnd' | 'isLongTerm'>,
+  contract: Pick<ContractRecord, 'campaignEnd' | 'isLongTerm'>
+    & Partial<Pick<ContractRecord, 'campaignStart'>>,
 ) => {
   const validity = getContractValidity(contract);
   if (validity.status === 'LONG_TERM') return '长期有效';
   if (validity.status === 'UNSET') return '未设置';
-  return validity.endDate;
+  return contract.campaignStart
+    ? `${contract.campaignStart} 至 ${validity.endDate}`
+    : validity.endDate;
 };
 
-export const recognitionCampaignEndValue = (
-  field: ContractRecognitionField | undefined,
-  isLongTerm = false,
+export const contractSignatureStatusLabel = (
+  contract: Pick<ContractRecord, 'isTemplate' | 'lifecycle' | 'signed'>,
 ) => {
-  if (isLongTerm) return '长期有效';
-  if (!field) return '待补充';
-  const normalized = typeof field.normalizedValue === 'object' && field.normalizedValue
-    ? field.normalizedValue as { endDate?: string }
-    : undefined;
-  const normalizedEnd = normalized?.endDate?.trim();
-  if (normalizedEnd) return normalizedEnd;
-  return normalizeCampaignPeriod(field.editedValue?.trim() || field.rawValue).endDate || '待补充';
+  if (contract.isTemplate) return '不适用';
+  if (contract.signed) return '已签署';
+  if (contract.lifecycle === 'SENT_FOR_SIGNATURE') return '待达人签署';
+  return '未签署';
 };
 
 const FEE_BEARER_LABELS = {
@@ -289,6 +298,38 @@ export const contractRecognizedAccountRows = (
   return rows;
 };
 
+export const contractSignaturePaymentInformationFor = (
+  contract: ContractRecord,
+  paymentSnapshot: DocumentPayoutSnapshot | null,
+): ContractSignaturePaymentInformation => {
+  const frozenRows = contractPaymentAccountRows(contract, paymentSnapshot);
+  const frozenByLabel = new Map(frozenRows.map((row) => [row.label, row.value]));
+  const recognizedRows = contract.recognizedPaymentDetails
+    ? contractRecognizedAccountRows(contract.recognizedPaymentDetails).map((row) => ({
+        ...row,
+        value: row.value === '待补充'
+          ? frozenByLabel.get(row.label) ?? row.value
+          : row.value,
+      }))
+    : [];
+  const usesRecognizedSnapshot = recognizedRows.length > 0;
+  const channel = contract.recognizedPaymentDetails?.detectedChannel === 'PAYPAL'
+    ? 'PayPal'
+    : contract.recognizedPaymentDetails?.detectedChannel === 'BANK'
+      ? '银行转账'
+      : contract.recognizedPaymentDetails?.detectedChannel === 'MIXED'
+        ? '银行转账 / PayPal'
+        : contractPaymentChannelDisplayValue(contract, paymentSnapshot);
+  return {
+    source: usesRecognizedSnapshot ? 'recognized-contract' : 'frozen-payout-account',
+    channel,
+    fields: (usesRecognizedSnapshot ? recognizedRows : frozenRows).map((row) => ({
+      label: row.label,
+      value: row.value,
+    })),
+  };
+};
+
 const createDemoAirwallexSnapshot = (contract: ContractRecord): DocumentPayoutSnapshot => {
   const accountName = contract.accountName || contract.publisher || 'Demo Creator';
   const accountTail = contract.id.replace(/\D/g, '').slice(-4).padStart(4, '0');
@@ -357,9 +398,8 @@ function ContractDefinitionList({
   projectName: string;
   formalFieldsHidden?: boolean;
 }) {
-  const joinedValue = (...values: string[]) => values.filter(Boolean).join(' · ') || '待补充';
   const valueFor = (key: ContractDetailField['key']) => {
-    if (formalFieldsHidden && key !== 'contractNumber') return '待补充';
+    if (formalFieldsHidden && key !== 'contractNumber' && key !== 'signatureStatus') return '待补充';
     switch (key) {
       case 'advertiser': return contract.advertiser || '待识别';
       case 'publisher': return contract.publisher || '待补充';
@@ -370,10 +410,8 @@ function ContractDefinitionList({
         contract.creatorPlatform ?? contract.platform,
       );
       case 'campaignEnd': return contractExpiryDisplayValue(contract);
+      case 'signatureStatus': return contractSignatureStatusLabel(contract);
       case 'effectiveDate': return contract.effectiveDate || '待补充';
-      case 'campaignPeriod': return contract.campaignStart && contract.campaignEnd
-        ? `${contract.campaignStart} 至 ${contract.campaignEnd}`
-        : '待补充';
       default: return '待补充';
     }
   };
@@ -384,7 +422,11 @@ function ContractDefinitionList({
           <dt>{field.label}</dt>
           <dd>
             {valueFor(field.key)}
-            <small>{field.key === 'contractNumber' ? '系统字段' : '合同识别 / 人工确认'}</small>
+            <small>{field.key === 'contractNumber'
+              ? '系统字段'
+              : field.key === 'signatureStatus'
+                ? '根据当前签署流程派生'
+                : '合同识别 / 人工确认'}</small>
           </dd>
         </div>
       ))}
@@ -440,22 +482,20 @@ function RecognitionFieldList({
   fields,
   fieldKeys,
   onChange,
+  onChangeExpiry,
   onSelectCandidate,
   onOpenSource,
   fieldLabels = {},
   recognitionLocked = false,
-  showCampaignEnd = false,
-  isLongTerm = false,
 }: {
   fields: ContractRecognitionField[];
   fieldKeys: ContractFieldKey[];
   onChange: (fieldKey: ContractFieldKey, value: string) => void;
+  onChangeExpiry: (startDate: string, endDate: string) => void;
   onSelectCandidate: (fieldKey: ContractFieldKey, candidate: ContractFieldCandidate) => void;
   onOpenSource: (source: ContractSourceLocation) => void;
   fieldLabels?: Partial<Record<ContractFieldKey, string>>;
   recognitionLocked?: boolean;
-  showCampaignEnd?: boolean;
-  isLongTerm?: boolean;
 }) {
   return (
     <div className="contract-recognition-detail-list">
@@ -469,32 +509,18 @@ function RecognitionFieldList({
           && 'signed' in field.normalizedValue
           ? (field.normalizedValue as { signed?: boolean }).signed ? 'SIGNED' : 'UNSIGNED'
           : '';
+        const expiryValue = field.fieldKey === 'contractExpiry'
+          && field.normalizedValue
+          && typeof field.normalizedValue === 'object'
+          ? field.normalizedValue as { startDate?: string; endDate?: string; isLongTerm?: boolean }
+          : undefined;
+        const expiryStartDate = expiryValue?.startDate?.trim() ?? '';
+        const expiryDate = expiryValue?.endDate?.trim() ?? '';
+        const expiryError = field.fieldKey === 'contractExpiry'
+          ? contractExpiryRangeValidationMessage(field.normalizedValue)
+          : '';
         return (
           <Fragment key={field.fieldKey}>
-            {showCampaignEnd && fieldKey === 'campaignPeriod' ? (
-              <article
-                className={`contract-recognition-detail contract-recognition-detail-derived contract-recognition-field-${field.status} contract-recognition-detail-readonly`}
-                data-derived-from="campaignPeriod"
-              >
-                <div className="contract-recognition-label">到期时间</div>
-                <div className="contract-recognition-value">
-                  <input
-                    aria-label="到期时间"
-                    value={recognitionCampaignEndValue(field, isLongTerm)}
-                    readOnly
-                  />
-                  {field.source ? (
-                    <button className="contract-recognition-source" type="button" onClick={() => onOpenSource(field.source!)}>
-                      <FileSearch size={12} />
-                      {sourceLabel(field.source)}
-                    </button>
-                  ) : <small className="contract-recognition-missing-source">未识别，需在 Campaign Period 补充</small>}
-                </div>
-                <div className="contract-recognition-actions">
-                  <span className="contract-recognition-status">自动同步</span>
-                </div>
-              </article>
-            ) : null}
             <article
               className={`contract-recognition-detail contract-recognition-field-${field.status}${fieldLocked ? ' contract-recognition-detail-readonly' : ''}`}
             >
@@ -511,11 +537,38 @@ function RecognitionFieldList({
                     <option value="SIGNED">已签署</option>
                     <option value="UNSIGNED">未签署</option>
                   </select>
+                ) : field.fieldKey === 'contractExpiry' ? (
+                  <div className={`contract-expiry-editor${expiryError ? ' is-error' : ''}`}>
+                    <label>
+                      <span>开始日期</span>
+                      <input
+                        aria-label="合同有效期开始日期"
+                        type="date"
+                        value={expiryStartDate}
+                        disabled={fieldLocked}
+                        aria-invalid={Boolean(expiryError)}
+                        onChange={(event) => onChangeExpiry(event.target.value, expiryDate)}
+                      />
+                    </label>
+                    <span className="contract-expiry-separator" aria-hidden="true">至</span>
+                    <label>
+                      <span>结束日期</span>
+                      <input
+                        aria-label="合同有效期结束日期"
+                        type="date"
+                        value={expiryDate}
+                        disabled={fieldLocked}
+                        aria-invalid={Boolean(expiryError)}
+                        onChange={(event) => onChangeExpiry(expiryStartDate, event.target.value)}
+                      />
+                    </label>
+                    {expiryError ? <small className="contract-expiry-error" role="alert">{expiryError}</small> : null}
+                  </div>
                 ) : (
                   <input
                     aria-label={fieldLabels[field.fieldKey] ?? field.label}
                     value={recognitionFieldDisplayValue(field)}
-                    placeholder={field.fieldKey === 'contractExpiry' ? 'YYYY-MM-DD 或长期有效' : '待补充'}
+                    placeholder="待补充"
                     readOnly={fieldLocked}
                     onChange={(event) => onChange(field.fieldKey, event.target.value)}
                   />
@@ -571,6 +624,7 @@ export function ContractDetailPage({
   onBindFrameworkContract,
   onUploadContracts,
   onTemplateDirtyChange,
+  signatureSender = simulateDocuSignContractSend,
 }: {
   contract: ContractRecord;
   contracts?: ContractRecord[];
@@ -587,10 +641,13 @@ export function ContractDetailPage({
   onBindFrameworkContract?: (ioContractId: ContractId, frameworkContractId?: ContractId) => boolean;
   onUploadContracts?: (inputs: ContractUploadInput[]) => ContractRecord[];
   onTemplateDirtyChange?: (dirty: boolean) => void;
+  signatureSender?: ContractSignatureSender;
 }) {
   const [activeTab, setActiveTab] = useState<ContractDetailTab>('summary');
   const [dismissedDocumentNoteId, setDismissedDocumentNoteId] = useState<string | null>(null);
-  const [draftFields, setDraftFields] = useState(contract.recognitionResults ?? []);
+  const [draftFields, setDraftFields] = useState(() => (
+    normalizeContractRecognitionFields(contract.recognitionResults ?? [])
+  ));
   const [activeDocumentId, setActiveDocumentId] = useState(contract.sourceDocuments?.[0]?.id ?? '');
   const [focusedSource, setFocusedSource] = useState<ContractSourceLocation | null>(null);
   const [frameworkUploadOpen, setFrameworkUploadOpen] = useState(false);
@@ -598,10 +655,18 @@ export function ContractDetailPage({
   const [templateEditorDirty, setTemplateEditorDirty] = useState(false);
   const [templateDeactivateConfirmationOpen, setTemplateDeactivateConfirmationOpen] = useState(false);
   const [templateStatusValidationIssues, setTemplateStatusValidationIssues] = useState<ContractTemplatePolicyIssue[]>([]);
+  const [signatureConfirmationOpen, setSignatureConfirmationOpen] = useState(false);
+  const [signatureSignerName, setSignatureSignerName] = useState('');
+  const [signatureSendError, setSignatureSendError] = useState('');
+  const [signatureSending, setSignatureSending] = useState(false);
   useEffect(() => {
-    setDraftFields(contract.recognitionResults ?? []);
+    setDraftFields(normalizeContractRecognitionFields(contract.recognitionResults ?? []));
     setActiveDocumentId(contract.sourceDocuments?.[0]?.id ?? '');
     setFocusedSource(null);
+    setSignatureConfirmationOpen(false);
+    setSignatureSignerName('');
+    setSignatureSendError('');
+    setSignatureSending(false);
   }, [contract.id]);
   useEffect(() => {
     if (!templateEditorDirty) return undefined;
@@ -703,6 +768,25 @@ export function ContractDetailPage({
   const allConfirmed = hasRecognition
     && applicableRecognitionFields.length > 0
     && confirmedCount === applicableRecognitionFields.length;
+  const draftSignatureField = draftFields.find((field) => field.fieldKey === 'signatureStatus');
+  const draftSignatureValue = draftSignatureField?.normalizedValue
+    && typeof draftSignatureField.normalizedValue === 'object'
+    ? draftSignatureField.normalizedValue as { signed?: boolean }
+    : null;
+  const draftSignatureConfirmed = draftSignatureField?.status === 'confirmed';
+  const draftSignatureSigned = draftSignatureConfirmed && draftSignatureValue?.signed === true;
+  const draftSignatureUnsigned = draftSignatureConfirmed && draftSignatureValue?.signed === false;
+  const confirmedRecognitionDraft = allConfirmed
+    ? projectConfirmedRecognitionDraft(
+        { ...contract, recognitionResults: draftFields },
+        requiredRecognitionFieldKeys,
+      )
+    : null;
+  const signatureSourceContract = confirmedRecognitionDraft ?? contract;
+  const signaturePaymentInformation = contractSignaturePaymentInformationFor(
+    signatureSourceContract,
+    paymentSnapshot,
+  );
   const recognitionApplied = contract.extractionStage === 'applied';
   const nonSignatureIssues = contract.issues.filter((issue) => issue.id !== 'signature');
   const visibleIssues = allConfirmed
@@ -716,7 +800,8 @@ export function ContractDetailPage({
   const readinessLabel = validity.expired ? '已失效' : readiness.label;
   const signatureConfirmed = contract.signed === true
     || (contract.signed == null && contract.lifecycle === 'CONFIRMED');
-  const signaturePending = !contract.isTemplate && !signatureConfirmed;
+  const effectiveSignatureConfirmed = signatureConfirmed || (!recognitionApplied && draftSignatureSigned);
+  const signaturePending = !contract.isTemplate && !effectiveSignatureConfirmed;
   const checkIssueCount = visibleIssues.length + (signaturePending ? 1 : 0);
   const recognitionPageState = (fieldKeys: readonly ContractFieldKey[]) => {
     const pageFieldKeys = recognitionKeysToConfirm(fieldKeys);
@@ -738,6 +823,27 @@ export function ContractDetailPage({
     { id: 'checks', label: `校验记录${checkIssueCount ? ` ${checkIssueCount}` : ''}` },
   ];
   const canEditCurrentContract = canEdit && (!contract.isTemplate || canEditTemplate);
+  const isConfirmedUnsignedUpload = allConfirmed
+    && draftSignatureUnsigned
+    && contract.lifecycle === 'UPLOADED_PENDING_CONFIRMATION'
+    && contract.extractionStage === 'confirmed';
+  const isLegacyAppliedUnsignedContract = contract.lifecycle === 'RECOGNITION_CONFIRMED'
+    && contract.extractionStage === 'applied'
+    && !contract.signed;
+  const canOpenSignatureConfirmation = (isConfirmedUnsignedUpload || isLegacyAppliedUnsignedContract)
+    && canEditCurrentContract
+    && Boolean(onUpdateContract);
+  const applyRecognitionDisabledReason = !canEditCurrentContract
+    ? '当前账号没有编辑合同资料的权限。'
+    : !onUpdateContract
+      ? '当前合同无法更新。'
+      : !allConfirmed
+        ? '请先确认全部识别字段。'
+        : draftSignatureUnsigned
+          ? '合同尚未签署，请先发送达人签署并等待完成。'
+          : !draftSignatureSigned
+            ? '请先确认合同签署状态。'
+            : undefined;
   const pendingGeneratedUpload = Boolean(
     contract.uploadedFromDraftId
     && contract.lifecycle === 'UPLOADED_PENDING_CONFIRMATION',
@@ -818,14 +924,23 @@ export function ContractDetailPage({
   };
 
   const updateField = (fieldKey: ContractFieldKey, value: string) => {
-    if (!canEditCurrentContract) return;
+    if (!canEditCurrentContract || contract.lifecycle === 'SENT_FOR_SIGNATURE') return;
     setDraftFields((current) => current.map((field) => (
       field.fieldKey === fieldKey ? editRecognitionField(field, value) : field
     )));
   };
 
+  const updateContractExpiry = (startDate: string, endDate: string) => {
+    if (!canEditCurrentContract || contract.lifecycle === 'SENT_FOR_SIGNATURE') return;
+    setDraftFields((current) => current.map((field) => (
+      field.fieldKey === 'contractExpiry'
+        ? editContractExpiryRange(field, startDate, endDate)
+        : field
+    )));
+  };
+
   const updateAccountRecognitionMode = (mode: string) => {
-    if (!canEditCurrentContract || recognitionApplied) return;
+    if (!canEditCurrentContract || recognitionApplied || contract.lifecycle === 'SENT_FOR_SIGNATURE') return;
     const next = draftFields.map((field) => {
       if (field.group === 'bank') return { ...field, applicable: mode === 'BANK' || mode === 'MIXED' };
       if (field.group === 'paypal') return { ...field, applicable: mode === 'PAYPAL' || mode === 'MIXED' };
@@ -841,7 +956,7 @@ export function ContractDetailPage({
 
   const confirmPage = (fieldKeys: readonly ContractFieldKey[], pageLabel: string) => {
     if (!canEditCurrentContract) return;
-    if (recognitionApplied) return;
+    if (recognitionApplied || contract.lifecycle === 'SENT_FOR_SIGNATURE') return;
     const fieldsToConfirm = recognitionKeysToConfirm(fieldKeys);
     if (!canConfirmRecognitionFields(draftFields, fieldsToConfirm)) {
       notify('本页仍有待处理字段', `${pageLabel}存在待补充或需核对字段，请处理后再确认。`);
@@ -861,7 +976,7 @@ export function ContractDetailPage({
 
   const editPage = (fieldKeys: readonly ContractFieldKey[], pageLabel: string) => {
     if (!canEditCurrentContract) return;
-    if (recognitionApplied) return;
+    if (recognitionApplied || contract.lifecycle === 'SENT_FOR_SIGNATURE') return;
     const next = reopenRecognitionFields(draftFields, fieldKeys);
     setDraftFields(next);
     onUpdateContract?.({
@@ -880,6 +995,9 @@ export function ContractDetailPage({
     if (!hasRecognition || !onUpdateContract) return null;
     if (!canEditCurrentContract) {
       return <span className="contract-page-readonly">仅允许媒介负责人、老板或管理员编辑</span>;
+    }
+    if (contract.lifecycle === 'SENT_FOR_SIGNATURE') {
+      return <span className="contract-page-readonly">已发送签署，字段已锁定</span>;
     }
     if (pageState.allConfirmed) {
       return recognitionApplied ? (
@@ -912,6 +1030,7 @@ export function ContractDetailPage({
   };
 
   const selectCandidate = (fieldKey: ContractFieldKey, candidate: ContractFieldCandidate) => {
+    if (!canEditCurrentContract || contract.lifecycle === 'SENT_FOR_SIGNATURE') return;
     setDraftFields((current) => current.map((field) => field.fieldKey === fieldKey
       ? {
           ...field,
@@ -919,7 +1038,9 @@ export function ContractDetailPage({
           normalizedValue: candidate.normalizedValue,
           source: candidate.source,
           confidence: candidate.confidence,
-          status: 'detected',
+          status: fieldKey === 'contractExpiry' && !isContractExpiryRangeValid(candidate.normalizedValue)
+            ? 'missing'
+            : 'detected',
         }
       : field));
     setActiveDocumentId(candidate.source.documentId);
@@ -934,6 +1055,19 @@ export function ContractDetailPage({
   const applyRecognition = () => {
     if (!canEditCurrentContract) {
       notify('暂无模板编辑权限', '仅媒介负责人、老板或管理员可以修改合同模板。');
+      return;
+    }
+    if (!allConfirmed) {
+      notify('仍有字段未确认', `已确认 ${confirmedCount}/${applicableRecognitionFields.length} 项，请完成适用字段确认。`);
+      return;
+    }
+    if (!draftSignatureSigned) {
+      notify(
+        draftSignatureUnsigned ? '合同尚未签署' : '签署状态未确认',
+        draftSignatureUnsigned
+          ? '合同尚未签署，请先发送达人签署并等待完成。'
+          : '请先确认合同签署状态。',
+      );
       return;
     }
     const candidate = { ...contract, recognitionResults: draftFields };
@@ -951,22 +1085,70 @@ export function ContractDetailPage({
     );
   };
 
-  const sendForSignature = () => {
-    if (!canEditCurrentContract || !onUpdateContract) return;
-    const sent = sendContractForSignature(contract);
-    if (!sent) {
-      notify('无法发送合同', '请先完成识别字段确认并应用到正式合同资料。');
+  const openSignatureConfirmation = () => {
+    if (!canOpenSignatureConfirmation) return;
+    setSignatureSignerName(signatureSourceContract.publisher || creator?.name || '');
+    setSignatureSendError('');
+    setSignatureConfirmationOpen(true);
+  };
+
+  const closeSignatureConfirmation = () => {
+    if (signatureSending) return;
+    setSignatureConfirmationOpen(false);
+    setSignatureSendError('');
+  };
+
+  const sendForSignature = async () => {
+    if (!canEditCurrentContract || !onUpdateContract || signatureSending) return;
+    const signerName = signatureSignerName.trim();
+    if (!signerName) {
+      setSignatureSendError('请填写签署人。');
       return;
     }
-    onUpdateContract(sent);
-    notify('已发送达人签署', `${contract.id} 已进入待签署，当前为前端原型模拟通知。`);
+    setSignatureSending(true);
+    setSignatureSendError('');
+    const request = createContractSignatureRequest(signatureSourceContract, {
+      creatorDisplayName: creator?.name || signatureSourceContract.publisher || '待补充',
+      amount: formatContractMoney(signatureSourceContract),
+      paymentInformation: signaturePaymentInformation,
+      signerName,
+      requestedAt: new Date().toISOString(),
+    });
+    try {
+      const result = await sendContractSignatureRequest(request, signatureSender);
+      if (!result.ok) {
+        setSignatureSendError(result.error);
+        notify('发送签署失败', result.error);
+        return;
+      }
+      const sent = sendContractForSignature({
+        ...contract,
+        recognitionResults: draftFields,
+        extractionStage: recognitionApplied ? contract.extractionStage : 'confirmed',
+      }, request, result);
+      if (!sent) {
+        const reason = '请先确认两页字段，并将签署状态选择为未签署。';
+        setSignatureSendError(reason);
+        notify('无法发送合同', reason);
+        return;
+      }
+      onUpdateContract(sent);
+      setSignatureConfirmationOpen(false);
+      notify('已发送达人签署', `${contract.id} 已进入待签署，当前为前端原型模拟 DocuSign 通知。`);
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : '签署通知发送失败，请稍后重试。';
+      setSignatureSendError(message);
+      notify('发送签署失败', message);
+    } finally {
+      setSignatureSending(false);
+    }
   };
 
   const completeSignature = () => {
     if (!canEditCurrentContract || !onUpdateContract) return;
-    const completed = completeContractSignature(contract);
+    const completed = completeContractSignature(contract, new Date().toISOString(), requiredRecognitionFieldKeys);
     if (!completed) {
-      notify('无法完成签署', '只有已发送给达人的待签署合同可以完成此操作。');
+      notify('无法完成签署', '请确认合同仍处于待签署状态，且发送前冻结的识别字段完整有效。');
       return;
     }
     onUpdateContract(completed);
@@ -1061,6 +1243,11 @@ export function ContractDetailPage({
             <span>上传者</span>
             <strong>{uploaderName}</strong>
             <small>{uploaderDetail}</small>
+          </article>
+          <article>
+            <span>签署状态</span>
+            <strong>{contractSignatureStatusLabel(contract)}</strong>
+            <small>合同模板不参与签署流程</small>
           </article>
         </div>
       ) : (
@@ -1231,17 +1418,16 @@ export function ContractDetailPage({
                   </span>
                   {renderPageAction(summaryFieldKeys, '合同摘要', summaryPageState)}
                 </div>
-                {hasRecognition ? (
+                {hasRecognition && !recognitionApplied ? (
                   <RecognitionFieldList
                     fields={draftFields}
                     fieldKeys={summaryFieldKeys}
                     onChange={updateField}
+                    onChangeExpiry={updateContractExpiry}
                     onSelectCandidate={selectCandidate}
                     onOpenSource={openSource}
                     fieldLabels={usesModernUploadRecognition ? {} : DETAIL_FIELD_LABELS}
-                    recognitionLocked={recognitionApplied || !canEditCurrentContract}
-                    showCampaignEnd={!usesModernUploadRecognition}
-                    isLongTerm={Boolean(contract.isLongTerm)}
+                    recognitionLocked={!canEditCurrentContract || contract.lifecycle === 'SENT_FOR_SIGNATURE'}
                   />
                 ) : (
                   <ContractDefinitionList
@@ -1271,7 +1457,7 @@ export function ContractDetailPage({
                     <select
                       aria-label="合同账户类型"
                       value={accountRecognitionMode}
-                      disabled={!canEditCurrentContract}
+                      disabled={!canEditCurrentContract || contract.lifecycle === 'SENT_FOR_SIGNATURE'}
                       onChange={(event) => updateAccountRecognitionMode(event.target.value)}
                     >
                       <option value="">未识别，请选择</option>
@@ -1298,10 +1484,11 @@ export function ContractDetailPage({
                       fields={draftFields}
                       fieldKeys={paymentFieldKeys}
                       onChange={updateField}
+                      onChangeExpiry={updateContractExpiry}
                       onSelectCandidate={selectCandidate}
                       onOpenSource={openSource}
                       fieldLabels={usesModernUploadRecognition ? {} : DETAIL_FIELD_LABELS}
-                      recognitionLocked={recognitionApplied || !canEditCurrentContract}
+                      recognitionLocked={recognitionApplied || !canEditCurrentContract || contract.lifecycle === 'SENT_FOR_SIGNATURE'}
                     />
                   </>
                 ) : (
@@ -1332,25 +1519,19 @@ export function ContractDetailPage({
                     >上传合同文件</Button>
                   </div>
                 ) : null}
-                {hasRecognition && contract.extractionStage !== 'applied' ? (
+                {hasRecognition
+                  && contract.extractionStage !== 'applied'
+                  && contract.lifecycle !== 'SENT_FOR_SIGNATURE' ? (
                   <div className={`contract-recognition-apply${allConfirmed ? ' contract-recognition-apply-complete' : ''}`}>
                     <span className="contract-recognition-apply-icon">
                       <CheckCircle2 size={17} />
                     </span>
                     <div><strong>人工确认进度</strong><small>{confirmedCount}/{applicableRecognitionFields.length} 项</small></div>
-                    <Button disabled={!allConfirmed || !onUpdateContract || !canEditCurrentContract} disabledReason={!canEditCurrentContract ? '当前账号没有编辑合同资料的权限。' : !onUpdateContract ? '当前合同无法更新。' : '请先确认全部识别字段。'} onClick={applyRecognition}>应用到正式合同资料</Button>
-                  </div>
-                ) : null}
-                {contract.lifecycle === 'RECOGNITION_CONFIRMED' ? (
-                  <div className="contract-recognition-apply contract-recognition-apply-complete">
-                    <span className="contract-recognition-apply-icon"><FileSignature size={17} /></span>
-                    <div><strong>识别信息已确认</strong><small>发送后合同将进入“待签署”</small></div>
                     <Button
-                      icon={<FileSignature size={15} />}
-                      disabled={!onUpdateContract || !canEditCurrentContract}
-                      disabledReason={!canEditCurrentContract ? '当前账号没有发送合同的权限。' : '当前合同无法更新。'}
-                      onClick={sendForSignature}
-                    >发送给达人签署</Button>
+                      disabled={Boolean(applyRecognitionDisabledReason)}
+                      disabledReason={applyRecognitionDisabledReason}
+                      onClick={applyRecognition}
+                    >应用到正式合同资料</Button>
                   </div>
                 ) : null}
                 {contract.lifecycle === 'SENT_FOR_SIGNATURE' ? (
@@ -1371,17 +1552,24 @@ export function ContractDetailPage({
                     >模拟达人完成签署</Button>
                   </div>
                 ) : null}
-                <article className={`contract-signature-check${contract.isTemplate ? ' is-not-applicable' : signatureConfirmed ? ' is-complete' : ' is-pending'}`}>
-                  <span>{contract.isTemplate || signatureConfirmed ? <CheckCircle2 size={18} /> : <FileSignature size={18} />}</span>
+                <article className={`contract-signature-check${contract.isTemplate ? ' is-not-applicable' : effectiveSignatureConfirmed ? ' is-complete' : ' is-pending'}`}>
+                  <span>{contract.isTemplate || effectiveSignatureConfirmed ? <CheckCircle2 size={18} /> : <FileSignature size={18} />}</span>
                   <div>
-                    <strong>{contract.isTemplate ? '参考模板无需签署' : signatureConfirmed ? '合同已完成签署' : '合同尚未完成签署'}</strong>
+                    <strong>{contract.isTemplate ? '参考模板无需签署' : effectiveSignatureConfirmed ? '合同已完成签署' : '合同尚未完成签署'}</strong>
                     <p>{contract.isTemplate
                       ? '该记录为参考模板，不参与签署和付款校验。'
-                      : signatureConfirmed
+                      : effectiveSignatureConfirmed
                         ? '签署状态已确认，可继续进行付款资料校验。'
                         : '请确认双方签署完成；未签署合同不能加入付款项目。'}</p>
                     <small>签署状态</small>
                   </div>
+                  {canOpenSignatureConfirmation ? (
+                      <Button
+                        className="contract-signature-send-action"
+                        icon={<FileSignature size={15} />}
+                        onClick={openSignatureConfirmation}
+                      >发送达人签署</Button>
+                    ) : null}
                 </article>
                 {visibleIssues.length > 0 ? (
                   <div className="contract-issue-list">
@@ -1392,7 +1580,7 @@ export function ContractDetailPage({
                       </article>
                     ))}
                   </div>
-                ) : !signaturePending ? (
+                ) : !signaturePending && paymentReady ? (
                   <div className="contract-check-success">
                     <CheckCircle2 size={22} />
                     <span><strong>关键字段检查通过</strong><small>{isFrameworkContract(contract) ? '框架合同可作为资源，并供同一达人 IO 单绑定。' : '合同可用于新建付款项目，并继续进行Invoice匹配。'}</small></span>
@@ -1435,6 +1623,89 @@ export function ContractDetailPage({
           onClose={() => setFrameworkUploadOpen(false)}
           onSave={saveFrameworkUpload}
         />
+      ) : null}
+      {signatureConfirmationOpen ? (
+        <Modal
+          title="发送达人签署"
+          width="860px"
+          className="contract-signature-send-modal"
+          onClose={closeSignatureConfirmation}
+          footer={(
+            <>
+              <Button variant="secondary" disabled={signatureSending} onClick={closeSignatureConfirmation}>取消</Button>
+              <Button
+                icon={<FileSignature size={15} />}
+                disabled={signatureSending}
+                onClick={() => void sendForSignature()}
+              >{signatureSending ? '发送中…' : '发送达人签署'}</Button>
+            </>
+          )}
+        >
+          <div className="contract-signature-send-content">
+            <div className="contract-signature-send-intro">
+              <span><FileSignature size={20} aria-hidden="true" /></span>
+              <div>
+                <strong>请核对签署通知信息</strong>
+                <p>以下内容来自两页已确认的识别结果，发送后将冻结并进入“待签署”。</p>
+              </div>
+              <em>模拟 DocuSign</em>
+            </div>
+
+            <section className="contract-signature-send-section" aria-labelledby="contract-signature-summary-title">
+              <header>
+                <strong id="contract-signature-summary-title">合同确认信息</strong>
+                <small>发送内容将随签署请求冻结</small>
+              </header>
+              <dl className="contract-signature-send-grid">
+                <div><dt>Advertiser</dt><dd>{signatureSourceContract.advertiser || '待补充'}</dd></div>
+                <div><dt>Publisher</dt><dd>{signatureSourceContract.publisher || '待补充'}</dd></div>
+                <div><dt>合同金额</dt><dd>{formatContractMoney(signatureSourceContract)}</dd></div>
+                <div><dt>手续费承担方</dt><dd>{FEE_BEARER_LABELS[signatureSourceContract.feeBearer]}</dd></div>
+                <div><dt>付款渠道</dt><dd>{signaturePaymentInformation.channel}</dd></div>
+              </dl>
+            </section>
+
+            <section className="contract-signature-send-section" aria-labelledby="contract-signature-payment-title">
+              <header>
+                <strong id="contract-signature-payment-title">付款信息</strong>
+                <small>{signaturePaymentInformation.source === 'recognized-contract'
+                  ? '优先使用合同识别快照，缺失字段已回退冻结付款账户'
+                  : '未识别到独立付款信息，使用合同冻结付款账户'}</small>
+              </header>
+              <dl className="contract-signature-payment-grid">
+                {signaturePaymentInformation.fields.map((field) => (
+                  <div key={field.label}><dt>{field.label}</dt><dd>{field.value}</dd></div>
+                ))}
+              </dl>
+            </section>
+
+            <label className={`contract-signature-signer-field${signatureSendError ? ' is-error' : ''}`}>
+              <span>签署人 *</span>
+              <input
+                value={signatureSignerName}
+                maxLength={120}
+                aria-invalid={Boolean(signatureSendError)}
+                aria-describedby={signatureSendError ? 'contract-signature-send-error' : undefined}
+                placeholder="请输入签署人"
+                disabled={signatureSending}
+                onChange={(event) => {
+                  setSignatureSignerName(event.target.value);
+                  if (signatureSendError) setSignatureSendError('');
+                }}
+              />
+              <small>默认为 Publisher，可根据实际签署主体修改。</small>
+            </label>
+            {signatureSendError ? (
+              <p id="contract-signature-send-error" className="contract-signature-send-error" role="alert">
+                <AlertTriangle size={14} aria-hidden="true" />
+                {signatureSendError}
+              </p>
+            ) : null}
+            <p className="contract-signature-send-note">
+              当前为纯前端原型：会生成模拟 envelope ID 和发送快照，不会调用真实 DocuSign 或达人端服务。
+            </p>
+          </div>
+        </Modal>
       ) : null}
       {templateDeactivateConfirmationOpen ? (
         <Modal

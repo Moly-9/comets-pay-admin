@@ -2,6 +2,7 @@ import type { ContractRecord } from '../contracts';
 import { accountDisplayValue } from '../accountPresentation';
 import type {
   DocumentPayoutSnapshot,
+  GeneratedInvoiceRecord,
   InvoiceContractMatchField,
   InvoiceContractMatchIssue,
   InvoiceContractMatchReview,
@@ -27,9 +28,13 @@ export type InvoiceContractMatchActor = {
   role: string;
 };
 
+export type InvoiceContractMatchOptions = {
+  paymentAccountPending?: boolean;
+};
+
 const FIELD_LABELS: Record<InvoiceContractMatchField, string> = {
-  PUBLISHER: '收款主体',
-  ADVERTISER: '付款主体',
+  PUBLISHER: 'From',
+  ADVERTISER: 'Bill To',
   AMOUNT: '应付金额',
   CURRENCY: '币种',
   PAYMENT_ACCOUNT: '付款账户',
@@ -167,26 +172,11 @@ const issue = (
   ...(paymentAccountDifference ? { paymentAccountDifference } : {}),
 });
 
-export const invoiceContractMatchFingerprint = (
-  contracts: ContractRecord[],
-  model: InvoiceDocumentModel,
-) => JSON.stringify({
-  contractIds: contracts.map((contract) => contract.contractId),
-  publisher: model.from.legalName,
-  advertiser: model.billTo.name,
-  currency: model.currency,
-  amount: invoiceTotal(model),
-  paymentMethod: model.paymentMethod,
-  payoutAccountId: model.payoutAccountId,
-  payoutAccountVersion: model.payoutAccountVersion,
-  payoutAccountFingerprint: model.payoutAccountFingerprint,
-  payment: model.payment,
-});
-
 export const evaluateInvoiceContractMatch = (
   contracts: ContractRecord[],
   model: InvoiceDocumentModel,
   reason = '',
+  options: InvoiceContractMatchOptions = {},
 ) => {
   const issues: InvoiceContractMatchIssue[] = [];
   const checks: InvoiceContractMatchCheck[] = [];
@@ -213,9 +203,9 @@ export const evaluateInvoiceContractMatch = (
         'PUBLISHER',
         'BLOCKER',
         contracts,
-        publisherValues.length ? uniqueValues(publisherValues).join('；') : '合同 Publisher 缺失',
-        model.from.legalName || 'Invoice From.Real Name 缺失',
-        '每份合同的 Publisher 必须与 Invoice From.Real Name 一致。',
+        publisherValues.length ? uniqueValues(publisherValues).join('；') : '合同 From 缺失',
+        model.from.legalName || 'Invoice From 缺失',
+        '每份合同的 From 必须与 Invoice From 一致。',
       ));
     }
 
@@ -228,9 +218,9 @@ export const evaluateInvoiceContractMatch = (
         'ADVERTISER',
         'BLOCKER',
         contracts,
-        advertiserValues.length ? uniqueValues(advertiserValues).join('；') : '合同 Advertiser 缺失',
-        model.billTo.name || 'Invoice Bill To.Name 缺失',
-        '每份合同的 Advertiser 必须与 Invoice Bill To.Name 一致。',
+        advertiserValues.length ? uniqueValues(advertiserValues).join('；') : '合同 Bill To 缺失',
+        model.billTo.name || 'Invoice Bill To 缺失',
+        '每份合同的 Bill To 必须与 Invoice Bill To 一致。',
       ));
     }
 
@@ -263,9 +253,11 @@ export const evaluateInvoiceContractMatch = (
       ));
     }
 
-    const accountContracts = contracts.filter((contract) => (
-      accountFields(contract, model).some((field) => populated(field.contractValue))
-    ));
+    const accountContracts = options.paymentAccountPending
+      ? []
+      : contracts.filter((contract) => (
+          accountFields(contract, model).some((field) => populated(field.contractValue))
+        ));
     const mismatchedAccountFields = accountContracts.flatMap((contract) => (
       accountFields(contract, model)
         .filter((field) => populated(field.contractValue) && !sameText(field.contractValue, field.invoiceValue))
@@ -320,6 +312,15 @@ export const evaluateInvoiceContractMatch = (
         checks.push({ field, label, contractValue: '合同未填写', invoiceValue: formatInvoiceMoney(model.currency, invoiceTotal(model)), state: 'NOT_APPLICABLE', message: '合同未填写金额，本项不参与匹配。' });
       } else if (field === 'CURRENCY' && !currencyContracts.length) {
         checks.push({ field, label, contractValue: '合同未填写', invoiceValue: model.currency, state: 'NOT_APPLICABLE', message: '合同未填写币种，本项不参与匹配。' });
+      } else if (field === 'PAYMENT_ACCOUNT' && options.paymentAccountPending) {
+        checks.push({
+          field,
+          label,
+          contractValue: contracts.some((contract) => populated(contract.payoutAccountId || contract.paymentSnapshot?.payoutAccountId)) ? '待上传后复核' : '合同未填写',
+          invoiceValue: '待达人上传并选择',
+          state: 'NOT_APPLICABLE',
+          message: '创建采集任务时不选择付款账户，待达人上传后再匹配。',
+        });
       } else if (field === 'PAYMENT_ACCOUNT' && !accountContracts.length) {
         checks.push({ field, label, contractValue: '合同未填写', invoiceValue: accountSummary(model), state: 'NOT_APPLICABLE', message: '合同未填写付款账户，本项不参与匹配。' });
       } else {
@@ -364,6 +365,24 @@ export const evaluateInvoiceContractMatch = (
   };
 };
 
+const invoiceContractMatchIssuesFingerprint = (issues: InvoiceContractMatchIssue[]) => JSON.stringify(
+  issues.map((matchIssue) => ({
+    field: matchIssue.field,
+    severity: matchIssue.severity,
+    contractIds: [...matchIssue.contractIds].sort(),
+    contractValue: matchIssue.contractValue,
+    invoiceValue: matchIssue.invoiceValue,
+  })),
+);
+
+export const invoiceContractMatchFingerprint = (
+  contracts: ContractRecord[],
+  model: InvoiceDocumentModel,
+  options: InvoiceContractMatchOptions = {},
+) => invoiceContractMatchIssuesFingerprint(
+  evaluateInvoiceContractMatch(contracts, model, '', options).issues,
+);
+
 export const createInvoiceContractMatchReview = ({
   contracts,
   model,
@@ -385,6 +404,7 @@ export const createInvoiceContractMatchReview = ({
   return {
     version,
     contractIds: contractIds(contracts),
+    fingerprint: invoiceContractMatchIssuesFingerprint(result.issues),
     result: result.result,
     issues: result.issues,
     reason: result.reasonRequiredIssues.length && result.reasonValid ? reason.trim() : undefined,
@@ -402,3 +422,57 @@ export const currentInvoiceContractMatchReview = (record: {
 }) => [...(record.contractMatchReviews ?? [])]
   .reverse()
   .find((review) => review.version === (record.version ?? 1));
+
+export type GeneratedInvoiceContractMatchReadiness = {
+  match: ReturnType<typeof evaluateInvoiceContractMatch>;
+  review?: InvoiceContractMatchReview;
+  fingerprint: string;
+  reviewMatches: boolean;
+  effectiveReason: string;
+  missingContractIds: string[];
+  canProceed: boolean;
+  blockingMessage?: string;
+};
+
+export const resolveGeneratedInvoiceContractMatch = (
+  record: Pick<GeneratedInvoiceRecord, 'version' | 'snapshot' | 'contractMatchReviews'>,
+  contracts: ContractRecord[],
+): GeneratedInvoiceContractMatchReadiness => {
+  const selectedContractIds = record.snapshot.contractIds ?? [];
+  const selectedContractIdSet = new Set(selectedContractIds);
+  const selectedContracts = contracts.filter((contract) => (
+    Boolean(contract.contractId && selectedContractIdSet.has(contract.contractId))
+  ));
+  const resolvedContractIds = new Set(selectedContracts.flatMap((contract) => (
+    contract.contractId ? [contract.contractId] : []
+  )));
+  const missingContractIds = selectedContractIds.filter((contractId) => !resolvedContractIds.has(contractId));
+  const review = currentInvoiceContractMatchReview(record);
+  const unresolvedMatch = evaluateInvoiceContractMatch(selectedContracts, record.snapshot);
+  const fingerprint = invoiceContractMatchIssuesFingerprint(unresolvedMatch.issues);
+  const reviewMatches = Boolean(review && (
+    review.fingerprint
+      ? review.fingerprint === fingerprint
+      : invoiceContractMatchIssuesFingerprint(review.issues) === fingerprint
+  ));
+  const effectiveReason = reviewMatches ? review?.reason?.trim() ?? '' : '';
+  const match = evaluateInvoiceContractMatch(selectedContracts, record.snapshot, effectiveReason);
+  const canProceed = missingContractIds.length === 0 && match.canProceed;
+  const blockingMessage = missingContractIds.length
+    ? `关联的合同已失效或不可用：${missingContractIds.join('、')}`
+    : match.blockerIssues[0]?.message
+      ?? (match.reasonRequiredIssues.length && !match.reasonValid
+        ? '合同存在可放行差异，请填写 1–300 字说明。'
+        : undefined);
+
+  return {
+    match,
+    review,
+    fingerprint,
+    reviewMatches,
+    effectiveReason,
+    missingContractIds,
+    canProceed,
+    blockingMessage,
+  };
+};

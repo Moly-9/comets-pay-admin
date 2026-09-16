@@ -21,6 +21,7 @@ import {
   revalidatePaymentListItem,
 } from './businessWorkflow';
 import type { GeneratedInvoiceRecord, InvoiceReviewStatus } from './types';
+import { requestApprovalReturnEditScope } from './requestApprovalWorkflow';
 
 export type PaymentRequestCreatorLink = {
   creatorId: CreatorId;
@@ -288,7 +289,7 @@ export const paymentRequestHasPaymentActivity = (
   payouts: Array<Pick<Payout, 'paymentRequestProjectId' | 'paymentFailureRecovery' | 'status'>>,
 ) => Boolean(paymentRequestProjectId) && payouts.some((payout) => (
   payout.paymentRequestProjectId === paymentRequestProjectId
-  && (Boolean(payout.paymentFailureRecovery) || ['等待付款', '付款处理中', '已付款'].includes(payout.status))
+  && (Boolean(payout.paymentFailureRecovery) || ['等待付款', '付款处理中', '付款失败', '已付款'].includes(payout.status))
 ));
 
 export const canCancelPaymentRequest = ({
@@ -334,6 +335,8 @@ export type RequestProjectStatus =
   | '财务审批中'
   | '正在付款'
   | '付款处理中'
+  | '部分失败'
+  | '全部失败'
   | '已付款'
   | '已退回';
 
@@ -382,19 +385,25 @@ export const myProjectStatusFor = (
 
 export const requestProjectStatusFor = (
   request: Pick<PaymentRequestProjectLike, 'approval' | 'lifecycle' | 'status' | 'paymentRequestProjectId'>,
-  payouts: Pick<Payout, 'paymentRequestProjectId' | 'status'>[] = [],
+  payouts: readonly Pick<Payout, 'paymentRequestProjectId' | 'status'>[] = [],
 ): RequestProjectStatus | null => {
   if (request.lifecycle === 'DRAFT' || request.lifecycle === 'CANCELLED' || (!request.approval && !request.lifecycle)) return null;
   if (request.lifecycle === 'COMPLETED') return '已付款';
-  if (request.lifecycle === 'RETURNED') return '已退回';
+  const linkedPayouts = request.paymentRequestProjectId
+    ? payouts.filter((payout) => payout.paymentRequestProjectId === request.paymentRequestProjectId)
+    : [];
+  const failedCount = linkedPayouts.filter((payout) => payout.status === '付款失败').length;
+  if (request.lifecycle === 'RETURNED') {
+    if (failedCount === linkedPayouts.length && failedCount > 0) return '全部失败';
+    if (failedCount > 0 || request.status === '部分打款失败' || request.status === '部分失败') return '部分失败';
+    if (request.status === '全部失败') return '全部失败';
+    return '已退回';
+  }
   if (request.lifecycle === 'APPROVED') {
-    const linkedPayouts = request.paymentRequestProjectId
-      ? payouts.filter((payout) => payout.paymentRequestProjectId === request.paymentRequestProjectId)
-      : [];
+    if (failedCount === linkedPayouts.length && failedCount > 0) return '全部失败';
+    if (failedCount > 0) return '部分失败';
     if (linkedPayouts.length > 0 && linkedPayouts.every((payout) => payout.status === '已付款')) return '已付款';
-    if (linkedPayouts.some((payout) => payout.status === '付款处理中' || payout.status === '付款失败')) {
-      return '付款处理中';
-    }
+    if (linkedPayouts.some((payout) => ['付款处理中', '已付款'].includes(payout.status))) return '付款处理中';
     return '正在付款';
   }
   if (request.approval) return REQUEST_PROJECT_APPROVAL_STATUS[request.approval.status];
@@ -507,7 +516,7 @@ export const filterPaymentRequestList = <T extends PaymentRequestListItem>({
     const searchable = `${request.requestCode ?? request.id}${request.cooperationProjectName ?? request.project}${request.project}`.toLowerCase();
     const matchesSearch = !query || searchable.includes(query);
     const matchesCustomer = filters.customers.length === 0 || filters.customers.includes(request.brand);
-    const matchesPM = filters.pms.length === 0 || filters.pms.includes(request.pm);
+    const matchesPM = filters.pms.length === 0 || filters.pms.includes(request.pm || '__UNASSIGNED__');
     const matchesCurrency = filters.currency === 'all' || filters.currency === budget.currency;
     const matchesMinBudget = invalidBudgetRange || minBudget === null || budget.amount >= minBudget;
     const matchesMaxBudget = invalidBudgetRange || maxBudget === null || budget.amount <= maxBudget;
@@ -531,6 +540,10 @@ export const filterPaymentRequestList = <T extends PaymentRequestListItem>({
 
 export const canAddCreatorToPaymentRequest = (request: PaymentRequestProjectLike) => (
   request.lifecycle === 'DRAFT'
+  || (
+    request.lifecycle === 'RETURNED'
+    && requestApprovalReturnEditScope(request.approval) === 'full'
+  )
 );
 
 export const isPaymentRequestFullyPaid = ({
@@ -615,6 +628,11 @@ export const findExistingEngagementId = ({
     reference.creatorId === creatorId && reference.status !== 'removed'
   ));
   if (activeReference) return activeReference.engagementId;
+
+  const removedReference = project.creatorProfiles?.find((reference) => (
+    reference.creatorId === creatorId && reference.status === 'removed'
+  ));
+  if (removedReference) return removedReference.engagementId;
 
   const invoiceReference = invoicesForCooperationCreator(invoices, projectId, creatorId)
     .find((invoice) => invoice.snapshot.engagementId)?.snapshot.engagementId;
@@ -854,6 +872,17 @@ export const addInvoiceToPaymentRequestSelection = ({
   selectedInvoiceIds: InvoiceId[];
   selectedContractIds: ContractId[];
 }) => {
+  const normalizedSelectedInvoiceIds = [...new Set(selectedInvoiceIds)];
+  if (
+    normalizedSelectedInvoiceIds.length
+    && !normalizedSelectedInvoiceIds.includes(invoice.invoiceId)
+  ) {
+    return {
+      invoiceIds: normalizedSelectedInvoiceIds,
+      contractIds: [...new Set(selectedContractIds)],
+      autoLinkedContractIds: [] as ContractId[],
+    };
+  }
   const selectableIds = new Set(selectableContractIds(contracts));
   const coveredContractIds = (invoice.snapshot.contractIds ?? []).filter((contractId) => {
     if (!selectableIds.has(contractId)) return false;
@@ -864,7 +893,9 @@ export const addInvoiceToPaymentRequestSelection = ({
       && contractLinkedToProject(contract, invoiceCooperationProjectId(invoice)),
     );
   });
-  const selectedInvoices = [...new Set([...selectedInvoiceIds, invoice.invoiceId])];
+  const selectedInvoices = normalizedSelectedInvoiceIds.length
+    ? normalizedSelectedInvoiceIds
+    : [invoice.invoiceId];
   const selectedContracts = [...new Set([...selectedContractIds, ...coveredContractIds])];
   const remainingCoveredIds = new Set(selectedInvoices.flatMap((invoiceId) => (
     invoices.find((candidate) => candidate.invoiceId === invoiceId)?.snapshot.contractIds ?? []
@@ -982,6 +1013,9 @@ export const paymentRequestSubmissionIssues = ({
     if (!link.invoiceIds.length) {
       issues.push(`达人 ${link.creatorId} 缺少关联 Invoice`);
       return;
+    }
+    if (link.invoiceIds.length > 1) {
+      issues.push(`达人 ${link.creatorId} 在一次请款中只能关联一份 Invoice`);
     }
     link.invoiceIds.forEach((invoiceId) => {
       const invoice = invoices.find((candidate) => candidate.invoiceId === invoiceId);

@@ -1,7 +1,7 @@
-.payment-project-payment-detail-page .payment-batch-detail-total > strong {
+.payment-project-payment-detail-page:not(.payment-batch-payment-detail-page) .payment-batch-detail-total > strong {
   color: #1f232b;
-  font-size: 28px;
-  font-weight: 760;
+  font-size: 30px;
+  font-weight: 500;
   line-height: 1.25;
 }
 
@@ -47,6 +47,7 @@
 .payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-card strong {
   color: #20232b;
   font-size: clamp(17px, 1.55vw, 24px);
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
   letter-spacing: 0;
@@ -67,7 +68,7 @@
   padding: 0;
   color: #20232b;
   font-size: clamp(17px, 1.55vw, 24px);
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1.2;
 }
 
@@ -322,7 +323,7 @@
 
 .payment-project-detail-table {
   width: max-content;
-  min-width: max(100%, 1696px);
+  min-width: max(100%, 1848px);
   table-layout: fixed;
   white-space: nowrap;
 }
@@ -549,6 +550,12 @@
   border-color: #e2d1f0;
   background: #f5ebfd;
   color: #664778;
+}
+
+.payment-project-attempt-badge.is-return {
+  border-color: #efcfca;
+  background: #fff2f0;
+  color: #9a4b42;
 }
 
 .payment-project-detail-date-cell,
@@ -902,8 +909,8 @@
 }
 
 @media (max-width: 720px) {
-  .payment-project-payment-detail-page .payment-batch-detail-total > strong {
-    font-size: 28px;
+  .payment-project-payment-detail-page:not(.payment-batch-payment-detail-page) .payment-batch-detail-total > strong {
+    font-size: 30px;
   }
 
   .payment-project-payment-detail-page.payment-batch-detail-page .payment-project-summary-card {
@@ -1016,4 +1023,5 @@
 .payment-project-payment-detail-page.payment-batch-payment-detail-page.payment-batch-detail-page
   .payment-project-summary-provider .payment-provider-badge {
   font-size: 18px;
+  font-weight: 500;
 }

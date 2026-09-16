@@ -2,11 +2,14 @@ import type { CreatorId, EngagementId, ProjectId } from '../businessWorkflow';
 import type { CreatorProfile } from '../types';
 
 export const INVOICE_BATCH_CREATOR_IMPORT_SCHEMA_VERSION = '1.0' as const;
+export const INVOICE_BATCH_GLOBAL_CREATOR_IMPORT_SCHEMA_VERSION = '2.0' as const;
 export const INVOICE_BATCH_CREATOR_IMPORT_MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 const CREATOR_SHEET = '达人名单';
 const METADATA_SHEET = '_metadata';
 const CREATOR_HEADERS = ['频道ID', 'Display Name', '频道链接'] as const;
+const PROJECT_TEMPLATE_PURPOSE = 'PROJECT_CREATOR_SELECTION';
+const GLOBAL_TEMPLATE_PURPOSE = 'INVOICE_BATCH_GLOBAL_CREATOR_SELECTION';
 
 export type InvoiceBatchCreatorImportRow = {
   sourceRow: number;
@@ -39,6 +42,13 @@ export type InvoiceBatchCreatorMatch = {
   creatorName: string;
   creatorHandle: string;
   sourceLabel: string;
+};
+
+export type InvoiceBatchGlobalCreatorMatch = Omit<InvoiceBatchCreatorMatch, 'engagementId'>;
+
+export type InvoiceBatchGlobalCreatorMatchResult = {
+  matches: InvoiceBatchGlobalCreatorMatch[];
+  issues: InvoiceBatchCreatorImportIssue[];
 };
 
 export type InvoiceBatchCreatorMatchResult = {
@@ -124,6 +134,7 @@ export const exportInvoiceBatchCreatorTemplate = async ({
     ['schema_version', INVOICE_BATCH_CREATOR_IMPORT_SCHEMA_VERSION],
     ['project_id', projectId],
     ['project_name', projectName],
+    ['template_purpose', PROJECT_TEMPLATE_PURPOSE],
   ]);
 
   const buffer = await workbook.xlsx.writeBuffer();
@@ -131,6 +142,105 @@ export const exportInvoiceBatchCreatorTemplate = async ({
     [new Uint8Array(buffer as ArrayBuffer)],
     { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
   );
+};
+
+export const exportInvoiceBatchGlobalCreatorTemplate = async () => {
+  const { Workbook } = await import('exceljs');
+  const workbook = new Workbook();
+  workbook.creator = 'COMETS Pay';
+  workbook.created = new Date();
+
+  const sheet = workbook.addWorksheet(CREATOR_SHEET, {
+    views: [{ state: 'frozen', ySplit: 1 }],
+  });
+  sheet.columns = [
+    { header: CREATOR_HEADERS[0], key: 'channelId', width: 24 },
+    { header: CREATOR_HEADERS[1], key: 'displayName', width: 28 },
+    { header: CREATOR_HEADERS[2], key: 'channelUrl', width: 48 },
+  ];
+  sheet.getRow(1).height = 28;
+  sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF172A3A' } };
+  sheet.getRow(1).alignment = { vertical: 'middle' };
+  sheet.autoFilter = { from: 'A1', to: 'C1' };
+  for (let rowNumber = 2; rowNumber <= 51; rowNumber += 1) {
+    const row = sheet.getRow(rowNumber);
+    row.height = 23;
+    row.alignment = { vertical: 'middle' };
+    row.eachCell({ includeEmpty: true }, (cell) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF9E8' } };
+      cell.protection = { locked: false };
+    });
+  }
+  sheet.getCell('A2').note = '每行填写频道ID、Display Name、频道链接中的任意一项；填写多项时必须指向同一达人。';
+
+  const metadata = workbook.addWorksheet(METADATA_SHEET, { state: 'veryHidden' });
+  metadata.addRows([
+    ['schema_version', INVOICE_BATCH_GLOBAL_CREATOR_IMPORT_SCHEMA_VERSION],
+    ['template_purpose', GLOBAL_TEMPLATE_PURPOSE],
+  ]);
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return new Blob(
+    [new Uint8Array(buffer as ArrayBuffer)],
+    { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+  );
+};
+
+export const importInvoiceBatchGlobalCreatorTemplate = async (
+  buffer: ArrayBuffer,
+): Promise<{
+  rows: InvoiceBatchCreatorImportRow[];
+  issues: InvoiceBatchCreatorImportIssue[];
+  fatal: boolean;
+}> => {
+  const { Workbook } = await import('exceljs');
+  const workbook = new Workbook();
+  await workbook.xlsx.load(buffer);
+  const sheet = workbook.getWorksheet(CREATOR_SHEET);
+  const metadata = workbook.getWorksheet(METADATA_SHEET);
+  if (!sheet || !metadata) {
+    return {
+      rows: [],
+      issues: [{ code: 'INVALID_TEMPLATE', message: '文件不是系统下载的批量 Invoice 达人模板' }],
+      fatal: true,
+    };
+  }
+
+  const actualHeaders = CREATOR_HEADERS.map((_, index) => cellText(sheet.getRow(1).getCell(index + 1).value));
+  if (actualHeaders.some((header, index) => header !== CREATOR_HEADERS[index])) {
+    return {
+      rows: [],
+      issues: [{ code: 'INVALID_TEMPLATE', message: '模板表头必须为“频道ID / Display Name / 频道链接”' }],
+      fatal: true,
+    };
+  }
+
+  const metadataValues = new Map<string, string>();
+  metadata.eachRow((row) => {
+    metadataValues.set(cellText(row.getCell(1).value), cellText(row.getCell(2).value));
+  });
+  if (
+    metadataValues.get('schema_version') !== INVOICE_BATCH_GLOBAL_CREATOR_IMPORT_SCHEMA_VERSION
+    || metadataValues.get('template_purpose') !== GLOBAL_TEMPLATE_PURPOSE
+  ) {
+    return {
+      rows: [],
+      issues: [{ code: 'UNSUPPORTED_VERSION', message: '模板类型或版本不受支持，请在批量 Invoice 页重新下载通用模板' }],
+      fatal: true,
+    };
+  }
+
+  const rows: InvoiceBatchCreatorImportRow[] = [];
+  sheet.eachRow((row, sourceRow) => {
+    if (sourceRow === 1) return;
+    const channelId = cellText(row.getCell(1).value);
+    const displayName = cellText(row.getCell(2).value);
+    const channelUrl = cellText(row.getCell(3).value);
+    if (!channelId && !displayName && !channelUrl) return;
+    rows.push({ sourceRow, channelId, displayName, channelUrl });
+  });
+  return { rows, issues: [], fatal: false };
 };
 
 export const importInvoiceBatchCreatorTemplate = async (
@@ -170,6 +280,12 @@ export const importInvoiceBatchCreatorTemplate = async (
   const issues: InvoiceBatchCreatorImportIssue[] = [];
   if (metadataValues.get('schema_version') !== INVOICE_BATCH_CREATOR_IMPORT_SCHEMA_VERSION) {
     issues.push({ code: 'UNSUPPORTED_VERSION', message: '模板版本不受支持，请重新下载' });
+  }
+  if (
+    metadataValues.get('template_purpose')
+    && metadataValues.get('template_purpose') !== PROJECT_TEMPLATE_PURPOSE
+  ) {
+    issues.push({ code: 'INVALID_TEMPLATE', message: '请使用“我的请款”中下载的项目达人模板' });
   }
   if (metadataValues.get('project_id') !== expectedProjectId) {
     issues.push({ code: 'WRONG_PROJECT', message: '模板项目与当前选择的合作项目不一致' });
@@ -397,16 +513,55 @@ export const matchInvoiceBatchCreatorTokens = ({
   return { matches: directMatches, issues: [...issues, ...resolved.issues] };
 };
 
-export const mergeInvoiceBatchCreatorSelection = ({
+const globalCreatorReferences = (creators: CreatorProfile[]): InvoiceBatchProjectCreatorReference[] => (
+  creators.map((creator) => ({
+    creatorId: creator.id as CreatorId,
+    engagementId: `global-creator:${creator.id}` as EngagementId,
+    status: 'active',
+  }))
+);
+
+const withoutGlobalEngagement = (
+  result: InvoiceBatchCreatorMatchResult,
+): InvoiceBatchGlobalCreatorMatchResult => ({
+  matches: result.matches.map(({ engagementId: _engagementId, ...match }) => match),
+  issues: result.issues,
+});
+
+export const matchInvoiceBatchGlobalCreatorRows = ({
+  rows,
+  creators,
+}: {
+  rows: InvoiceBatchCreatorImportRow[];
+  creators: CreatorProfile[];
+}) => withoutGlobalEngagement(matchInvoiceBatchCreatorRows({
+  rows,
+  creators,
+  projectReferences: globalCreatorReferences(creators),
+}));
+
+export const matchInvoiceBatchGlobalCreatorTokens = ({
+  tokens,
+  creators,
+}: {
+  tokens: string[];
+  creators: CreatorProfile[];
+}) => withoutGlobalEngagement(matchInvoiceBatchCreatorTokens({
+  tokens,
+  creators,
+  projectReferences: globalCreatorReferences(creators),
+}));
+
+export const mergeInvoiceBatchCreatorSelection = <SelectionId extends string>({
   currentIds,
   incomingIds,
   lockedIds,
   mode,
   maxRows,
 }: {
-  currentIds: EngagementId[];
-  incomingIds: EngagementId[];
-  lockedIds: EngagementId[];
+  currentIds: SelectionId[];
+  incomingIds: SelectionId[];
+  lockedIds: SelectionId[];
   mode: 'APPEND' | 'REPLACE';
   maxRows: number;
 }) => {

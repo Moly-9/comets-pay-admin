@@ -24,6 +24,7 @@ import {
 } from 'react';
 import {
   createPrototypeCode,
+  createPrototypeId,
   type CreatorId,
   type EngagementId,
   type ProjectId,
@@ -289,6 +290,16 @@ export function ContractBuilderPage({
   );
   const [engagementId, setEngagementId] = useState(draftModel?.engagementId ?? initialEngagementId ?? '');
   const [projectSelectionId, setProjectSelectionId] = useState(initialProjectId);
+  const [draftEngagementIds] = useState<Record<string, EngagementId>>(() => Object.fromEntries(
+    projects.flatMap((project) => creators.map((creator) => {
+      const projectId = String(project.cooperationProjectId ?? project.projectId ?? project.id);
+      const existing = project.creatorProfiles?.find((reference) => reference.creatorId === creator.id);
+      return [
+        `${creator.id}:${projectId}`,
+        existing?.engagementId ?? createPrototypeId('engagement') as EngagementId,
+      ];
+    })),
+  ));
   const [contractType, setContractType] = useState<NonNullable<ContractGenerationModel['contractType']>>(draftModel?.contractType ?? existingDraft?.contractType ?? 'INDEPENDENT');
   const [contractNumber] = useState(() => existingDraft?.id ?? createPrototypeCode('CON'));
   const [contractName, setContractName] = useState(draftModel?.contractName ?? existingDraft?.name ?? '');
@@ -765,9 +776,9 @@ export function ContractBuilderPage({
       ?? null;
     setCreatorId(creator?.id ?? '');
     setCreatorSocialAccountId(socialAccount?.id ?? '');
-    const currentProjectReference = selectedProject?.creatorProfiles?.find((reference) => reference.creatorId === creator?.id && reference.status !== 'removed');
-    setEngagementId(currentProjectReference?.engagementId ?? '');
-    if (selectedProject) setProjectName(selectedProject.name);
+    setProjectSelectionId('');
+    setEngagementId('');
+    setProjectName('');
     setPromotedProduct('');
     setPayoutAccountId(account ? getPayoutAccountId(account) : '');
     setPublishingChannels(contractPublishingChannelsForCreator(creator).sort((left, right) => (
@@ -783,9 +794,8 @@ export function ContractBuilderPage({
 
   const selectProject = (id: string) => {
     const project = projects.find((item) => String(item.cooperationProjectId ?? item.projectId ?? item.id) === id);
-    const reference = project?.creatorProfiles?.find((item) => item.creatorId === creatorId && item.status !== 'removed');
     setProjectSelectionId(id);
-    setEngagementId(reference?.engagementId ?? '');
+    setEngagementId(creatorId && project ? draftEngagementIds[`${creatorId}:${id}`] ?? '' : '');
     setProjectName(project?.name ?? '');
     setPromotedProduct(project?.brand ?? '');
     setErrors({});
@@ -941,7 +951,7 @@ export function ContractBuilderPage({
         </button>
         <PageHeading
           title="生成合同"
-          subtitle="从项目、达人档案和已验证收款账户带入资料，可按需补充商业字段后生成 PDF 与可编辑 DOCX。"
+          subtitle="从达人档案、合作项目和已验证收款账户带入资料，可按需补充商业字段后生成 PDF 与可编辑 DOCX。"
         />
         <NoticeBanner>当前为纯前端原型。合同与账户快照只保留在本次浏览器会话，不会上传到外部服务。</NoticeBanner>
         {Object.keys(errors).length ? (
@@ -1069,7 +1079,7 @@ export function ContractBuilderPage({
               ) : null}
               {templateHasOutputField('publisher') && templateFieldPolicies.publisher !== 'OMIT' ? (
                 <label className={errors.publisher ? 'has-error' : ''} data-contract-field="publisher" {...fieldProps('publisher')}>
-                  <span>Publisher（real name）*</span>
+                  <span>Publisher（Real Name / Company Name）*</span>
                   <input
                     value={templateFieldPolicies.publisher === 'MANUAL' ? manualScalarFieldValue('publisher') : publisher}
                     readOnly={templateFieldPolicies.publisher !== 'MANUAL'}

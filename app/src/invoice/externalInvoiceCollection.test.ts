@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import type { CreatorId, EngagementId, ProjectId } from '../businessWorkflow';
+import type { ContractId, CreatorId, EngagementId, ProjectId } from '../businessWorkflow';
+import type { ContractRecord } from '../contracts';
 import type { CreatorProfile, InvoiceEntity } from '../types';
 import { createDocumentPayoutSnapshot } from '../payoutAccounts';
 import {
   EXTERNAL_INVOICE_REVIEW_FIELD_ORDER,
   buildApprovedExternalInvoice,
+  confirmExternalInvoiceSignature,
   correctExternalInvoiceRecognition,
   createExternalInvoiceCollection,
+  currentExternalInvoiceSignatureConfirmation,
   currentExternalInvoiceConfirmation,
   currentExternalInvoiceFieldReview,
   currentExternalInvoiceRecognition,
@@ -14,9 +17,11 @@ import {
   externalInvoicePageTab,
   externalInvoiceReviewReadiness,
   externalInvoiceValidationIssues,
+  evaluateExternalInvoiceContractMatch,
   publishExternalInvoiceCollection,
   reviewExternalInvoiceField,
   returnExternalInvoice,
+  saveExternalInvoiceContractMatchReview,
   simulateExternalInvoiceUpload,
   submitExternalInvoiceForReview,
 } from './externalInvoiceCollection';
@@ -43,7 +48,7 @@ const creator: CreatorProfile = {
     nickname: 'Primary PayPal',
     isDefault: true,
     status: 'VERIFIED',
-    paypalUsername: 'Alicia Lin LLC',
+    paypalUsername: 'Alicia Payout Account',
     paypalEmail: 'alicia@example.com',
   }],
 };
@@ -51,8 +56,54 @@ const creator: CreatorProfile = {
 const actor = { account: 'media.demo', name: 'Media Reviewer', role: '媒介' };
 const creatorActor = { account: 'creator.demo', name: 'Alicia Lin', role: '达人账号' };
 const invoiceEntity: InvoiceEntity = { name: 'Comets Global Ltd.', address: 'Hong Kong' };
-const presetPayoutAccount = creator.payoutAccounts[0];
 const presetPayoutAccountId = 'payout-account-alicia';
+const primaryPayoutAccount = creator.payoutAccounts[0];
+
+const contract = (overrides: Partial<ContractRecord> = {}): ContractRecord => ({
+  contractId: 'contract-external-1' as ContractId,
+  id: 'CON-EXTERNAL-1',
+  contractType: 'INDEPENDENT',
+  ioId: '',
+  name: 'External creator services',
+  templateFamily: '',
+  sourceName: '',
+  documentUrl: '',
+  isTemplate: false,
+  project: 'Global Creator Campaign',
+  brand: 'Prototype brand',
+  advertiser: invoiceEntity.name,
+  publisher: creator.contact.legalName,
+  channelName: creator.handle,
+  channelLink: '',
+  platform: creator.platform,
+  effectiveDate: '2026-08-01',
+  campaignStart: '2026-08-01',
+  campaignEnd: '2026-08-31',
+  currency: 'USD',
+  totalFee: 4800,
+  licensePrice: null,
+  licenseIncludedInTotal: null,
+  invoiceWithinWorkingDays: null,
+  paymentWithinWorkingDays: null,
+  feeBearer: 'ADVERTISER',
+  paymentMethod: 'PAYPAL',
+  accountName: primaryPayoutAccount.provider === 'PayPal'
+    ? primaryPayoutAccount.paypalUsername
+    : primaryPayoutAccount.nickname,
+  accountFingerprint: 'fp-alicia',
+  payoutAccountId: presetPayoutAccountId,
+  payoutAccountVersion: 'v1',
+  payoutProvider: 'PayPal',
+  payoutAccountFingerprint: 'fp-alicia',
+  paymentSnapshot: createDocumentPayoutSnapshot(primaryPayoutAccount, creatorId),
+  signed: true,
+  status: '已生效',
+  updated: '2026-08-20',
+  deliverables: [],
+  issues: [],
+  lifecycle: 'CONFIRMED',
+  ...overrides,
+});
 
 const createRecord = (publish = true) => createExternalInvoiceCollection({
   projectId: 'project-external-1' as ProjectId,
@@ -60,10 +111,9 @@ const createRecord = (publish = true) => createExternalInvoiceCollection({
   engagementId: 'engagement-external-1' as EngagementId,
   creatorId,
   creatorName: creator.name,
+  creatorLegalName: creator.contact.legalName,
   creatorHandle: creator.handle,
   contractIds: [],
-  presetPayoutAccountId,
-  presetPayoutAccountSnapshot: createDocumentPayoutSnapshot(presetPayoutAccount, creatorId),
   expected: {
     amount: 4800,
     currency: 'USD',
@@ -73,6 +123,33 @@ const createRecord = (publish = true) => createExternalInvoiceCollection({
   },
   actor,
   publish,
+  occurredAt: '2026-08-20T01:00:00.000Z',
+});
+
+const createRecordWithContract = (
+  selectedContract: ContractRecord,
+  contractMatchReason?: string,
+) => createExternalInvoiceCollection({
+  projectId: 'project-external-1' as ProjectId,
+  projectName: 'Global Creator Campaign',
+  engagementId: 'engagement-external-1' as EngagementId,
+  creatorId,
+  creatorName: creator.name,
+  creatorLegalName: creator.contact.legalName,
+  creatorHandle: creator.handle,
+  contractIds: [selectedContract.contractId!],
+  contractMatchReason,
+  expected: {
+    amount: 4800,
+    currency: 'USD',
+    billTo: invoiceEntity,
+    description: 'Creator production service',
+    dueDate: '2026-09-05',
+  },
+  actor,
+  creator,
+  contracts: [selectedContract],
+  publish: true,
   occurredAt: '2026-08-20T01:00:00.000Z',
 });
 
@@ -101,17 +178,15 @@ describe('external Invoice collection workflow', () => {
     expect(externalInvoiceListStatus('WAITING_CONFIRMATION')).toBe('待上传');
     expect(externalInvoiceListStatus('RETURNED_FOR_CORRECTION')).toBe('待重新上传');
     expect(externalInvoiceListStatus('RETURNED_FOR_REUPLOAD')).toBe('待重新上传');
+    expect(externalInvoiceListStatus('APPROVED')).toBe('待发起请款');
     expect(externalInvoicePageTab('WAITING_MEDIA_REVIEW')).toBe('review');
   });
 
   it('saves a draft before publishing it to the creator', () => {
     const draft = createRecord(false);
     expect(draft.invoiceNumber).toBeUndefined();
-    expect(draft.presetPayoutAccountId).toBe(presetPayoutAccountId);
-    expect(draft.presetPayoutAccountSnapshot).toMatchObject({
-      payoutAccountId: presetPayoutAccountId,
-      validationStatus: 'VERIFIED',
-    });
+    expect(draft.presetPayoutAccountId).toBeUndefined();
+    expect(draft.presetPayoutAccountSnapshot).toBeUndefined();
     expect(draft.expected.billTo).toEqual(invoiceEntity);
     expect(draft.expected.billTo).not.toBe(invoiceEntity);
     expect(draft.reviewHistory.map((event) => event.action)).toEqual(['CREATED']);
@@ -121,20 +196,16 @@ describe('external Invoice collection workflow', () => {
     expect(published.reviewHistory[published.reviewHistory.length - 1]?.action).toBe('PUBLISHED');
   });
 
-  it('rejects a collection without a verified preset payout account snapshot', () => {
+  it('does not require a preset payout account but blocks a missing Real Name / Company Name', () => {
     expect(() => createExternalInvoiceCollection({
       projectId: 'project-external-1' as ProjectId,
       projectName: 'Global Creator Campaign',
       engagementId: 'engagement-external-1' as EngagementId,
       creatorId,
       creatorName: creator.name,
+      creatorLegalName: '   ',
       creatorHandle: creator.handle,
       contractIds: [],
-      presetPayoutAccountId,
-      presetPayoutAccountSnapshot: {
-        ...createDocumentPayoutSnapshot(presetPayoutAccount, creatorId),
-        validationStatus: 'READY_FOR_VALIDATION',
-      },
       expected: {
         amount: 4800,
         currency: 'USD',
@@ -144,7 +215,67 @@ describe('external Invoice collection workflow', () => {
       },
       actor,
       publish: false,
-    })).toThrow('默认且已审核的收款账户');
+    })).toThrow('Real Name / Company Name');
+  });
+
+  it('uses From and Bill To as hard contract blockers while allowing documented amount differences', () => {
+    expect(() => createRecordWithContract(contract({ publisher: 'Different Publisher' })))
+      .toThrow('From');
+    expect(() => createRecordWithContract(contract({ totalFee: 4200 })))
+      .toThrow('1–300');
+
+    const documented = createRecordWithContract(
+      contract({ totalFee: 4200 }),
+      '合同金额为合作上限，本次 Invoice 按实际已交付内容结算。',
+    );
+    expect(documented.contractMatchReviews).toEqual([
+      expect.objectContaining({
+        stage: 'CREATION',
+        result: 'APPROVED_WITH_REASON',
+        reason: '合同金额为合作上限，本次 Invoice 按实际已交付内容结算。',
+      }),
+    ]);
+  });
+
+  it('carries a still-valid creation difference reason into media review and saves its audit', () => {
+    const selectedContract = contract({ totalFee: 4200 });
+    const uploaded = simulateExternalInvoiceUpload({
+      record: createRecordWithContract(selectedContract, '合同金额为合作上限，本次按实际交付结算。'),
+      creator,
+      payoutAccountId: presetPayoutAccountId,
+      scenario: 'NORMAL',
+      actor: creatorActor,
+      invoiceDate: '2026-08-20',
+    });
+    const submitted = submitExternalInvoiceForReview({
+      record: uploaded,
+      creator,
+      contracts: [selectedContract],
+      occupiedInvoices: [],
+      actor: creatorActor,
+    });
+    expect(evaluateExternalInvoiceContractMatch({
+      record: submitted,
+      creator,
+      contracts: [selectedContract],
+    })).toMatchObject({
+      result: 'APPROVED_WITH_REASON',
+      effectiveReason: '合同金额为合作上限，本次按实际交付结算。',
+    });
+
+    const saved = saveExternalInvoiceContractMatchReview({
+      record: submitted,
+      creator,
+      contracts: [selectedContract],
+      reason: '合同金额为合作上限，本次按实际交付结算，媒介已复核。',
+      actor,
+      occurredAt: '2026-08-20T04:00:00.000Z',
+    });
+    expect(saved.reviewHistory[saved.reviewHistory.length - 1]?.action).toBe('CONTRACT_MATCH_REVIEWED');
+    expect(saved.contractMatchReviews[saved.contractMatchReviews.length - 1]).toMatchObject({
+      stage: 'MEDIA_REVIEW',
+      result: 'APPROVED_WITH_REASON',
+    });
   });
 
   it('preserves source, first recognition and corrected confirmation as separate layers', () => {
@@ -152,6 +283,8 @@ describe('external Invoice collection workflow', () => {
     const recognition = currentExternalInvoiceRecognition(recognized)!;
     expect(recognition.fields.AMOUNT.evidence.sourceValue).toBe('4800.00');
     expect(recognition.fields.AMOUNT.value).toBe('4600.00');
+    expect(recognition.fields.PUBLISHER.evidence.sourceValue).toBe('Alicia Lin LLC');
+    expect(recognition.fields.PUBLISHER.evidence.sourceValue).not.toBe('Alicia Payout Account');
     expect(currentExternalInvoiceConfirmation(recognized)?.values.AMOUNT).toBe('4600.00');
 
     const corrected = correctExternalInvoiceRecognition(
@@ -212,7 +345,10 @@ describe('external Invoice collection workflow', () => {
       decision: 'CONFIRMED_CORRECTION',
       fileVersionId: reviewed.sourceFileVersions[0].fileVersionId,
     });
-    expect(externalInvoiceReviewReadiness({ record: reviewed, creator }).canApprove).toBe(true);
+    expect(externalInvoiceReviewReadiness({ record: reviewed, creator }).blockers).toContain('请确认当前版本 Invoice 已签名');
+    const signed = confirmExternalInvoiceSignature(reviewed, actor, '2026-08-20T03:30:00.000Z');
+    expect(externalInvoiceReviewReadiness({ record: signed, creator }).canApprove).toBe(true);
+    expect(signed.reviewHistory[signed.reviewHistory.length - 1]?.action).toBe('INVOICE_SIGNATURE_CONFIRMED');
   });
 
   it('blocks an Invoice-file account that differs from the selected verified profile account', () => {
@@ -229,6 +365,20 @@ describe('external Invoice collection workflow', () => {
       occupiedInvoices: [],
       actor: creatorActor,
     })).toThrow('票面收款账户');
+  });
+
+  it('keeps Date of Invoice as record-only data outside system consistency validation', () => {
+    const uploaded = upload('NORMAL');
+    const confirmation = currentExternalInvoiceConfirmation(uploaded)!;
+    const changedDate = {
+      ...uploaded,
+      confirmedSnapshots: [{
+        ...confirmation,
+        values: { ...confirmation.values, INVOICE_DATE: '2025-01-01' },
+      }],
+    };
+    expect(externalInvoiceValidationIssues({ record: changedDate, creator })
+      .some((issue) => issue.fieldKey === 'INVOICE_DATE')).toBe(false);
   });
 
   it('requires a note when media marks a field anomalous or requiring reupload', () => {
@@ -262,6 +412,53 @@ describe('external Invoice collection workflow', () => {
     expect(second.sourceFileVersions[1].supersedesFileVersionId).toBe(second.sourceFileVersions[0].fileVersionId);
     expect(second.recognitionSnapshots).toHaveLength(2);
     expect(second.confirmedSnapshots).toHaveLength(2);
+  });
+
+  it('inherits contract signature state and invalidates Invoice signature confirmation after reupload', () => {
+    const signedContract = contract();
+    const firstSubmitted = submitExternalInvoiceForReview({
+      record: simulateExternalInvoiceUpload({
+        record: createRecordWithContract(signedContract),
+        creator,
+        payoutAccountId: presetPayoutAccountId,
+        scenario: 'NORMAL',
+        actor: creatorActor,
+        invoiceDate: '2026-08-20',
+      }),
+      creator,
+      contracts: [signedContract],
+      occupiedInvoices: [],
+      actor: creatorActor,
+    });
+    const confirmed = confirmExternalInvoiceSignature(firstSubmitted, actor);
+    expect(currentExternalInvoiceSignatureConfirmation(confirmed)?.fileVersionId)
+      .toBe(confirmed.sourceFileVersions[confirmed.sourceFileVersions.length - 1]?.fileVersionId);
+    expect(externalInvoiceReviewReadiness({
+      record: confirmed,
+      creator,
+      contracts: [{ ...signedContract, signed: false, lifecycle: 'SENT_FOR_SIGNATURE' }],
+    }).blockers).toContain(`合同 ${signedContract.id} 尚未完成签署`);
+
+    const returned = returnExternalInvoice(confirmed, 'REUPLOAD', '请上传带签名的新文件。', actor);
+    const replacement = simulateExternalInvoiceUpload({
+      record: returned,
+      creator,
+      payoutAccountId: presetPayoutAccountId,
+      scenario: 'NORMAL',
+      actor: creatorActor,
+      invoiceDate: '2026-08-21',
+    });
+    const resubmitted = submitExternalInvoiceForReview({
+      record: replacement,
+      creator,
+      contracts: [signedContract],
+      occupiedInvoices: [],
+      actor: creatorActor,
+    });
+    expect(currentExternalInvoiceSignatureConfirmation(resubmitted)).toBeUndefined();
+    expect(resubmitted.invoiceSignatureConfirmations).toHaveLength(1);
+    expect(externalInvoiceReviewReadiness({ record: resubmitted, creator, contracts: [signedContract] }).blockers)
+      .toContain('请确认当前版本 Invoice 已签名');
   });
 
   it('blocks task mismatches but treats contract account differences separately', () => {
@@ -384,8 +581,9 @@ describe('external Invoice collection workflow', () => {
       actor: creatorActor,
     }).status).toBe('WAITING_MEDIA_REVIEW');
 
+    const signedSubmitted = confirmExternalInvoiceSignature(submitted, actor, '2026-08-20T03:45:00.000Z');
     const approved = buildApprovedExternalInvoice({
-      record: submitted,
+      record: signedSubmitted,
       creator,
       occupiedInvoices: [],
       actor,
@@ -394,6 +592,10 @@ describe('external Invoice collection workflow', () => {
     expect(approved.collection.status).toBe('APPROVED');
     expect(approved.invoice.invoiceType).toBe('EXTERNAL');
     expect(approved.invoice.status).toBe('已通过');
+    expect(approved.invoice.contractMatchReviews?.[0]).toMatchObject({
+      version: 1,
+      result: 'NOT_APPLICABLE',
+    });
     expect(approved.invoice.snapshot.billTo).toEqual(submitted.expected.billTo);
     expect(approved.invoice.snapshot.billTo).not.toBe(submitted.expected.billTo);
     expect(approved.payout.invoiceReviewStatus).toBe('已通过');

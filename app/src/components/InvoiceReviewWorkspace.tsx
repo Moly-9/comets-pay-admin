@@ -42,7 +42,8 @@ export type InvoiceReviewFieldStatus =
   | 'PENDING_REVIEW'
   | 'MISMATCH'
   | 'MISSING'
-  | 'REUPLOAD_REQUIRED';
+  | 'REUPLOAD_REQUIRED'
+  | 'NOT_CHECKED';
 export type InvoiceReviewFieldAction = 'CONFIRM_CORRECTION' | 'REUPLOAD_REQUIRED' | 'ANOMALY';
 
 export type InvoiceReviewEvidence = {
@@ -250,6 +251,8 @@ type InvoiceReviewWorkspaceProps = {
   externalSummary?: boolean;
   overviewFields?: InvoiceReviewOverviewField[];
   contractChecks: InvoiceReviewContractCheck[];
+  contractContent?: ReactNode;
+  contractTabLabel?: string;
   contractMismatchReview?: InvoiceReviewContractMismatchReview;
   noContract?: boolean;
   contractPending?: boolean;
@@ -299,6 +302,7 @@ const FIELD_STATUS_META: Record<InvoiceReviewFieldStatus, {
   MISMATCH: { tone: 'danger', icon: AlertTriangle },
   MISSING: { tone: 'danger', icon: CircleAlert },
   REUPLOAD_REQUIRED: { tone: 'danger', icon: AlertTriangle },
+  NOT_CHECKED: { tone: 'neutral', icon: FileText },
 };
 
 const formatEvidenceTime = (value?: string) => {
@@ -313,6 +317,28 @@ const formatEvidenceTime = (value?: string) => {
     hour12: false,
   });
 };
+
+export const externalInvoiceEvidenceItems = (
+  evidence: NonNullable<InvoiceReviewOverviewField['evidence']>,
+) => [
+  {
+    label: '系统首次 OCR',
+    value: evidence.recognizedValue,
+    meta: '首次识别值不可覆盖',
+  },
+  {
+    label: '达人最终确认值',
+    value: evidence.confirmedValue,
+    meta: evidence.correctionReason ?? '达人确认识别结果',
+  },
+  {
+    label: '纠正与复核',
+    value: evidence.mediaReview ?? '待复核',
+    meta: evidence.correctedBy
+      ? `${evidence.correctedBy} · ${formatEvidenceTime(evidence.correctedAt)}`
+      : '该字段未发生达人纠正',
+  },
+];
 
 const contractStateLabel = (state: InvoiceReviewContractCheck['state']) => {
   if (state === 'PASS') return '已通过';
@@ -337,6 +363,8 @@ export function InvoiceReviewWorkspace({
   externalSummary = false,
   overviewFields = [],
   contractChecks,
+  contractContent,
+  contractTabLabel,
   contractMismatchReview,
   noContract = false,
   contractPending = false,
@@ -391,7 +419,7 @@ export function InvoiceReviewWorkspace({
   )).length;
   const contractWarnings = contractChecks.filter((check) => check.state === 'WARNING').length;
   const contractFailures = contractChecks.filter((check) => check.state === 'FAIL').length;
-  const contractLabel = noContract
+  const contractLabel = contractTabLabel ?? (noContract
     ? '合同匹配 · 无合同'
     : contractPending
       ? '合同匹配 · 待上传'
@@ -399,7 +427,7 @@ export function InvoiceReviewWorkspace({
       ? `合同匹配 ${contractPassed}/${contractChecks.length}`
       : contractFailures
         ? `合同匹配 ${contractPassed}/${contractChecks.length} · ${contractFailures}项异常${contractWarnings ? ` · ${contractWarnings}项需关注` : ''}`
-        : `合同匹配 ${contractPassed}/${contractChecks.length} · ${contractWarnings}项需关注`;
+        : `合同匹配 ${contractPassed}/${contractChecks.length} · ${contractWarnings}项需关注`);
   const tabs: Array<{ id: InvoiceReviewWorkspaceTab; label: string; icon: typeof ShieldCheck }> = [
     { id: 'overview', label: '审核概览', icon: FileCheck2 },
     { id: 'contract', label: contractLabel, icon: ShieldCheck },
@@ -407,10 +435,10 @@ export function InvoiceReviewWorkspace({
     { id: 'history', label: '审核记录', icon: History },
   ];
   const exceptionFields = useMemo(() => overviewFields.filter((field) => (
-    field.status !== 'MATCHED'
+    field.status !== 'MATCHED' && field.status !== 'NOT_CHECKED'
   )), [overviewFields]);
   const matchedFields = useMemo(() => overviewFields.filter((field) => (
-    field.status === 'MATCHED'
+    field.status === 'MATCHED' || field.status === 'NOT_CHECKED'
   )), [overviewFields]);
 
   useEffect(() => {
@@ -471,7 +499,7 @@ export function InvoiceReviewWorkspace({
         <div className="invoice-review-row-actions">
           {field.evidence ? (
             <button type="button" onClick={() => toggleEvidence(field)} aria-expanded={expanded}>
-              <Eye size={14} />查看证据<ChevronDown size={13} />
+              <Eye size={14} />查看识别记录<ChevronDown size={13} />
             </button>
           ) : null}
           {field.allowConfirmCorrection && onFieldAction ? (
@@ -504,10 +532,9 @@ export function InvoiceReviewWorkspace({
         </div>
         {expanded && field.evidence ? (
           <div className="invoice-review-evidence-grid">
-            <div><span>原始 Invoice 原文</span><strong>{field.evidence.sourceValue}</strong><small>第 {field.evidence.pageNumber ?? 1} 页</small></div>
-            <div><span>系统首次 OCR</span><strong>{field.evidence.recognizedValue}</strong><small>首次识别值不可覆盖</small></div>
-            <div><span>达人最终确认值</span><strong>{field.evidence.confirmedValue}</strong><small>{field.evidence.correctionReason ?? '达人确认识别结果'}</small></div>
-            <div><span>纠正与复核</span><strong>{field.evidence.mediaReview ?? '待复核'}</strong><small>{field.evidence.correctedBy ? `${field.evidence.correctedBy} · ${formatEvidenceTime(field.evidence.correctedAt)}` : '该字段未发生达人纠正'}</small></div>
+            {externalInvoiceEvidenceItems(field.evidence).map((item) => (
+              <div key={item.label}><span>{item.label}</span><strong>{item.value}</strong><small>{item.meta}</small></div>
+            ))}
           </div>
         ) : null}
       </article>
@@ -696,7 +723,7 @@ export function InvoiceReviewWorkspace({
                   <AlertTriangle size={17} />
                   <span><strong>{exceptionFields.length} 项需要关注</strong><small>逐项查看原文证据并完成复核</small></span>
                 </div>
-              ) : (
+              ) : contractContent ? contractContent : (
                 <div className="invoice-review-clear-summary" role="status"><CheckCircle2 size={17} />全部识别字段与校验基准一致</div>
               )}
               {exceptionFields.length ? (
@@ -717,7 +744,10 @@ export function InvoiceReviewWorkspace({
                 <div><ShieldCheck size={18} /><span><strong>合同与 Invoice 匹配</strong><small>合同非必填，无合同时视为正常状态</small></span></div>
               </div>
               {noContract ? (
-                <div className="invoice-review-no-contract"><CheckCircle2 size={20} /><span><strong>无合同</strong><small>当前 Invoice 按无合同流程发起，不构成审核异常。</small></span></div>
+                <>
+                  <div className="invoice-review-no-contract"><CheckCircle2 size={20} /><span><strong>无合同</strong><small>当前 Invoice 按无合同流程发起，不构成审核异常。</small></span></div>
+                  {contractContent}
+                </>
               ) : contractPending ? (
                 <div className="invoice-review-pending-state"><Clock3 size={20} /><span><strong>待达人上传 Invoice 后进行匹配</strong><small>上传后将校验主体、币种和金额、收款信息及签名完整性。</small></span></div>
               ) : (
@@ -728,6 +758,7 @@ export function InvoiceReviewWorkspace({
                       meta: contractMismatchReview.meta,
                     }]} />
                   ) : null}
+                  {contractContent}
                   <div className="invoice-review-contract-list">
                     {contractChecks.map((check) => (
                       <article className={`is-${check.state.toLowerCase().replace('_', '-')}`} key={check.id}>
@@ -769,7 +800,7 @@ export function InvoiceReviewWorkspace({
           {activeTab === 'history' ? (
             <div className="invoice-review-history-section">
               <div className="invoice-review-section-heading">
-                <div><History size={18} /><span><strong>审核与流转记录</strong><small>展示当前 Invoice 的版本摘要与完整流程</small></span></div>
+                <div><History size={18} /><span><strong>审核与流转记录</strong><small>展示当前 Invoice 的完整审核与流转记录</small></span></div>
               </div>
               {historySummary.length ? (
                 <dl className="invoice-review-history-summary">

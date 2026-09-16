@@ -10,7 +10,7 @@ export function InvoiceDocumentView({
 }) {
   const paymentLines = model.paymentMethod === 'bank'
     ? [
-      ['Real Name', model.from.legalName],
+      ['Real Name / Company Name', model.from.legalName],
       ['Account Name', model.payment.accountName],
       ['Account Number', model.payment.accountNumber],
       ['Beneficiary Bank Name', model.payment.bankName],
@@ -42,7 +42,7 @@ export function InvoiceDocumentView({
       <div className="invoice-paper-meta">
         <section>
           <strong>From</strong>
-          <p><b>Real Name:</b> {model.from.legalName || '—'}</p>
+          <p><b>Real Name / Company Name:</b> {model.from.legalName || '—'}</p>
           <p><b>Address:</b> {model.from.address || '—'}</p>
           <p><b>Tel:</b> {model.from.phone || '—'}</p>
           <p><b>Email:</b> {model.from.email || '—'}</p>

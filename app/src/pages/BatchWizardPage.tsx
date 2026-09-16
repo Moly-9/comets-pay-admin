@@ -1,14 +1,18 @@
 import { AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronRight, Search, ShieldCheck } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { accountDisplayValue } from '../accountPresentation';
-import type { PaymentListRecord } from '../businessWorkflow';
+import {
+  paymentListEffectiveAccount,
+  type PaymentListItem,
+  type PaymentListRecord,
+} from '../businessWorkflow';
 import {
   createMockBatchSubmission,
   validatePayoutForBatch,
   type ExecutableBatchProvider,
   type MockBatchSubmission,
 } from '../batchTransfers';
-import { Button, PageHeading, SelectField, StatusMark } from '../components/Common';
+import { Button, PageHeading, SelectField, StatusMark, type SelectOption } from '../components/Common';
 import { PaymentCreatorIdentity } from '../components/PaymentCreatorIdentity';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import { formatAmount } from '../data';
@@ -20,10 +24,13 @@ import {
 import {
   findPaymentListItemForPayout,
   paymentCreatorIdentityFromPayout,
+  type PaymentCreatorIdentityData,
 } from '../paymentCreatorIdentity';
 import type { CreatorProfile, GeneratedInvoiceRecord, InvoiceCurrency, Payout } from '../types';
+import type { RequestProjectSummary } from './RequestProjectDetailPage';
 
 const STEPS = ['选择付款', '校验资料', '选择渠道', '确认提交'];
+const ALL_PROJECTS = 'all';
 const PROVIDERS: Array<{
   id: ExecutableBatchProvider | 'PayMax';
   title: string;
@@ -50,8 +57,165 @@ const FUNDING_ACCOUNTS: Record<ExecutableBatchProvider, Array<{ value: string; l
   ],
 };
 
+export type BatchWizardRequestProject = Pick<
+  RequestProjectSummary,
+  | 'id'
+  | 'paymentRequestProjectId'
+  | 'requestCode'
+  | 'cooperationProjectId'
+  | 'cooperationProjectCode'
+  | 'cooperationProjectName'
+  | 'projectId'
+  | 'project'
+>;
+
+export type BatchWizardRow = {
+  payout: Payout;
+  request: BatchWizardRequestProject | null;
+  requestKey: string;
+  requestCode: string;
+  cooperationProjectKey: string;
+  cooperationProjectCode: string;
+  cooperationProjectName: string;
+  paymentItem?: PaymentListItem;
+  creatorIdentity: PaymentCreatorIdentityData;
+  accountSummary: string;
+  accountVersion: string;
+  accountProvider: string;
+  sourcePaymentOrderKey: string;
+};
+
+const normalized = (value: unknown) => String(value ?? '').trim();
+
+export const batchWizardRequestForPayout = (
+  payout: Payout,
+  requests: readonly BatchWizardRequestProject[],
+) => requests.find((request) => (
+  Boolean(payout.paymentRequestProjectId)
+  && request.paymentRequestProjectId === payout.paymentRequestProjectId
+)) ?? requests.find((request) => {
+  const requestProjectId = normalized(request.cooperationProjectId ?? request.projectId);
+  return Boolean(requestProjectId) && requestProjectId === normalized(payout.projectId);
+}) ?? null;
+
+const requestKeyFor = (payout: Payout, request: BatchWizardRequestProject | null) => (
+  normalized(payout.paymentRequestProjectId ?? request?.paymentRequestProjectId)
+  || `legacy:${normalized(request?.cooperationProjectId ?? request?.projectId ?? payout.projectId)}`
+);
+
+export const buildBatchWizardRows = ({
+  payouts,
+  requests,
+  generatedInvoices,
+  paymentLists,
+  creators,
+}: {
+  payouts: readonly Payout[];
+  requests: readonly BatchWizardRequestProject[];
+  generatedInvoices: readonly GeneratedInvoiceRecord[];
+  paymentLists: readonly PaymentListRecord[];
+  creators: readonly CreatorProfile[];
+}): BatchWizardRow[] => payouts.map((payout) => {
+  const request = batchWizardRequestForPayout(payout, requests);
+  const paymentItem = findPaymentListItemForPayout(payout, generatedInvoices, paymentLists);
+  const paymentList = paymentItem
+    ? paymentLists.find((list) => list.items.some((item) => item.invoiceId === paymentItem.invoiceId))
+    : undefined;
+  const creator = creators.find((candidate) => candidate.id === payout.creatorId);
+  const effectiveAccount = paymentItem ? paymentListEffectiveAccount(paymentItem) : undefined;
+  const usesProjectedCreatorUpdate = payout.paymentFailureRecovery?.readyReason === 'REVALIDATED'
+    && Boolean(payout.paymentFailureRecovery.reportedPayoutAccountId)
+    && payout.paymentFailureRecovery.reportedPayoutAccountId !== effectiveAccount?.payoutAccountId;
+  const accountVersion = usesProjectedCreatorUpdate
+    ? payout.paymentFailureRecovery?.reportedPayoutAccountVersion
+    : effectiveAccount?.payoutAccountVersion
+      ?? payout.paymentFailureRecovery?.reportedPayoutAccountVersion
+      ?? payout.payoutAccountVersion;
+  const cooperationProjectKey = normalized(
+    request?.cooperationProjectId
+    ?? request?.projectId
+    ?? request?.cooperationProjectCode
+    ?? payout.projectId,
+  );
+  return {
+    payout,
+    request,
+    requestKey: requestKeyFor(payout, request),
+    requestCode: normalized(request?.requestCode) || '待同步',
+    cooperationProjectKey,
+    cooperationProjectCode: normalized(request?.cooperationProjectCode ?? request?.projectId ?? payout.projectId) || '待同步',
+    cooperationProjectName: normalized(request?.cooperationProjectName ?? request?.project ?? payout.project) || '待同步',
+    paymentItem,
+    creatorIdentity: paymentCreatorIdentityFromPayout({ payout, paymentItem, creator }),
+    accountSummary: accountDisplayValue(
+      usesProjectedCreatorUpdate ? payout.account : effectiveAccount?.accountSummary ?? payout.account,
+    ),
+    accountVersion: normalized(accountVersion) || 'legacy-v1',
+    accountProvider: paymentProviderDisplayName(
+      ((usesProjectedCreatorUpdate ? payout.provider : effectiveAccount?.provider) || payout.provider) as Payout['provider'],
+    ),
+    sourcePaymentOrderKey: normalized(
+      payout.currentPaymentAttempt?.sourcePaymentOrderCode
+      ?? payout.currentPaymentAttempt?.paymentOrderCode
+      ?? paymentList?.paymentListCode,
+    ),
+  };
+});
+
+export const filterBatchWizardRows = (
+  rows: readonly BatchWizardRow[],
+  search: string,
+  cooperationProjectFilter: string,
+) => {
+  const query = search.trim().toLowerCase();
+  return rows.filter((row) => {
+    const matchesProject = cooperationProjectFilter === ALL_PROJECTS
+      || row.cooperationProjectKey === cooperationProjectFilter;
+    const matchesSearch = !query || [
+      row.creatorIdentity.accountName,
+      row.creatorIdentity.displayName,
+      row.requestCode,
+      row.cooperationProjectName,
+      row.cooperationProjectCode,
+    ].some((value) => value.toLowerCase().includes(query));
+    return matchesProject && matchesSearch;
+  });
+};
+
+export const batchWizardSelectionScopeIssue = (
+  row: BatchWizardRow,
+  selectedRow: BatchWizardRow | undefined,
+) => {
+  if (!selectedRow) return '';
+  if (row.requestKey !== selectedRow.requestKey) return '一个付款批次只能关联一个请款项目';
+  if (row.payout.provider !== selectedRow.payout.provider) return '一个付款批次只能使用同一付款渠道';
+  const selectedIsRetry = isPaymentFailureRetryCandidate(selectedRow.payout);
+  if (isPaymentFailureRetryCandidate(row.payout) !== selectedIsRetry) {
+    return '首次付款和重新付款需要分别创建付款批次';
+  }
+  if (
+    selectedIsRetry
+    && selectedRow.sourcePaymentOrderKey
+    && row.sourcePaymentOrderKey !== selectedRow.sourcePaymentOrderKey
+  ) return '重新付款只能选择同一张原付款单的失败明细';
+  return '';
+};
+
+const retryResultLabel = (payout: Payout) => {
+  const recovery = payout.paymentFailureRecovery;
+  if (!recovery) return null;
+  if (recovery.status === 'AWAITING_CREATOR_UPDATE') return '尚未更新';
+  if (recovery.readyReason === 'ACCOUNT_UNCHANGED') return '原账户未变 · 可重试';
+  if (
+    recovery.readyReason === 'REVALIDATED'
+    || ['CREATOR_UPDATED', 'PENDING_FINANCE_CONFIRMATION'].includes(recovery.status)
+  ) return '达人已更新 · 可重试';
+  return null;
+};
+
 export function BatchWizardPage({
   payouts,
+  requests = [],
   generatedInvoices = [],
   paymentLists = [],
   creators = [],
@@ -60,6 +224,7 @@ export function BatchWizardPage({
   onDraft,
 }: {
   payouts: Payout[];
+  requests?: BatchWizardRequestProject[];
   generatedInvoices?: GeneratedInvoiceRecord[];
   paymentLists?: PaymentListRecord[];
   creators?: CreatorProfile[];
@@ -67,39 +232,69 @@ export function BatchWizardPage({
   onSubmit: (submission: MockBatchSubmission) => void;
   onDraft: () => void;
 }) {
-  const [selected, setSelected] = useState(() => new Set(
-    payouts.filter((payout) => !isPaymentFailureRetryCandidate(payout)).map((payout) => payout.id),
-  ));
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [provider, setProvider] = useState<ExecutableBatchProvider>('Airwallex');
   const [mode, setMode] = useState<'batch' | 'single'>('batch');
   const [search, setSearch] = useState('');
+  const [cooperationProjectFilter, setCooperationProjectFilter] = useState(ALL_PROJECTS);
   const [sourceCurrency, setSourceCurrency] = useState<InvoiceCurrency>('USD');
   const [fundingAccountId, setFundingAccountId] = useState(FUNDING_ACCOUNTS.Airwallex[0].value);
   const [submissionError, setSubmissionError] = useState('');
 
-  const visiblePayouts = payouts.filter((payout) =>
-    `${payout.creator}${payout.project}${payout.invoice}`.toLowerCase().includes(search.toLowerCase()),
+  const rows = useMemo(() => buildBatchWizardRows({
+    payouts,
+    requests,
+    generatedInvoices,
+    paymentLists,
+    creators,
+  }), [creators, generatedInvoices, paymentLists, payouts, requests]);
+  const rowByPayoutId = useMemo(() => new Map(rows.map((row) => [row.payout.id, row])), [rows]);
+  const projectOptions = useMemo<readonly SelectOption<string>[]>(() => {
+    const projects = new Map<string, SelectOption<string>>();
+    rows.forEach((row) => {
+      if (!row.cooperationProjectKey || projects.has(row.cooperationProjectKey)) return;
+      projects.set(row.cooperationProjectKey, {
+        value: row.cooperationProjectKey,
+        label: row.cooperationProjectName,
+        description: row.cooperationProjectCode,
+      });
+    });
+    return [
+      { value: ALL_PROJECTS, label: '全部合作项目' },
+      ...projects.values(),
+    ];
+  }, [rows]);
+  const visibleRows = useMemo(
+    () => filterBatchWizardRows(rows, search, cooperationProjectFilter),
+    [cooperationProjectFilter, rows, search],
   );
-  const selectedPayouts = payouts.filter((payout) => selected.has(payout.id));
-  const getAccountCheck = (payout: Payout) => {
+  const selectedRows = rows.filter((row) => selected.has(row.payout.id));
+  const selectedPayouts = selectedRows.map((row) => row.payout);
+  const selectedScopeRow = selectedRows[0];
+  const selectedRequestKey = selectedRows[0]?.requestKey ?? '';
+
+  const getAccountCheck = (row: BatchWizardRow) => {
+    const { payout } = row;
     const retryCandidate = isPaymentFailureRetryCandidate(payout);
     if (retryCandidate && !isPaymentFailureRetryReady(payout)) {
       return {
         eligible: false,
-        label: paymentFailureRecoveryLabel(payout),
-        description: `${paymentProviderDisplayName(payout.provider)} · ${payout.paymentFailureRecovery?.reportedPayoutAccountVersion ?? payout.payoutAccountVersion ?? 'legacy-v1'} · 失败重试款`,
+        label: retryResultLabel(payout) ?? paymentFailureRecoveryLabel(payout),
+        issue: retryResultLabel(payout) ?? paymentFailureRecoveryLabel(payout),
       };
     }
     const issues = validatePayoutForBatch(payout, provider);
+    const retryLabel = retryCandidate ? retryResultLabel(payout) : null;
     return {
       eligible: issues.length === 0,
-      label: issues[0] ?? (retryCandidate ? paymentFailureRecoveryLabel(payout) : '冻结快照校验通过'),
-      description: `${paymentProviderDisplayName(payout.provider)} · ${payout.payoutAccountVersion ?? payout.invoiceSnapshot?.payoutAccountVersion ?? 'legacy-v1'} · ${accountDisplayValue(payout.account)}`,
+      label: retryLabel ?? issues[0] ?? '冻结快照校验通过',
+      issue: issues[0],
     };
   };
-  const selectedChecks = selectedPayouts.map((payout) => getAccountCheck(payout));
+  const selectedChecks = selectedRows.map((row) => getAccountCheck(row));
   const issueCount = selectedChecks.filter((check) => !check.eligible).length;
   const hasIssue = issueCount > 0;
+  const firstSelectedIssue = selectedChecks.find((check) => !check.eligible)?.issue;
   const passedCount = selectedPayouts.length - issueCount;
   const canSubmit = selectedPayouts.length > 0 && !hasIssue && Boolean(fundingAccountId);
   const totals = useMemo(() => selectedPayouts.reduce<Record<string, number>>((result, payout) => ({
@@ -107,9 +302,27 @@ export function BatchWizardPage({
     [payout.currency]: (result[payout.currency] ?? 0) + payout.amount,
   }), {}), [selectedPayouts]);
 
+  const selectionScopeIssue = (row: BatchWizardRow) => {
+    if (mode !== 'batch' || !selectedRequestKey) return '';
+    return batchWizardSelectionScopeIssue(row, selectedScopeRow);
+  };
+
+  const selectableVisibleRows = mode === 'batch' && selectedRequestKey
+    ? visibleRows.filter((row) => (
+        !selectionScopeIssue(row)
+        && (!isPaymentFailureRetryCandidate(row.payout) || isPaymentFailureRetryReady(row.payout))
+      ))
+    : [];
+  const selectableVisibleIds = selectableVisibleRows.map((row) => row.payout.id);
+  const selectedVisibleCount = selectableVisibleIds.filter((id) => selected.has(id)).length;
+  const allVisibleSelected = selectableVisibleIds.length > 0
+    && selectedVisibleCount === selectableVisibleIds.length;
+  const someVisibleSelected = selectedVisibleCount > 0 && !allVisibleSelected;
+
   const toggleOne = (id: string) => {
-    const payout = payouts.find((candidate) => candidate.id === id);
-    if (!payout || (isPaymentFailureRetryCandidate(payout) && !isPaymentFailureRetryReady(payout))) return;
+    const row = rowByPayoutId.get(id);
+    if (!row || (isPaymentFailureRetryCandidate(row.payout) && !isPaymentFailureRetryReady(row.payout))) return;
+    if (selectionScopeIssue(row)) return;
     setSelected((current) => {
       if (mode === 'single') {
         return current.has(id) && current.size === 1 ? new Set() : new Set([id]);
@@ -122,21 +335,24 @@ export function BatchWizardPage({
   };
 
   const toggleAll = () => {
-    if (mode === 'single') return;
-    const selectableIds = payouts
-      .filter((payout) => !isPaymentFailureRetryCandidate(payout) || isPaymentFailureRetryReady(payout))
-      .map((payout) => payout.id);
-    setSelected((current) => selectableIds.every((id) => current.has(id))
-      ? new Set()
-      : new Set(selectableIds));
+    if (mode === 'single' || !selectedRequestKey || !selectableVisibleIds.length) return;
+    setSelected((current) => {
+      const next = new Set(current);
+      if (selectableVisibleIds.every((id) => current.has(id))) {
+        selectableVisibleIds.forEach((id) => next.delete(id));
+      } else {
+        selectableVisibleIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
   };
 
   const changeMode = (nextMode: 'batch' | 'single') => {
     setMode(nextMode);
     if (nextMode === 'single') {
       setSelected((current) => {
-        const firstSelected = payouts.find((payout) => current.has(payout.id));
-        return firstSelected ? new Set([firstSelected.id]) : new Set();
+        const firstSelected = rows.find((row) => current.has(row.payout.id));
+        return firstSelected ? new Set([firstSelected.payout.id]) : new Set();
       });
     }
   };
@@ -179,51 +395,77 @@ export function BatchWizardPage({
 
       <div className="batch-layout">
         <section className="batch-panel batch-selection-panel">
-          <div className="panel-title-row">
-            <div><h2>已选择的付款</h2><p>{selectedPayouts.length} 笔付款将进入本批次</p></div>
-            <label className="search-control"><Search size={16} /><input aria-label="搜索付款" placeholder="搜索达人、项目或 Invoice" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
+          <div className="panel-title-row batch-selection-toolbar">
+            <div className="batch-selection-filters">
+              <label className="search-control"><Search size={16} /><input aria-label="搜索付款" placeholder="搜索达人、请款编号或合作项目" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
+              <SelectField
+                ariaLabel="按合作项目筛选付款"
+                className="batch-project-filter"
+                value={cooperationProjectFilter}
+                options={projectOptions}
+                onChange={setCooperationProjectFilter}
+              />
+            </div>
+            <div className="batch-selection-count"><h2>已选择的付款</h2><p>{selectedPayouts.length} 笔付款将进入本批次</p></div>
           </div>
 
           <div className="batch-table-scroll">
-            <table className="batch-table">
-              <thead><tr><th><input aria-label="全选付款" type="checkbox" checked={mode === 'batch' && payouts.filter((payout) => !isPaymentFailureRetryCandidate(payout) || isPaymentFailureRetryReady(payout)).every((payout) => selected.has(payout.id))} disabled={mode === 'single'} onChange={toggleAll} /></th><th>达人 / 项目</th><th>执行账户</th><th>资料校验</th><th>金额</th></tr></thead>
+            <table className="batch-table batch-wizard-table">
+              <thead><tr>
+                <th className="batch-wizard-col-select"><input
+                  ref={(node) => { if (node) node.indeterminate = someVisibleSelected; }}
+                  aria-label="全选当前请款项目付款"
+                  type="checkbox"
+                  checked={mode === 'batch' && allVisibleSelected}
+                  disabled={mode === 'single' || !selectedRequestKey || !selectableVisibleIds.length}
+                  title={!selectedRequestKey ? '请先选择一笔付款以锁定请款项目' : undefined}
+                  onChange={toggleAll}
+                /></th>
+                <th className="batch-wizard-col-creator">达人</th>
+                <th className="batch-wizard-col-request">请款编号</th>
+                <th className="batch-wizard-col-project">合作项目</th>
+                <th className="batch-wizard-col-account">银行账号</th>
+                <th className="batch-wizard-col-validation">账户校验</th>
+                <th className="batch-wizard-col-amount">金额</th>
+              </tr></thead>
               <tbody>
-                {visiblePayouts.map((payout) => {
-                  const creator = creators.find((candidate) => candidate.id === payout.creatorId);
-                  const paymentItem = findPaymentListItemForPayout(payout, generatedInvoices, paymentLists);
-                  const creatorIdentity = paymentCreatorIdentityFromPayout({ payout, paymentItem, creator });
-                  const accountCheck = getAccountCheck(payout);
+                {visibleRows.map((row) => {
+                  const { payout } = row;
+                  const accountCheck = getAccountCheck(row);
                   const accountIssue = !accountCheck.eligible;
                   const rowIssue = selected.has(payout.id) && accountIssue;
                   const retryCandidate = isPaymentFailureRetryCandidate(payout);
                   const retryBlocked = retryCandidate && !isPaymentFailureRetryReady(payout);
+                  const scopeIssue = selectionScopeIssue(row);
+                  const selectionBlocked = retryBlocked || Boolean(scopeIssue);
+                  const blockedReason = scopeIssue || (retryBlocked ? accountCheck.label : undefined);
                   return (
-                    <tr className={`${rowIssue ? 'row-error ' : ''}${retryCandidate ? 'batch-retry-row' : ''}`.trim()} key={payout.id}>
-                      <td><input aria-label={`选择 ${payout.creator}`} type="checkbox" checked={selected.has(payout.id)} disabled={retryBlocked} onChange={() => toggleOne(payout.id)} /></td>
-                      <td>
+                    <tr className={`${rowIssue ? 'row-error ' : ''}${retryCandidate ? 'batch-retry-row ' : ''}${scopeIssue ? 'batch-request-locked-row' : ''}`.trim()} key={payout.id} title={scopeIssue ? blockedReason : undefined}>
+                      <td className="batch-wizard-col-select"><input aria-label={`选择 ${payout.creator}`} type="checkbox" checked={selected.has(payout.id)} disabled={selectionBlocked} title={blockedReason} onChange={() => toggleOne(payout.id)} /></td>
+                      <td className="batch-wizard-col-creator">
                         <div className="batch-wizard-creator-cell">
-                          <PaymentCreatorIdentity {...creatorIdentity} />
-                          <span className="batch-wizard-creator-meta">
-                            <span title={`${payout.invoice} · ${payout.project}`}>{payout.invoice} · {payout.project}</span>
-                            {retryCandidate ? <em className="batch-retry-badge">失败重试</em> : null}
-                          </span>
+                          <PaymentCreatorIdentity {...row.creatorIdentity} />
+                          {retryCandidate ? <em className="batch-retry-badge">失败重试</em> : null}
                         </div>
                       </td>
-                      <td>
+                      <td className="batch-wizard-col-request"><strong className="batch-wizard-request-code" title={row.requestCode}>{row.requestCode}</strong></td>
+                      <td className="batch-wizard-col-project"><span className="batch-wizard-project-cell"><strong title={row.cooperationProjectName}>{row.cooperationProjectName}</strong><small title={row.cooperationProjectCode}>{row.cooperationProjectCode}</small></span></td>
+                      <td className="batch-wizard-col-account">
                         <span className="batch-account-cell">
-                          <strong>{provider}</strong>
-                          <small>{accountCheck.description}</small>
+                          <strong title={row.accountSummary}>{row.accountSummary}</strong>
+                          <small title={`${row.accountProvider} · ${row.accountVersion}`}>{row.accountProvider} · {row.accountVersion}</small>
                         </span>
                       </td>
-                      <td>
-                        {accountIssue ? (
-                          <span className="warning-text"><AlertTriangle size={15} />{accountCheck.label}</span>
-                        ) : <span className="validation-ok"><CheckCircle2 size={16} />{accountCheck.label}</span>}
+                      <td className="batch-wizard-col-validation">
+                        {accountIssue && !isPaymentFailureRetryReady(payout) ? (
+                          <span className="warning-text" title={accountCheck.label}><AlertTriangle size={15} />{accountCheck.label}</span>
+                        ) : <span className="validation-ok" title={accountCheck.label}><CheckCircle2 size={16} />{accountCheck.label}</span>}
                       </td>
-                      <td className="amount-cell">{formatAmount(payout)}</td>
+                      <td className="batch-wizard-col-amount amount-cell">{formatAmount(payout)}</td>
                     </tr>
                   );
                 })}
+                {!visibleRows.length ? <tr><td className="batch-wizard-empty" colSpan={7}>没有符合当前条件的付款</td></tr> : null}
               </tbody>
             </table>
           </div>
@@ -276,8 +518,8 @@ export function BatchWizardPage({
             <div><ShieldCheck size={20} /><span><strong>{mode === 'batch' ? '批次资料校验' : '单笔资料校验'}</strong><small>{passedCount} / {selectedPayouts.length} 笔通过</small></span></div>
             <StatusMark status={hasIssue ? '信息异常' : '等待付款'} />
           </div>
-          {hasIssue ? <div className="inline-alert"><AlertTriangle size={17} />请先处理 {issueCount} 笔冻结快照，才能提交付款。</div> : null}
-          {submissionError ? <div className="inline-alert"><AlertTriangle size={17} />{submissionError}</div> : null}
+          {hasIssue ? <div className="inline-alert"><AlertTriangle size={17} />{firstSelectedIssue || `请先处理 ${issueCount} 笔冻结快照，才能提交付款。`}</div> : null}
+          {submissionError ? <div className="inline-alert" role="alert"><AlertTriangle size={17} />{submissionError}</div> : null}
         </aside>
       </div>
 

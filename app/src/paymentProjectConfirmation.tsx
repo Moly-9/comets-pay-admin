@@ -69,7 +69,7 @@ function GenericPaymentConfirmationDocument({ item }: { item: PaymentBatchItemSn
     ['付款渠道', paymentProviderDisplayName(item.provider)],
     ['付款编号', item.paymentCode || '付款编号待补全'],
     ['收款方账户名', item.accountName || '待补充'],
-    ['实际付款日期', confirmationDateLabel(item.paymentSubmittedAt)],
+    ['付款日期', confirmationDateLabel(item.paymentSubmittedAt)],
     ['付款方式', item.localClearingSystem || item.transferMethod],
     ['收款国家 / 地区', item.recipientCountry || '待补充'],
     ['付款状态', item.paymentStatus],
@@ -81,7 +81,7 @@ function GenericPaymentConfirmationDocument({ item }: { item: PaymentBatchItemSn
         <Text style={styles.title}>付款确认函</Text>
         <Text style={styles.prototype}>前端原型确认函 · 不代表支付渠道正式凭证</Text>
         <View style={styles.hero}>
-          <Text style={styles.heroLabel}>付款方支付金额</Text>
+          <Text style={styles.heroLabel}>支出金额</Text>
           <Text style={styles.heroValue}>{actualPaid}</Text>
         </View>
         <View style={styles.grid}>

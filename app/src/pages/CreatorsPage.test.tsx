@@ -6,6 +6,7 @@ import type { CreatorCollaborationProjectRecord } from '../creatorCollaborationP
 import type { CreatorProfile } from '../types';
 import {
   CreatorCollaborationProjectDetails,
+  CreatorSocialAccountDetails,
   CreatorSocialPlatformIcons,
   CreatorsPage,
   getCreatorPayoutAccountValidationError,
@@ -177,6 +178,10 @@ describe('CreatorsPage profile cards', () => {
     expect(html.indexOf('邀请记录')).toBeGreaterThan(html.indexOf('导出所选（0）'));
     expect(html).toContain('aria-disabled="true"');
     expect(html).toContain('<th>社媒平台数</th>');
+    expect(html).toContain('<th>Real Name / Company Name</th>');
+    expect(html).not.toContain('<th>地区</th>');
+    expect(html).toContain(creator.contact.legalName);
+    expect(html).toContain('搜索达人名称、账号或 Real Name / Company Name');
     expect(html).toContain('<th>账户更新时间</th>');
     expect(html).toContain('creator-directory-identity');
     expect(html).toContain('@Luna_J');
@@ -189,9 +194,42 @@ describe('CreatorsPage profile cards', () => {
     expect(source).toContain('CreatorInvitationSendDialog');
     expect(source).toContain('CreatorInvitationRecordsDialog');
     expect(source).not.toContain('达人 C 端入驻');
-    expect(source).toContain('Display name · 默认跟随首个 Handle');
+    expect(source).toContain('Display Name · 默认使用首个 Handle（不含 @）');
+    expect(source).toContain('nameIsAutoDerived');
+    expect(source).toContain("const primaryHandle = normalizeSocialHandle(socialAccounts[0]?.handle ?? '')");
     expect(source).toContain('readOnly value={draft.region || \'待识别\'}');
     expect(source).toContain('请在联系地址末尾填写国家名');
     expect(source).not.toContain('<span>地区<em className="required-mark"');
+  });
+
+  it('社媒账号卡展示后台截图查看入口和历史缺失状态', () => {
+    const mina = INITIAL_CREATORS.find((item) => item.id === 'creator-mina');
+    const luna = INITIAL_CREATORS.find((item) => item.id === 'creator-luna');
+    if (!mina || !luna) throw new Error('演示数据缺少 Mina 或 Luna');
+
+    const instagram = mina.socialAccounts[0];
+    const withScreenshots = renderToStaticMarkup(
+      <CreatorSocialAccountDetails accounts={[{
+        ...instagram,
+        verificationScreenshots: [
+          ...(instagram.verificationScreenshots ?? []),
+          {
+            id: 'screenshot-creator-mina-instagram-2',
+            fileName: 'mina-instagram-audience-demo.svg',
+            imageUrl: '/creator-verification-demo-mina-instagram.svg',
+            uploadedAt: '2026-09-12T03:19:00.000Z',
+          },
+        ],
+      }]} />,
+    );
+    const withoutScreenshots = renderToStaticMarkup(
+      <CreatorSocialAccountDetails accounts={[luna.socialAccounts[0]]} />,
+    );
+
+    expect(withScreenshots).toContain('查看后台截图（2）');
+    expect(withScreenshots).toContain(`aria-label="查看 Instagram @MinaKato 的 2 张后台截图"`);
+    expect(withScreenshots).toContain('creator-social-screenshot-button');
+    expect(withoutScreenshots).toContain('后台截图待补充');
+    expect(withoutScreenshots).toContain('disabled=""');
   });
 });

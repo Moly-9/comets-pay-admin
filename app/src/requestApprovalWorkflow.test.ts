@@ -13,7 +13,9 @@ import {
   requestApprovalReturnItemForInvoice,
   requestApprovalReturnItemForInvoiceEdit,
   requestApprovalReturnItemForPaymentListEdit,
+  requestApprovalReturnEditScope,
   requestApprovalReturnDetails,
+  requestApprovalStagesFor,
   returnApprovedRequestToMediaReview,
 } from './requestApprovalWorkflow';
 import { myProjectStatusFor, requestProjectStatusFor } from './paymentRequestProjects';
@@ -60,6 +62,24 @@ describe('request approval workflow', () => {
     ]);
   });
 
+  it('starts at project owner and omits the PM stage when no PM is assigned', () => {
+    const projectOwner = userFor('project');
+    const owner = userFor('owner');
+    const finance = userFor('finance');
+    let state = createRequestApprovalState('2026-08-04T01:00:00.000Z', undefined, '');
+
+    expect(state.status).toBe('PENDING_PROJECT_OWNER');
+    expect(requestApprovalStagesFor('', state)).toEqual(['PROJECT_OWNER', 'OWNER', 'FINANCE']);
+    expect(canReviewRequestApproval(userFor('pm'), state, '')).toBe(false);
+    expect(canReviewRequestApproval(projectOwner, state, '')).toBe(true);
+
+    state = applyRequestApprovalAction(state, 'APPROVE', projectOwner);
+    state = applyRequestApprovalAction(state, 'APPROVE', owner);
+    state = applyRequestApprovalAction(state, 'APPROVE', finance);
+    expect(state.status).toBe('APPROVED');
+    expect(state.history.map((event) => event.stage)).toEqual(['PROJECT_OWNER', 'OWNER', 'FINANCE']);
+  });
+
   it('returns any active approval node and starts a new round at the intercepted node', () => {
     const pm = userFor('pm');
     const state = createRequestApprovalState('2026-08-04T01:00:00.000Z');
@@ -81,6 +101,16 @@ describe('request approval workflow', () => {
     ]);
     expect(myProjectStatusFor({ lifecycle: 'SUBMITTED', approval: nextRound })).toBe('PM审批中');
     expect(requestProjectStatusFor({ lifecycle: 'SUBMITTED', approval: nextRound })).toBe('PM审批中');
+  });
+
+  it('skips a returned PM node when the PM is removed before resubmission', () => {
+    const state = createRequestApprovalState('2026-08-04T01:00:00.000Z', undefined, '张咏诗');
+    const returned = applyRequestApprovalAction(state, 'RETURN', userFor('pm'), '请修改请款范围');
+    const nextRound = createRequestApprovalState('2026-08-05T01:00:00.000Z', returned, '');
+
+    expect(nextRound.status).toBe('PENDING_PROJECT_OWNER');
+    expect(nextRound.round).toBe(2);
+    expect(requestApprovalStagesFor('', nextRound)).toEqual(['PROJECT_OWNER', 'OWNER', 'FINANCE']);
   });
 
   it('restores a returned project-owner request to the project-owner node', () => {
@@ -132,6 +162,7 @@ describe('request approval workflow', () => {
       }],
     });
     expect(requestApprovalHasScopedReturnItems(returned)).toBe(true);
+    expect(requestApprovalReturnEditScope(returned)).toBe('full');
     expect(requestApprovalReturnItemForInvoice(returned, 'stable-invoice-id' as never, 'PAYMENT_LIST'))
       .toMatchObject({ invoiceNumber: 'INV-TEST' });
     expect(requestApprovalAllowsInvoicePayoutOverride(returned, 'stable-invoice-id' as never)).toBe(false);
@@ -140,6 +171,25 @@ describe('request approval workflow', () => {
     expect(resubmitted.round).toBe(2);
     expect(requestApprovalReturnDetails(resubmitted)).toBeNull();
     expect(resubmitted.returnItems).toBeUndefined();
+  });
+
+  it('limits edits only after approval or during payment failure recovery', () => {
+    const approvalReturn = applyRequestApprovalAction(
+      { ...createRequestApprovalState(), status: 'PENDING_FINANCE' },
+      'RETURN',
+      userFor('finance'),
+      '付款资料需要修改',
+    );
+    const executionReturn = returnApprovedRequestToMediaReview(
+      { ...approvalReturn, status: 'APPROVED' },
+      userFor('finance'),
+      '付款执行前退回',
+    );
+
+    expect(requestApprovalReturnEditScope()).toBe('none');
+    expect(requestApprovalReturnEditScope(approvalReturn)).toBe('full');
+    expect(requestApprovalReturnEditScope(approvalReturn, true)).toBe('scoped');
+    expect(requestApprovalReturnEditScope(executionReturn)).toBe('scoped');
   });
 
   it('allows payout override only for the returned Invoice-content detail', () => {

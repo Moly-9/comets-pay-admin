@@ -11,12 +11,19 @@ import {
   frameworkIoContracts,
   getContractReadiness,
   isPaymentContract,
+  projectConfirmedRecognitionDraft,
   sendContractForSignature,
   applyConfirmedRecognitionToContract,
   type ContractGenerationModel,
   type ContractRecord,
+  type ContractSignatureRequest,
   type ContractUploadInput,
 } from './contracts';
+import {
+  createContractSignatureRequest,
+  sendContractSignatureRequest,
+  simulateDocuSignContractSend,
+} from './contractSignature';
 import type { ContractId, CreatorId, EngagementId, ProjectId } from './businessWorkflow';
 import type { ContractFieldKey, ContractRecognitionField } from './contractRecognitionTypes';
 
@@ -405,6 +412,7 @@ describe('generated contract upload workflow', () => {
         field('contractNumber', 'CON-FRAMEWORK-002'),
         field('effectiveDate', '2026-08-05', { date: '2026-08-05' }),
         field('campaignPeriod', '2026-08-10 至 2026-08-31', { startDate: '2026-08-10', endDate: '2026-08-31' }),
+        field('signatureStatus', '已签署', { signed: true }),
         field('transferFee', 'Advertiser', 'ADVERTISER'),
         field('beneficiaryAccount', 'Sample Creator Limited'),
       ],
@@ -416,12 +424,15 @@ describe('generated contract upload workflow', () => {
       'contractNumber',
       'effectiveDate',
       'campaignPeriod',
+      'signatureStatus',
       'transferFee',
       'beneficiaryAccount',
     ]);
 
-    expect(applied?.lifecycle).toBe('RECOGNITION_CONFIRMED');
-    expect(applied?.signed).toBe(false);
+    expect(applied?.lifecycle).toBe('CONFIRMED');
+    expect(applied?.signed).toBe(true);
+    expect(applied?.campaignStart).toBe('2026-08-10');
+    expect(applied?.campaignEnd).toBe('2026-08-31');
     expect(applied?.feeBearer).toBe('ADVERTISER');
     expect(applied?.project).toBe('Keep this project');
     expect(applied?.platform).toBe('Keep this platform');
@@ -461,5 +472,188 @@ describe('generated contract upload workflow', () => {
     });
     expect(completed?.issues.some((issue) => issue.id === 'signature')).toBe(false);
     expect(isPaymentContract(completed!)).toBe(true);
+  });
+
+  it('sends a confirmed unsigned recognition draft and auto-applies it after signing', async () => {
+    const source = {
+      documentId: 'unsigned-upload-document',
+      documentType: 'STANDARD_TERMS' as const,
+      fileName: 'unsigned-upload.pdf',
+      pageNumber: 1,
+      section: 'Contract',
+      sourceText: 'Synthetic unsigned contract',
+      blockId: 'unsigned-upload-block',
+    };
+    const confirmedField = (
+      fieldKey: ContractFieldKey,
+      rawValue: string,
+      normalizedValue: unknown = rawValue,
+    ): ContractRecognitionField => ({
+      fieldKey,
+      label: fieldKey,
+      rawValue,
+      normalizedValue,
+      source,
+      confidence: 1,
+      status: 'confirmed',
+      candidates: [],
+    });
+    const recognitionResults = [
+      confirmedField('advertiser', 'Draft Advertiser Limited'),
+      confirmedField('publisher', 'Draft Publisher Limited'),
+      confirmedField('projectTotalFees', 'USD 4,200', { amount: 4200, currency: 'USD' }),
+      confirmedField('contractExpiry', '2026-09-01 至 2026-12-31', {
+        startDate: '2026-09-01',
+        endDate: '2026-12-31',
+        isLongTerm: false,
+      }),
+      confirmedField('transferFee', 'Advertiser', 'ADVERTISER'),
+      confirmedField('signatureStatus', '未签署', { signed: false }),
+    ];
+    const requiredKeys = recognitionResults.map((field) => field.fieldKey);
+    const uploaded = {
+      ...createGeneratedContractDraft(generationModel, 1, 'blob:unsigned-upload'),
+      lifecycle: 'UPLOADED_PENDING_CONFIRMATION' as const,
+      extractionStage: 'confirmed' as const,
+      recognitionResults,
+      advertiser: 'Formal value must stay frozen before signing',
+      signed: false,
+      issues: [
+        { id: 'recognition-review', label: '待确认', description: '待确认', severity: 'blocker' as const, source: '识别' },
+        { id: 'signature', label: '待签署', description: '待签署', severity: 'blocker' as const, source: '签署' },
+      ],
+    } satisfies ContractRecord;
+    const projection = projectConfirmedRecognitionDraft(uploaded, requiredKeys);
+    expect(projection).toMatchObject({
+      advertiser: 'Draft Advertiser Limited',
+      publisher: 'Draft Publisher Limited',
+      totalFee: 4200,
+      signed: false,
+    });
+    const request = createContractSignatureRequest(projection!, {
+      creatorDisplayName: generationModel.creatorName,
+      amount: 'USD 4,200',
+      signerName: 'Draft Publisher Limited',
+      requestedAt: '2026-09-09T10:00:00.000Z',
+      paymentInformation: {
+        source: 'frozen-payout-account',
+        channel: 'Airwallex',
+        fields: [{ label: 'Account Name', value: 'Sample Creator Limited' }],
+      },
+    });
+    const result = await sendContractSignatureRequest(request, simulateDocuSignContractSend);
+    if (!result.ok) throw new Error(result.error);
+
+    const sent = sendContractForSignature(uploaded, request, result);
+    expect(sent).toMatchObject({
+      lifecycle: 'SENT_FOR_SIGNATURE',
+      extractionStage: 'confirmed',
+      advertiser: 'Formal value must stay frozen before signing',
+      signatureRequestSnapshot: {
+        advertiser: 'Draft Advertiser Limited',
+        publisher: 'Draft Publisher Limited',
+        signerName: 'Draft Publisher Limited',
+      },
+    });
+
+    const completed = completeContractSignature(
+      sent!,
+      '2026-09-10T11:00:00.000Z',
+      requiredKeys,
+    );
+    expect(completed).toMatchObject({
+      lifecycle: 'CONFIRMED',
+      extractionStage: 'applied',
+      advertiser: 'Draft Advertiser Limited',
+      publisher: 'Draft Publisher Limited',
+      campaignStart: '2026-09-01',
+      campaignEnd: '2026-12-31',
+      isLongTerm: false,
+      totalFee: 4200,
+      signed: true,
+      signedBy: 'Draft Publisher Limited',
+      signedAt: '2026-09-10T11:00:00.000Z',
+      confirmedAt: '2026-09-10T11:00:00.000Z',
+    });
+    expect(completed?.recognitionResults?.find((field) => field.fieldKey === 'signatureStatus')).toMatchObject({
+      rawValue: '已签署',
+      normalizedValue: {
+        signed: true,
+        signedAt: '2026-09-10T11:00:00.000Z',
+        signerName: 'Draft Publisher Limited',
+      },
+      status: 'confirmed',
+    });
+    expect(completed?.issues.some((issue) => issue.id === 'signature' || issue.id === 'recognition-review')).toBe(false);
+  });
+
+  it('freezes the confirmed fields and document reference after a simulated DocuSign send', async () => {
+    const recognized = {
+      ...createGeneratedContractDraft(generationModel, 1, 'blob:generated-contract'),
+      lifecycle: 'RECOGNITION_CONFIRMED' as const,
+      extractionStage: 'applied' as const,
+      signed: false,
+      issues: [{
+        id: 'signature',
+        label: '合同待发送达人签署',
+        description: '待发送',
+        severity: 'blocker' as const,
+        source: '达人签署',
+      }],
+    };
+    const request: ContractSignatureRequest = createContractSignatureRequest(recognized, {
+      creatorDisplayName: generationModel.creatorName,
+      amount: 'USD 3,000',
+      signerName: generationModel.publisher,
+      requestedAt: '2026-09-09T10:00:00.000Z',
+      paymentInformation: {
+        source: 'frozen-payout-account',
+        channel: 'Airwallex',
+        fields: [{ label: 'Account Name', value: 'Sample Creator Limited' }],
+      },
+    });
+    const result = await sendContractSignatureRequest(request, simulateDocuSignContractSend);
+
+    expect(result).toMatchObject({ ok: true, sentAt: request.requestedAt });
+    if (!result.ok) throw new Error(result.error);
+    const sent = sendContractForSignature(recognized, request, result);
+    expect(sent).toMatchObject({
+      lifecycle: 'SENT_FOR_SIGNATURE',
+      signatureEnvelopeId: result.envelopeId,
+      signatureRequestSnapshot: {
+        contractId: recognized.contractId,
+        creatorId: generationModel.creatorId,
+        signerName: generationModel.publisher,
+        documentReference: {
+          fileName: recognized.sourceName,
+          documentUrl: 'blob:generated-contract',
+        },
+      },
+    });
+    const completed = completeContractSignature(sent!, '2026-09-10T11:00:00.000Z');
+    expect(completed?.signedBy).toBe(generationModel.publisher);
+  });
+
+  it('keeps the contract unchanged when the signature adapter rejects the request', async () => {
+    const request = createContractSignatureRequest(
+      createGeneratedContractDraft(generationModel, 1, 'blob:generated-contract'),
+      {
+        creatorDisplayName: generationModel.creatorName,
+        amount: 'USD 3,000',
+        signerName: generationModel.publisher,
+        requestedAt: '2026-09-09T10:00:00.000Z',
+        paymentInformation: {
+          source: 'frozen-payout-account',
+          channel: 'Airwallex',
+          fields: [],
+        },
+      },
+    );
+    const result = await sendContractSignatureRequest(request, async () => ({
+      ok: false,
+      error: '模拟发送失败',
+    }));
+
+    expect(result).toEqual({ ok: false, error: '模拟发送失败' });
   });
 });

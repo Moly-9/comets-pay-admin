@@ -22,6 +22,7 @@ import { createPortal } from 'react-dom';
 import './MediaPaymentProjectsPage.css';
 import { Avatar, Button, ListActionButton, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { ContractDocumentView } from '../components/ContractDocumentView';
+import { DraftExitDialog } from '../components/DraftExitDialog';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import { Pagination, usePagination } from '../components/Pagination';
 import { PaymentRequestCostCascader } from '../components/PaymentRequestCostCascader';
@@ -93,15 +94,19 @@ import {
   type PaymentRequestRemarkAttachment,
 } from '../paymentRequestProjects';
 import { paymentFailureRecoveryLabel } from '../paymentFailureRecovery';
+import { paymentPayoutExpenditureTotals } from '../paymentAttempts';
 import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
 import { CreatorIdentity } from '../components/CreatorIdentity';
 import {
+  creatorSocialAccounts,
   creatorSearchTerms,
   resolveCreatorSocialAccount,
 } from '../creatorSearchOptions';
 import {
   requestApprovalHasScopedReturnItems,
+  requestApprovalReturnEditScope,
   requestApprovalReturnDetails,
+  requestApprovalStagesFor,
 } from '../requestApprovalWorkflow';
 import {
   ProjectInlineFilterPanel,
@@ -115,7 +120,7 @@ import { downloadBlob } from '../invoice/invoiceUtils';
 type Notify = (title: string, message: string) => void;
 
 const STATUS_COPY = {
-  READY: '可选择多份 Invoice',
+  READY: '可选择 1 份 Invoice',
   MISSING_INVOICE: '该合作项目下暂无此达人 Invoice',
   INVOICE_NOT_APPROVED: '该合作项目下的 Invoice 尚未完成签署和审核',
   INVOICE_IN_USE: '可用 Invoice 均已关联其他请款',
@@ -127,15 +132,123 @@ const PAYMENT_CHANNEL_OPTIONS = [
   { value: 'Payermax', label: 'Payer Max', description: '本地支付网络' },
 ] as const;
 
+export const PAYMENT_REQUEST_BRAND_OPTIONS = [
+  '网易',
+  '腾讯',
+  '叠纸',
+  '米哈游',
+  '莉莉丝',
+  '字节跳动',
+  '库洛',
+  '雷霆游戏',
+  '祖龙游戏',
+  '西山居',
+  '英雄互娱',
+  '深蓝互动',
+  '双尾',
+] as const;
+
+export const paymentRequestBrandOptionsFor = (brand: string) => {
+  const standardOptions = PAYMENT_REQUEST_BRAND_OPTIONS.map((option) => ({
+    value: option,
+    label: option,
+  }));
+  const currentBrand = brand.trim();
+  if (!currentBrand || PAYMENT_REQUEST_BRAND_OPTIONS.some((option) => option === currentBrand)) {
+    return standardOptions;
+  }
+  return [
+    ...standardOptions,
+    { value: currentBrand, label: currentBrand, description: '历史品牌' },
+  ];
+};
+
 const REMARK_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const PAYMENT_REQUEST_CREATE_DRAFT_VERSION = 1;
+
+type PaymentRequestCreateDraft = {
+  version: typeof PAYMENT_REQUEST_CREATE_DRAFT_VERSION;
+  cooperationProjectId: string;
+  brand: string;
+  pm: string;
+  paymentChannel: PaymentRequestPaymentChannel | '';
+  paymentEntity: PaymentRequestPaymentEntity | '';
+  projectCostAttribution: PaymentRequestCostAttribution | '';
+  expectedPaymentDate: string;
+  costType: PaymentRequestCostType;
+  costTypeDetail: PaymentRequestProcurementCostDetail | '';
+  reason: string;
+  remark: string;
+  remarkAttachments: PaymentRequestRemarkAttachment[];
+  selectedCreatorIds: CreatorId[];
+  socialAccountIdsByCreator: Record<string, string>;
+  contractIdsByCreator: Record<string, ContractId[]>;
+  invoiceIdsByCreator: Record<string, InvoiceId[]>;
+  autoLinkedContractIdsByCreator: Record<string, ContractId[]>;
+  savedAt: string;
+};
+
+const paymentRequestCreateDraftStorageKey = (account: string) => (
+  `comets-pay.payment-request-draft.v${PAYMENT_REQUEST_CREATE_DRAFT_VERSION}:${account}`
+);
+
+const isStringRecord = (value: unknown): value is Record<string, string> => (
+  value !== null
+  && typeof value === 'object'
+  && !Array.isArray(value)
+  && Object.values(value).every((item) => typeof item === 'string')
+);
+
+const isStringArrayRecord = (value: unknown): value is Record<string, string[]> => (
+  value !== null
+  && typeof value === 'object'
+  && !Array.isArray(value)
+  && Object.values(value).every((item) => Array.isArray(item) && item.every((entry) => typeof entry === 'string'))
+);
+
+const parsePaymentRequestCreateDraft = (value: string): PaymentRequestCreateDraft | null => {
+  const parsed = JSON.parse(value) as Partial<PaymentRequestCreateDraft>;
+  if (
+    parsed.version !== PAYMENT_REQUEST_CREATE_DRAFT_VERSION
+    || typeof parsed.cooperationProjectId !== 'string'
+    || typeof parsed.brand !== 'string'
+    || typeof parsed.pm !== 'string'
+    || typeof parsed.paymentChannel !== 'string'
+    || typeof parsed.paymentEntity !== 'string'
+    || typeof parsed.projectCostAttribution !== 'string'
+    || typeof parsed.expectedPaymentDate !== 'string'
+    || typeof parsed.costType !== 'string'
+    || typeof parsed.costTypeDetail !== 'string'
+    || typeof parsed.reason !== 'string'
+    || typeof parsed.remark !== 'string'
+    || !Array.isArray(parsed.remarkAttachments)
+    || !parsed.remarkAttachments.every((attachment) => (
+      Boolean(attachment)
+      && typeof attachment.name === 'string'
+      && typeof attachment.size === 'number'
+      && typeof attachment.type === 'string'
+      && typeof attachment.lastModified === 'number'
+      && (attachment.dataUrl === undefined || typeof attachment.dataUrl === 'string')
+    ))
+    || !Array.isArray(parsed.selectedCreatorIds)
+    || !parsed.selectedCreatorIds.every((creatorId) => typeof creatorId === 'string')
+    || !isStringRecord(parsed.socialAccountIdsByCreator)
+    || !isStringArrayRecord(parsed.contractIdsByCreator)
+    || !isStringArrayRecord(parsed.invoiceIdsByCreator)
+    || !isStringArrayRecord(parsed.autoLinkedContractIdsByCreator)
+    || typeof parsed.savedAt !== 'string'
+  ) return null;
+  return parsed as PaymentRequestCreateDraft;
+};
 
 const actualPayoutAmountLabel = (payout?: Payout) => {
-  if (!payout || payout.status !== '已付款') return '—';
-  const amount = payout.actualPaidAmount ?? payout.amount;
-  return `${payout.actualPaidCurrency ?? payout.currency} ${amount.toLocaleString('en-US', {
+  if (!payout) return '—';
+  const totals = paymentPayoutExpenditureTotals(payout);
+  if (!totals.length) return payout.status === '付款处理中' ? '待渠道回写' : '—';
+  return totals.map(({ currency, amount }) => `${currency} ${amount.toLocaleString('en-US', {
     minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
     maximumFractionDigits: 2,
-  })}`;
+  })}`).join(' · ');
 };
 
 const fileDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
@@ -240,7 +353,7 @@ function RequestResourcePicker({
   const label = isInvoice ? 'Invoice' : '合同';
   const ResourceIcon = isInvoice ? ReceiptText : FileText;
   const helper = isInvoice
-    ? '关联已录入系统的 Invoice，可多选'
+    ? '关联已录入系统的 Invoice，仅可单选'
     : '仅已确认合同可关联，可多选';
   const selectedCopy = selectedCount
     ? `已选择 ${selectedCount} 份${isInvoice ? ' Invoice' : '合同'}`
@@ -459,22 +572,25 @@ const approvalProgressSteps = ({
   hasPaymentFailureRecovery: boolean;
 }): MyProjectRequestProgressStep[] => {
   const approval = request.approval;
+  const visibleStages = REQUEST_APPROVAL_PROGRESS_STAGES.filter((item) => (
+    requestApprovalStagesFor(request.pm, approval).includes(item.stage)
+  ));
   if (!approval || request.lifecycle === 'CANCELLED') {
-    return REQUEST_APPROVAL_PROGRESS_STAGES.map((item, index) => ({
+    return visibleStages.map((item, index) => ({
       label: item.label,
-      description: index === 0 ? '提交审核后进入' : `${REQUEST_APPROVAL_PROGRESS_STAGES[index - 1].label}通过后进入`,
+      description: index === 0 ? '提交审核后进入' : `${visibleStages[index - 1].label}通过后进入`,
       time: '待开始',
       state: 'pending',
     }));
   }
 
-  const currentStageIndex = REQUEST_APPROVAL_PROGRESS_STAGES.findIndex((item) => item.status === approval.status);
-  const returnedStageIndex = REQUEST_APPROVAL_PROGRESS_STAGES.findIndex((item) => item.stage === approval.returnedFromStage);
+  const currentStageIndex = visibleStages.findIndex((item) => item.status === approval.status);
+  const returnedStageIndex = visibleStages.findIndex((item) => item.stage === approval.returnedFromStage);
   const latestEventForStage = (stage: RequestApprovalStage, action: 'APPROVE' | 'RETURN') => (
     [...approval.history].reverse().find((event) => event.stage === stage && event.action === action)
   );
 
-  return REQUEST_APPROVAL_PROGRESS_STAGES.map((item, index) => {
+  return visibleStages.map((item, index) => {
     const approvedEvent = latestEventForStage(item.stage, 'APPROVE');
     const stageComplete = approvalCompleted
       || approval.status === 'APPROVED'
@@ -509,7 +625,7 @@ const approvalProgressSteps = ({
     }
     return {
       label: item.label,
-      description: index === 0 ? '提交审核后进入' : `${REQUEST_APPROVAL_PROGRESS_STAGES[index - 1].label}通过后进入`,
+      description: index === 0 ? '提交审核后进入' : `${visibleStages[index - 1].label}通过后进入`,
       time: '待开始',
       state: 'pending',
     };
@@ -834,10 +950,11 @@ export function MediaPaymentProjectsPage({
 }) {
   const [creating, setCreating] = useState(false);
   const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
+  const [createExitDialogOpen, setCreateExitDialogOpen] = useState(false);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(focusedProjectId);
   const [cooperationProjectId, setCooperationProjectId] = useState('');
   const [brand, setBrand] = useState('');
-  const [pm, setPm] = useState(PM_USERS[0]?.name ?? '');
+  const [pm, setPm] = useState('');
   const [paymentChannel, setPaymentChannel] = useState<PaymentRequestPaymentChannel | ''>('');
   const [paymentEntity, setPaymentEntity] = useState<PaymentRequestPaymentEntity | ''>('');
   const [projectCostAttribution, setProjectCostAttribution] = useState<PaymentRequestCostAttribution | ''>('');
@@ -866,6 +983,7 @@ export function MediaPaymentProjectsPage({
   const [cancelReason, setCancelReason] = useState('');
   const [creatorAddRequestId, setCreatorAddRequestId] = useState<string | null>(null);
   const [focusCreatorDocuments, setFocusCreatorDocuments] = useState(false);
+  const brandOptions = useMemo(() => paymentRequestBrandOptionsFor(brand), [brand]);
 
   useEffect(() => {
     if (initialFocusedFailurePayoutId) setFocusedFailurePayoutId(initialFocusedFailurePayoutId);
@@ -994,10 +1112,10 @@ export function MediaPaymentProjectsPage({
   const customerCounts = visibleRequests.reduce<Record<string, number>>((result, request) => (
     request.brand ? { ...result, [request.brand]: (result[request.brand] ?? 0) + 1 } : result
   ), {});
-  const pmCounts = visibleRequests.reduce<Record<string, number>>((result, request) => ({
-    ...result,
-    [request.pm]: (result[request.pm] ?? 0) + 1,
-  }), {});
+  const pmCounts = visibleRequests.reduce<Record<string, number>>((result, request) => {
+    const pmName = request.pm || '__UNASSIGNED__';
+    return { ...result, [pmName]: (result[pmName] ?? 0) + 1 };
+  }, {});
   const customerFilterOptions = Object.entries(customerCounts).map(([customer, count]) => ({
     value: customer,
     label: customer,
@@ -1005,7 +1123,7 @@ export function MediaPaymentProjectsPage({
   }));
   const pmFilterOptions = Object.entries(pmCounts).map(([pmName, count]) => ({
     value: pmName,
-    label: pmName,
+    label: pmName === '__UNASSIGNED__' ? '未指定' : pmName,
     description: `${count} 个请款${PM_USERS.find((user) => user.name === pmName)?.email ? ` · ${PM_USERS.find((user) => user.name === pmName)?.email}` : ''}`,
   }));
   const currencies = Array.from(new Set(visibleRequests
@@ -1050,10 +1168,31 @@ export function MediaPaymentProjectsPage({
     }
   };
 
+  const createDraftStorageKey = paymentRequestCreateDraftStorageKey(currentUser.account);
+  const hasCreateDraftContent = Boolean(
+    cooperationProjectId
+    || brand.trim()
+    || pm
+    || paymentChannel
+    || paymentEntity
+    || projectCostAttribution
+    || expectedPaymentDate
+    || costType !== DEFAULT_PAYMENT_REQUEST_COST_TYPE
+    || costTypeDetail
+    || reason.trim()
+    || remark.trim()
+    || remarkAttachments.length
+    || selectedCreatorIds.length
+    || Object.keys(socialAccountIdsByCreator).length
+    || Object.keys(contractIdsByCreator).length
+    || Object.keys(invoiceIdsByCreator).length
+    || Object.keys(autoLinkedContractIdsByCreator).length
+  );
+
   const resetForm = () => {
     setCooperationProjectId('');
     setBrand('');
-    setPm(PM_USERS[0]?.name ?? '');
+    setPm('');
     setPaymentChannel('');
     setPaymentEntity('');
     setProjectCostAttribution('');
@@ -1076,17 +1215,148 @@ export function MediaPaymentProjectsPage({
     setFormSubmitAttempted(false);
     setFocusCreatorDocuments(false);
     setEditingRequestId(null);
+    setCreateExitDialogOpen(false);
   };
 
-  const closeForm = () => {
+  const finishCloseForm = () => {
     const returnRequestId = editingRequest?.id ?? null;
     resetForm();
     setCreating(false);
     if (returnRequestId) setSelectedRequestId(returnRequestId);
   };
 
+  const discardCreateDraftAndExit = () => {
+    try {
+      localStorage.removeItem(createDraftStorageKey);
+    } catch {
+      // Closing must remain available when browser storage is unavailable.
+    }
+    finishCloseForm();
+  };
+
+  const createDraftSnapshot = (): PaymentRequestCreateDraft => ({
+    version: PAYMENT_REQUEST_CREATE_DRAFT_VERSION,
+    cooperationProjectId,
+    brand,
+    pm,
+    paymentChannel,
+    paymentEntity,
+    projectCostAttribution,
+    expectedPaymentDate,
+    costType,
+    costTypeDetail,
+    reason,
+    remark,
+    remarkAttachments,
+    selectedCreatorIds,
+    socialAccountIdsByCreator,
+    contractIdsByCreator,
+    invoiceIdsByCreator,
+    autoLinkedContractIdsByCreator,
+    savedAt: new Date().toISOString(),
+  });
+
+  const saveCreateDraftAndExit = () => {
+    try {
+      localStorage.setItem(createDraftStorageKey, JSON.stringify(createDraftSnapshot()));
+    } catch {
+      notify('请款草稿保存失败', '浏览器存储空间不足或不可用，请移除较大的备注截图后重试。');
+      return;
+    }
+    finishCloseForm();
+    notify('请款草稿已保存', '下次打开“新建请款审批”时会自动恢复。');
+  };
+
+  const requestCloseForm = () => {
+    if (editingRequest) {
+      finishCloseForm();
+      return;
+    }
+    if (hasCreateDraftContent) {
+      setCreateExitDialogOpen(true);
+      return;
+    }
+    discardCreateDraftAndExit();
+  };
+
   const openCreateForm = () => {
     resetForm();
+    try {
+      const storedDraft = localStorage.getItem(createDraftStorageKey);
+      const draft = storedDraft ? parsePaymentRequestCreateDraft(storedDraft) : null;
+      if (storedDraft && !draft) localStorage.removeItem(createDraftStorageKey);
+      if (draft) {
+        const activeProject = selectableCooperationProjects.find((project) => (
+          cooperationProjectIdFor(project) === draft.cooperationProjectId
+        ));
+        const restoredProjectId = activeProject ? draft.cooperationProjectId : '';
+        const validCreators = restoredProjectId
+          ? creators.filter((creator) => draft.selectedCreatorIds.includes(creator.id as CreatorId))
+          : [];
+        const validCreatorIds = new Set(validCreators.map((creator) => creator.id));
+        const validContractIds = new Set(contracts.flatMap((contract) => (
+          contract.contractId ? [contract.contractId] : []
+        )));
+        const validInvoiceIds = new Set(invoices.map((invoice) => invoice.invoiceId));
+        const filterRelationRecord = <T extends string>(
+          record: Record<string, string[]>,
+          validIds: Set<string>,
+        ): Record<string, T[]> => Object.fromEntries(
+          Object.entries(record).flatMap(([creatorId, ids]) => (
+            validCreatorIds.has(creatorId)
+              ? [[creatorId, ids.filter((id) => validIds.has(id)) as T[]]]
+              : []
+          )),
+        );
+        const restoredSocialAccounts = Object.fromEntries(validCreators.flatMap((creator) => {
+          const socialAccountId = draft.socialAccountIdsByCreator[creator.id];
+          return socialAccountId && creatorSocialAccounts(creator).some((account) => account.id === socialAccountId)
+            ? [[creator.id, socialAccountId]]
+            : [];
+        }));
+        const restoredContractIds = filterRelationRecord<ContractId>(draft.contractIdsByCreator, validContractIds);
+        const restoredInvoiceIds = filterRelationRecord<InvoiceId>(draft.invoiceIdsByCreator, validInvoiceIds);
+        const restoredAutoLinkedIds = filterRelationRecord<ContractId>(draft.autoLinkedContractIdsByCreator, validContractIds);
+        const corrected = Boolean(draft.cooperationProjectId && !activeProject)
+          || validCreators.length !== draft.selectedCreatorIds.length
+          || Boolean(draft.pm && !PM_USERS.some((user) => user.name === draft.pm))
+          || Boolean(draft.paymentChannel && !PAYMENT_CHANNEL_OPTIONS.some((option) => option.value === draft.paymentChannel))
+          || Boolean(draft.paymentEntity && !PAYMENT_REQUEST_PAYMENT_ENTITIES.includes(draft.paymentEntity as PaymentRequestPaymentEntity))
+          || Boolean(draft.projectCostAttribution && !PAYMENT_REQUEST_COST_ATTRIBUTIONS.includes(draft.projectCostAttribution as PaymentRequestCostAttribution))
+          || Object.keys(restoredSocialAccounts).length !== Object.keys(draft.socialAccountIdsByCreator).length
+          || Object.values(restoredContractIds).flat().length !== Object.values(draft.contractIdsByCreator).flat().length
+          || Object.values(restoredInvoiceIds).flat().length !== Object.values(draft.invoiceIdsByCreator).flat().length
+          || Object.values(restoredAutoLinkedIds).flat().length !== Object.values(draft.autoLinkedContractIdsByCreator).flat().length;
+
+        setCooperationProjectId(restoredProjectId);
+        setBrand(draft.brand);
+        setPm(PM_USERS.some((user) => user.name === draft.pm) ? draft.pm : '');
+        setPaymentChannel(PAYMENT_CHANNEL_OPTIONS.some((option) => option.value === draft.paymentChannel) ? draft.paymentChannel : '');
+        setPaymentEntity(PAYMENT_REQUEST_PAYMENT_ENTITIES.includes(draft.paymentEntity as PaymentRequestPaymentEntity) ? draft.paymentEntity : '');
+        setProjectCostAttribution(PAYMENT_REQUEST_COST_ATTRIBUTIONS.includes(draft.projectCostAttribution as PaymentRequestCostAttribution) ? draft.projectCostAttribution : '');
+        setExpectedPaymentDate(draft.expectedPaymentDate);
+        setCostType(normalizePaymentRequestCostType(draft.costType));
+        setCostTypeDetail(normalizePaymentRequestProcurementCostDetail(draft.costTypeDetail));
+        setReason(draft.reason);
+        setRemark(draft.remark);
+        setRemarkAttachments(draft.remarkAttachments);
+        setSelectedCreatorIds(validCreators.map((creator) => creator.id as CreatorId));
+        setSocialAccountIdsByCreator(restoredSocialAccounts);
+        setContractIdsByCreator(restoredContractIds);
+        setInvoiceIdsByCreator(restoredInvoiceIds);
+        setAutoLinkedContractIdsByCreator(restoredAutoLinkedIds);
+        notify(
+          corrected ? '请款草稿已恢复并校正' : '请款草稿已恢复',
+          corrected ? '已移除当前系统中不可用的项目、达人或单据关联。' : '已恢复上次未完成的请款内容。',
+        );
+      }
+    } catch {
+      try {
+        localStorage.removeItem(createDraftStorageKey);
+      } catch {
+        // Ignore unavailable browser storage and keep the blank form usable.
+      }
+    }
     setCreating(true);
   };
 
@@ -1163,6 +1433,7 @@ export function MediaPaymentProjectsPage({
     setFormSubmitAttempted(false);
     setFocusCreatorDocuments(newCreators.length > 0);
     setCreatorAddRequestId(null);
+    setCreateExitDialogOpen(false);
     setEditingRequestId(request.id);
     setSelectedRequestId(null);
     setCreating(true);
@@ -1258,6 +1529,11 @@ export function MediaPaymentProjectsPage({
     const resolution = resolutions.get(creatorId);
     const invoice = resolution?.availableInvoices.find((candidate) => candidate.invoiceId === invoiceId);
     if (!invoice || !resolution) return;
+    const selectedInvoiceIds = invoiceIdsByCreator[creatorId] ?? [];
+    if (selectedInvoiceIds.length && !selectedInvoiceIds.includes(invoiceId)) {
+      notify('Invoice 只能单选', '该达人已关联一份 Invoice，请先取消当前 Invoice 后再选择。');
+      return;
+    }
     const expectedProvider = paymentRequestProviderForChannel(paymentChannel || undefined);
     const invoiceProvider = invoicePaymentListProvider(invoice);
     if (expectedProvider && invoiceProvider !== expectedProvider) {
@@ -1271,7 +1547,7 @@ export function MediaPaymentProjectsPage({
       invoice,
       invoices: resolution.invoices,
       contracts: resolution.contracts,
-      selectedInvoiceIds: invoiceIdsByCreator[creatorId] ?? [],
+      selectedInvoiceIds,
       selectedContractIds: contractIdsByCreator[creatorId] ?? [],
     });
     setInvoiceIdsByCreator((current) => ({ ...current, [creatorId]: result.invoiceIds }));
@@ -1357,7 +1633,6 @@ export function MediaPaymentProjectsPage({
   };
   const formIssues = [
     !selectedProject ? '请选择关联项目' : '',
-    !pm ? '请选择项目 PM' : '',
     ...paymentRequestPaymentPlanIssues({
       paymentChannel,
       paymentEntity,
@@ -1368,7 +1643,8 @@ export function MediaPaymentProjectsPage({
     !reason.trim() ? '请填写请款事由' : '',
     ...selectedCreators.flatMap((creator) => {
       const selectedInvoiceIds = invoiceIdsByCreator[creator.id] ?? [];
-      if (!selectedInvoiceIds.length) return [`请为 ${creator.name} 至少选择一份 Invoice`];
+      if (!selectedInvoiceIds.length) return [`请为 ${creator.name} 选择一份 Invoice`];
+      if (selectedInvoiceIds.length > 1) return [`${creator.name} 在一次请款中只能关联一份 Invoice`];
       const resolution = resolutions.get(creator.id);
       const selectedInvoices = resolution?.invoices.filter((invoice) => selectedInvoiceIds.includes(invoice.invoiceId)) ?? [];
       if (selectedInvoices.length !== selectedInvoiceIds.length) return [`${creator.name} 的 Invoice 关联已失效，请重新选择`];
@@ -1387,7 +1663,6 @@ export function MediaPaymentProjectsPage({
   ].filter(Boolean);
   const canCreateRequest = Boolean(
     selectedProject
-    && pm
     && paymentChannel
     && paymentEntity
     && projectCostAttribution
@@ -1466,7 +1741,14 @@ export function MediaPaymentProjectsPage({
       },
     };
     if (editingRequest) onUpdated(request);
-    else onCreated(request);
+    else {
+      onCreated(request);
+      try {
+        localStorage.removeItem(createDraftStorageKey);
+      } catch {
+        // The request is already created; unavailable storage must not block completion.
+      }
+    }
     resetForm();
     setCreating(false);
     setSelectedRequestId(request.id);
@@ -1517,6 +1799,11 @@ export function MediaPaymentProjectsPage({
     ].filter(Boolean);
     const editable = requestEditAllowed(selectedRequest);
     const hasScopedApprovalReturn = requestApprovalHasScopedReturnItems(selectedRequest.approval);
+    const returnEditScope = requestApprovalReturnEditScope(
+      selectedRequest.approval,
+      hasPaymentFailureRecovery,
+    );
+    const hasEditScopeRestriction = returnEditScope === 'scoped';
     const hasInvoiceReturn = Boolean(selectedRequest.approval?.returnItems?.some((item) => (
       ['INVOICE_CONTENT', 'FULL_ITEM'].includes(item.issueType)
     )));
@@ -1529,9 +1816,9 @@ export function MediaPaymentProjectsPage({
     const hasFullItemReturn = Boolean(selectedRequest.approval?.returnItems?.some((item) => (
       item.issueType === 'FULL_ITEM'
     )));
-    const requestContentEditable = editable && !hasPaymentFailureRecovery && !hasScopedApprovalReturn;
+    const requestContentEditable = editable && !hasPaymentFailureRecovery && !hasEditScopeRestriction;
     const canAddCreators = !hasPaymentFailureRecovery
-      && !hasScopedApprovalReturn
+      && !hasEditScopeRestriction
       && canCreate
       && canAddCreatorToPaymentRequest(selectedRequest);
     const canSubmit = editable && submissionIssues.length === 0;
@@ -1668,14 +1955,14 @@ export function MediaPaymentProjectsPage({
                 <div>
                   <span>退回待处理</span>
                   <h2 id="media-request-return-heading">{returnHeading}</h2>
-                  <p>{hasScopedApprovalReturn
+                  <p>{hasEditScopeRestriction && hasScopedApprovalReturn
                     ? '请仅处理下方标记的退回明细；未被标记的合同、Invoice 与付款明细保持锁定。'
-                    : '请根据退回意见修改请款内容和付款清单，完成校验后重新提交。'}</p>
+                    : '可根据退回意见修改请款全部内容与关联资料，完成校验后重新提交。'}</p>
                 </div>
                 {editable ? (
                   <div className="media-request-return-panel-actions">
-                    {!hasScopedApprovalReturn ? <Button variant="secondary" icon={<Pencil size={15} />} onClick={() => openEditForm(selectedRequest)}>修改请款内容</Button> : null}
-                    <Button variant={hasScopedApprovalReturn ? 'secondary' : 'ghost'} onClick={() => scrollToSection('media-request-resource-section')}>
+                    {!hasEditScopeRestriction ? <Button variant="secondary" icon={<Pencil size={15} />} onClick={() => openEditForm(selectedRequest)}>修改请款内容</Button> : null}
+                    <Button variant={hasEditScopeRestriction ? 'secondary' : 'ghost'} onClick={() => scrollToSection('media-request-resource-section')}>
                       {hasFullItemReturn
                         ? '处理整笔退回'
                         : [hasContractReturn, hasInvoiceReturn, hasPaymentListReturn].filter(Boolean).length > 1
@@ -1764,11 +2051,11 @@ export function MediaPaymentProjectsPage({
           />
         </section>
         <section className="project-detail-card">
-          <header className="project-detail-card-header"><div><h2>达人名单</h2><p>按达人核对付款渠道、请款金额与实际付款金额。</p></div>{canAddCreators ? <button className="text-link" type="button" onClick={() => setCreatorAddRequestId(selectedRequest.id)}>添加达人</button> : <span>共 {links.length} 位</span>}</header>
+          <header className="project-detail-card-header"><div><h2>达人名单</h2><p>按达人核对付款渠道、请款金额与累计净支出。</p></div>{canAddCreators ? <button className="text-link" type="button" onClick={() => setCreatorAddRequestId(selectedRequest.id)}>添加达人</button> : <span>共 {links.length} 位</span>}</header>
           {links.length ? (
             <div className="table-scroll">
               <table className="data-table project-creator-table media-request-creator-table">
-                <thead><tr><th>达人</th><th>付款渠道</th><th className="media-request-money-heading">Invoice 金额</th><th className="media-request-money-heading">请款金额</th><th className="media-request-money-heading">实际付款金额</th><th>校验状态</th><th>付款状态</th></tr></thead>
+                <thead><tr><th>达人</th><th>付款渠道</th><th className="media-request-money-heading">Invoice 金额</th><th className="media-request-money-heading">请款金额</th><th className="media-request-money-heading">实际支出金额</th><th>校验状态</th><th>付款状态</th></tr></thead>
                 <tbody>{links.map((link) => {
                   const creator = creators.find((item) => item.id === link.creatorId);
                   const presentation = paymentRequestCreatorPresentation({
@@ -1919,7 +2206,7 @@ export function MediaPaymentProjectsPage({
           <AlertTriangle size={18} aria-hidden="true" />
           <div>
             <strong>{pendingRequestCount} 个请款待处理</strong>
-            <p>其中 {returnedRequests.length} 个付款信息有误，{paymentFailureRequests.length} 个打款失败。请在下方列表中点击“处理退回”或“处理失败请款”，查看原因并处理。</p>
+            <p>其中 {returnedRequests.length} 个付款材料有误，{paymentFailureRequests.length} 个打款失败。请在下方列表中点击“处理退回”或“处理失败请款”，查看原因并处理。</p>
           </div>
         </div>
       ) : null}
@@ -1980,7 +2267,7 @@ export function MediaPaymentProjectsPage({
                     <td><strong>{requestCodeFor(request)}</strong></td>
                     <td><strong>{request.cooperationProjectName ?? request.project}</strong><small className="cell-subtext">{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></td>
                     <td>{request.brand || '—'}</td>
-                    <td>{request.pm}</td>
+                    <td>{request.pm || '未指定'}</td>
                     <td>{request.creatorLinks?.length ?? request.invoices} 位</td>
                     <td>{request.amount}</td>
                     <td className="media-request-submitted-at">
@@ -2050,9 +2337,9 @@ export function MediaPaymentProjectsPage({
       {creating ? (
         <Modal
           title={editingRequest ? `编辑请款 · ${requestCodeFor(editingRequest)}` : '新建请款'}
-          onClose={closeForm}
+          onClose={requestCloseForm}
           width="820px"
-          footer={<><Button variant="ghost" onClick={closeForm}>取消</Button><Button onClick={saveRequest}>{editingRequest ? '保存修改' : '创建请款'}</Button></>}
+          footer={<><Button variant="ghost" onClick={requestCloseForm}>取消</Button><Button onClick={saveRequest}>{editingRequest ? '保存修改' : '创建请款'}</Button></>}
         >
           <div className="form-grid single-column project-create-form media-request-create-form">
             <div className="form-field">
@@ -2075,8 +2362,20 @@ export function MediaPaymentProjectsPage({
                 placeholder="请选择飞书合作项目"
               />
             </div>
-            <label><span>品牌 <small className="request-optional-label">选填</small></span><input placeholder="输入品牌或客户名称" value={brand} onChange={(event) => setBrand(event.target.value)} /></label>
-            <div className="form-field"><span className="form-field-label">项目 PM <em className="required-mark" aria-hidden="true">*</em></span><SelectField ariaLabel="选择项目 PM" variant="form" value={pm} options={PM_USERS.map((user) => ({ value: user.name, label: user.name, description: user.email }))} onChange={setPm} /></div>
+            <div className="form-field">
+              <span className="form-field-label">品牌 <small className="request-optional-label">选填</small></span>
+              <SelectField
+                ariaLabel="选择品牌"
+                variant="form"
+                value={brand}
+                options={brandOptions}
+                onChange={setBrand}
+                onClear={() => setBrand('')}
+                clearLabel="清除品牌"
+                placeholder="请选择品牌"
+              />
+            </div>
+            <div className="form-field"><span className="form-field-label">项目 PM <small className="request-optional-label">选填</small></span><SelectField ariaLabel="选择项目 PM" variant="form" value={pm} options={[{ value: '', label: '不指定 PM', description: '将从媒介负责人审批开始' }, ...PM_USERS.map((user) => ({ value: user.name, label: user.name, description: user.email }))]} onChange={setPm} placeholder="不指定 PM" /></div>
             <div className="media-request-payment-plan">
               <div className="form-field">
                 <span className="form-field-label">付款渠道 <em className="required-mark" aria-hidden="true">*</em></span>
@@ -2189,7 +2488,7 @@ export function MediaPaymentProjectsPage({
                 ) : null}
                 {creatorPickerOpen && creatorSelectionEditable ? (
                   <div id="media-request-creator-options" className="creator-options" role="listbox" aria-label="达人档案列表" aria-multiselectable="true">
-                    <div className="creator-picker-search-row"><label className="creator-picker-search"><Search size={16} aria-hidden="true" /><input aria-label="搜索合作达人" placeholder="搜索 Display Name、Handle、Real Name、Company Name 或 Account Name" value={creatorSearch} onChange={(event) => setCreatorSearch(event.target.value)} /></label><span className="creator-picker-result-count" aria-live="polite"><strong>{visibleCreators.length}</strong><span>位达人</span></span></div>
+                    <div className="creator-picker-search-row"><label className="creator-picker-search"><Search size={16} aria-hidden="true" /><input aria-label="搜索合作达人" placeholder="搜索 Display Name、Handle、Real Name / Company Name 或 Account Name" value={creatorSearch} onChange={(event) => setCreatorSearch(event.target.value)} /></label><span className="creator-picker-result-count" aria-live="polite"><strong>{visibleCreators.length}</strong><span>位达人</span></span></div>
                     <div className="creator-option-list">
                       {visibleCreators.map((creator) => {
                         const selected = selectedCreatorIds.includes(creator.id as CreatorId);
@@ -2206,7 +2505,7 @@ export function MediaPaymentProjectsPage({
             </div>
             {selectedCreators.length ? (
               <section id="media-request-document-section" className="media-request-document-section">
-                <header><div><h3>达人单据关联</h3><p>使用下拉框选择单据。Invoice 必填且可多选，选择后自动带入其覆盖的已确认合同。</p></div><span>{selectedCreators.length} 位达人</span></header>
+                <header><div><h3>达人单据关联</h3><p>使用下拉框选择单据。每位达人必须且仅能关联一份 Invoice，选择后自动带入其覆盖的已确认合同。</p></div><span>{selectedCreators.length} 位达人</span></header>
                 {selectedCreators.map((creator) => {
                   const resolution = resolutions.get(creator.id);
                   const selectedContractIds = contractIdsByCreator[creator.id] ?? [];
@@ -2223,12 +2522,13 @@ export function MediaPaymentProjectsPage({
                     const invoiceProvider = invoicePaymentListProvider(invoice);
                     const channelMismatch = Boolean(expectedProvider && invoiceProvider !== expectedProvider);
                     const invoiceNotApproved = invoice.status !== '已通过';
+                    const singleInvoiceLimit = selectedInvoiceIds.length > 0 && !selected;
                     return {
                       value: invoice.invoiceId,
                       label: invoiceRequestResourceTitle(invoice, selectedProject?.name),
-                      description: `${invoiceAmountLabel(invoice)} · ${owner ? `已关联 ${owner.requestCode ?? owner.id}` : invoiceNotApproved ? '尚未完成签署和审核' : channelMismatch ? `${invoiceProvider} 与所选付款渠道不一致` : selected ? '已选择' : invoice.status}`,
+                      description: `${invoiceAmountLabel(invoice)} · ${selected ? '已选择' : singleInvoiceLimit ? '请先取消当前 Invoice' : owner ? `已关联 ${owner.requestCode ?? owner.id}` : invoiceNotApproved ? '尚未完成签署和审核' : channelMismatch ? `${invoiceProvider} 与所选付款渠道不一致` : invoice.status}`,
                       selected,
-                      disabled: Boolean(owner || invoiceNotApproved || channelMismatch),
+                      disabled: selected ? false : Boolean(singleInvoiceLimit || owner || invoiceNotApproved || channelMismatch),
                       resource: { kind: 'invoice', invoice },
                     };
                   });
@@ -2254,7 +2554,7 @@ export function MediaPaymentProjectsPage({
                       <div className="media-request-document-creator"><CreatorIdentity creator={creator} /></div>
                       <div className="media-request-document-fields">
                         <div className={`media-request-document-field media-request-invoice-state is-${resolution?.status.toLowerCase() ?? 'missing'}`}>
-                          <span>Invoice <em>必填，可多选</em></span>
+                          <span>Invoice <em>必填，单选</em></span>
                           <RequestResourcePicker
                             id={invoicePickerId}
                             kind="invoice"
@@ -2362,6 +2662,15 @@ export function MediaPaymentProjectsPage({
           </div>
         </Modal>
       ) : null}
+      <DraftExitDialog
+        open={createExitDialogOpen}
+        title="退出新建请款？"
+        description="当前请款内容尚未保存，你可以保存为草稿后退出。"
+        discardLabel="放弃并退出"
+        onDiscard={discardCreateDraftAndExit}
+        onSave={saveCreateDraftAndExit}
+        onContinue={() => setCreateExitDialogOpen(false)}
+      />
       {cancelRequestModal}
     </div>
   );

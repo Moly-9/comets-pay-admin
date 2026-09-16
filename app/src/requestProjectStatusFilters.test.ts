@@ -16,9 +16,14 @@ describe('request project dashboard status filters', () => {
     expect(requestProjectStatusesForFilter('approved')).toEqual([
       '正在付款',
       '付款处理中',
+      '部分失败',
+      '全部失败',
       '已付款',
     ]);
+    expect(requestProjectStatusesForFilter('awaiting-payment')).toEqual(['正在付款']);
+    expect(requestProjectStatusesForFilter('processing')).toEqual(['付款处理中']);
     expect(requestProjectStatusesForFilter('paid')).toEqual(['已付款']);
+    expect(requestProjectStatusesForFilter('failed')).toEqual(['部分失败', '全部失败']);
   });
 
   it('matches the current approval and payment lifecycle labels', () => {
@@ -29,6 +34,11 @@ describe('request project dashboard status filters', () => {
     expect(matchesRequestProjectStatusFilter('已付款', 'approved')).toBe(true);
     expect(matchesRequestProjectStatusFilter('已付款', 'paid')).toBe(true);
     expect(matchesRequestProjectStatusFilter('正在付款', 'paid')).toBe(false);
+    expect(matchesRequestProjectStatusFilter('正在付款', 'awaiting-payment')).toBe(true);
+    expect(matchesRequestProjectStatusFilter('付款处理中', 'processing')).toBe(true);
+    expect(matchesRequestProjectStatusFilter('部分失败', 'failed')).toBe(true);
+    expect(matchesRequestProjectStatusFilter('全部失败', 'failed')).toBe(true);
+    expect(matchesRequestProjectStatusFilter('已付款', 'failed')).toBe(false);
     expect(matchesRequestProjectStatusFilter('任意状态', 'all')).toBe(true);
   });
 });

@@ -30,8 +30,7 @@ export const PAYMENT_BATCH_RETRY_DEMO = {
   originalFailedAt: '2026-08-05T16:05',
   retryBatchId: 'payment_batch_fixture_retry_001',
   retryBatchCode: 'BAT-20260806-001',
-  retryPaymentOrderCode: 'PAY-2608060001',
-  retryPaymentCode: 'PMT-2608060901',
+  retryPaymentOrderCode: 'PAY-2607270011',
   submittedAt: '2026-08-06T10:15',
   succeededAt: '2026-08-06T10:20',
   payer: '奚文慧',
@@ -167,8 +166,11 @@ export const applyPaymentBatchPrototypeScenario = ({
       const failedPaymentResult = failed ? {
         transferFeeAmount: prototypePaymentResult.transferFeeAmount,
         transferFeeCurrency: prototypePaymentResult.transferFeeCurrency,
-        actualPaidAmount: prototypePaymentResult.transferFeeAmount,
-        actualPaidCurrency: prototypePaymentResult.transferFeeCurrency,
+        actualPaidAmount: prototypePaymentResult.actualPaidAmount,
+        actualPaidCurrency: prototypePaymentResult.actualPaidCurrency,
+        refundAmount: payout.amount,
+        refundCurrency: payout.currency,
+        refundedAt: PAYMENT_BATCH_RETRY_DEMO.originalFailedAt,
         recipientReceivedAmount: 0,
         recipientReceivedCurrency: receiveCurrency,
       } : undefined;
@@ -186,8 +188,11 @@ export const applyPaymentBatchPrototypeScenario = ({
               principalCurrency: payout.currency,
               transferFeeAmount: paymentResult.transferFeeAmount,
               transferFeeCurrency: payout.currency,
-              actualPaidAmount: paymentResult.transferFeeAmount,
-              actualPaidCurrency: payout.currency,
+              actualPaidAmount: paymentResult.actualPaidAmount,
+              actualPaidCurrency: paymentResult.actualPaidCurrency,
+              refundAmount: payout.amount,
+              refundCurrency: payout.currency,
+              refundedAt: PAYMENT_BATCH_RETRY_DEMO.originalFailedAt,
               recipientReceivedAmount: 0,
               recipientReceivedCurrency: receiveCurrency,
               errorCode: 'BENEFICIARY_UNAVAILABLE',
@@ -197,7 +202,7 @@ export const applyPaymentBatchPrototypeScenario = ({
             {
               paymentBatchId: PAYMENT_BATCH_RETRY_DEMO.retryBatchId as PaymentBatchId,
               paymentBatchCode: PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
-              paymentCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentCode,
+              paymentCode: payout.paymentCode,
               attemptNumber: 2,
               status: '已付款' as const,
               submittedAt: PAYMENT_BATCH_RETRY_DEMO.submittedAt,
@@ -222,7 +227,7 @@ export const applyPaymentBatchPrototypeScenario = ({
       if (postTransactionBalance !== undefined) runningBalances.set(balanceKey, postTransactionBalance);
       return {
         ...payout,
-        paymentCode: isRetrySuccess ? PAYMENT_BATCH_RETRY_DEMO.retryPaymentCode : payout.paymentCode,
+        paymentCode: payout.paymentCode,
         status,
         paidAt: status === '已付款'
           ? (isRetrySuccess ? PAYMENT_BATCH_RETRY_DEMO.succeededAt : payout.paidAt ?? '2026-08-05 16:00')
@@ -242,7 +247,7 @@ export const applyPaymentBatchPrototypeScenario = ({
         currentPaymentAttempt: isRetrySuccess ? {
           paymentBatchId: PAYMENT_BATCH_RETRY_DEMO.retryBatchId as PaymentBatchId,
           paymentBatchCode: PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
-          paymentCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentCode,
+          paymentCode: payout.paymentCode,
           submittedAt: PAYMENT_BATCH_RETRY_DEMO.submittedAt,
           paymentOrderCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentOrderCode,
           sourcePaymentOrderCode,

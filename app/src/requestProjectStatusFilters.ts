@@ -8,8 +8,11 @@ const REQUEST_PROJECT_STATUSES_BY_FILTER = {
     '老板审批中',
     '财务审批中',
   ],
-  approved: ['正在付款', '付款处理中', '已付款'],
+  approved: ['正在付款', '付款处理中', '部分失败', '全部失败', '已付款'],
+  'awaiting-payment': ['正在付款'],
+  processing: ['付款处理中'],
   paid: ['已付款'],
+  failed: ['部分失败', '全部失败'],
 } as const satisfies Record<RequestProjectStatusFilter, readonly string[]>;
 
 export const requestProjectStatusesForFilter = (

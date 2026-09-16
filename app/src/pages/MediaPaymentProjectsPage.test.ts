@@ -4,11 +4,38 @@ import {
   contractRequestResourceTitle,
   formatPaymentRequestSubmittedAt,
   invoiceRequestResourceTitle,
+  PAYMENT_REQUEST_BRAND_OPTIONS,
+  paymentRequestBrandOptionsFor,
   positionRequestResourcePreview,
   sortRequestResourcePickerOptions,
 } from './MediaPaymentProjectsPage';
 
 describe('new payment request resource picker', () => {
+  it('guards dirty new-request exits and restores account-scoped local drafts', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+    const closeGuardSource = source.slice(
+      source.indexOf('const createDraftStorageKey'),
+      source.indexOf('const openRequestDetail'),
+    );
+
+    expect(source).toContain("import { DraftExitDialog } from '../components/DraftExitDialog'");
+    expect(source).toContain('comets-pay.payment-request-draft.v${PAYMENT_REQUEST_CREATE_DRAFT_VERSION}:${account}');
+    expect(closeGuardSource).toContain('const hasCreateDraftContent = Boolean(');
+    expect(closeGuardSource).not.toContain('creatorSearch.trim()');
+    expect(closeGuardSource).toContain('if (editingRequest)');
+    expect(closeGuardSource).toContain('setCreateExitDialogOpen(true)');
+    expect(closeGuardSource).toContain('localStorage.setItem(createDraftStorageKey');
+    expect(closeGuardSource).toContain('localStorage.getItem(createDraftStorageKey)');
+    expect(closeGuardSource).toContain('请款草稿已恢复');
+    expect(source).toContain('onClose={requestCloseForm}');
+    expect(source).toContain('<Button variant="ghost" onClick={requestCloseForm}>取消</Button>');
+    expect(source).toContain('title="退出新建请款？"');
+    expect(source).toContain('discardLabel="放弃并退出"');
+    expect(source).toContain('onDiscard={discardCreateDraftAndExit}');
+    expect(source).toContain('onSave={saveCreateDraftAndExit}');
+    expect(source).toContain('onContinue={() => setCreateExitDialogOpen(false)}');
+  });
+
   it('uses the concise my-request page title', () => {
     const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
     expect(source).toContain('title="我的请款"');
@@ -18,6 +45,17 @@ describe('new payment request resource picker', () => {
   it('only offers active cooperation projects to new payment requests', () => {
     const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
     expect(source).toContain("(project.availability ?? 'ACTIVE') === 'ACTIVE'");
+  });
+
+  it('keeps my payment requests project-first before creator selection', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+    const projectPicker = source.indexOf('ariaLabel="选择合作项目"');
+    const creatorPicker = source.indexOf('<span>合作达人 <small className="request-optional-label">选填</small></span>');
+
+    expect(projectPicker).toBeGreaterThan(-1);
+    expect(creatorPicker).toBeGreaterThan(-1);
+    expect(projectPicker).toBeLessThan(creatorPicker);
+    expect(source).toContain("cooperationProjectId ? '可现在选择，也可创建请款后补充' : '请先选择关联项目'");
   });
 
   it('uses request terminology only in the my-request list and detail', () => {
@@ -76,6 +114,37 @@ describe('new payment request resource picker', () => {
     expect(cascaderSource).toContain('aria-haspopup="tree"');
     expect(css).toContain('.payment-request-cost-cascader-menu.has-children');
     expect(css).toContain('@media (max-width: 559px)');
+  });
+
+  it('treats the project PM as optional and starts unassigned requests at the media owner', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+
+    expect(source).toContain('项目 PM <small className="request-optional-label">选填</small>');
+    expect(source).toContain("{ value: '', label: '不指定 PM', description: '将从媒介负责人审批开始' }");
+    expect(source).toContain("const [pm, setPm] = useState('')");
+    expect(source).toContain("setPm('')");
+    expect(source).not.toContain("!pm ? '请选择项目 PM' : ''");
+    expect(source).not.toMatch(/selectedProject\s*&&\s*pm\s*&&\s*paymentChannel/);
+  });
+
+  it('uses the standard optional brand picker and preserves historical brands while editing', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+
+    expect(PAYMENT_REQUEST_BRAND_OPTIONS).toEqual([
+      '网易', '腾讯', '叠纸', '米哈游', '莉莉丝', '字节跳动', '库洛',
+      '雷霆游戏', '祖龙游戏', '西山居', '英雄互娱', '深蓝互动', '双尾',
+    ]);
+    expect(source).toContain('ariaLabel="选择品牌"');
+    expect(source).toContain('placeholder="请选择品牌"');
+    expect(source).toContain("onClear={() => setBrand('')}");
+    expect(source).not.toContain('placeholder="输入品牌或客户名称"');
+    expect(paymentRequestBrandOptionsFor('网易')).toHaveLength(13);
+    const historicalBrandOptions = paymentRequestBrandOptionsFor('NetEase Games');
+    expect(historicalBrandOptions[historicalBrandOptions.length - 1]).toEqual({
+      value: 'NetEase Games',
+      label: 'NetEase Games',
+      description: '历史品牌',
+    });
   });
 
   it('shows selectable and selected resources before disabled resources', () => {
@@ -162,6 +231,18 @@ describe('new payment request resource picker', () => {
     expect(pickerSource).not.toContain('disabled={option.disabled && !option.selected}');
   });
 
+  it('requires exactly one Invoice per creator and keeps replacement explicit', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+
+    expect(source).toContain('每位达人必须且仅能关联一份 Invoice');
+    expect(source).toContain('<span>Invoice <em>必填，单选</em></span>');
+    expect(source).toContain('关联已录入系统的 Invoice，仅可单选');
+    expect(source).toContain("notify('Invoice 只能单选'");
+    expect(source).toContain("singleInvoiceLimit ? '请先取消当前 Invoice'");
+    expect(source).toContain('selected ? false : Boolean(singleInvoiceLimit || owner || invoiceNotApproved || channelMismatch)');
+    expect(source).toContain('selectedInvoiceIds.length > 1');
+  });
+
   it('keeps resource titles and status lines on one line without exposing contract type', () => {
     const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
     const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
@@ -178,7 +259,7 @@ describe('new payment request resource picker', () => {
     expect(contractOptionsSource).not.toContain('contract.id');
   });
 
-  it('simplifies the creator table and adds the actual paid amount after request amount', () => {
+  it('simplifies the creator table and adds actual expenditure after request amount', () => {
     const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
     const tableSource = source.slice(
       source.indexOf('<table className="data-table project-creator-table media-request-creator-table">'),
@@ -188,8 +269,8 @@ describe('new payment request resource picker', () => {
 
     expect(headingSource).toContain('Invoice 金额');
     expect(headingSource).toContain('请款金额');
-    expect(headingSource).toContain('实际付款金额');
-    expect(headingSource.indexOf('请款金额')).toBeLessThan(headingSource.indexOf('实际付款金额'));
+    expect(headingSource).toContain('实际支出金额');
+    expect(headingSource.indexOf('请款金额')).toBeLessThan(headingSource.indexOf('实际支出金额'));
     expect(headingSource).not.toContain('<th>Invoice</th>');
     expect(headingSource).not.toContain('<th>合同</th>');
     expect(tableSource).not.toContain('invoice.invoiceNumber');

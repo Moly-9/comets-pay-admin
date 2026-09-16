@@ -1,7 +1,8 @@
 import type { FeishuCooperationProjectDto } from './cooperationProjects';
 
 export type CooperationProjectSourceType = 'FEISHU' | 'MANUAL';
-export type CooperationProjectAvailability = 'ACTIVE' | 'OUT_OF_SCOPE' | 'DISABLED';
+export type CooperationProjectAvailability = 'ACTIVE' | 'DISABLED';
+export type CooperationProjectSyncScope = 'IN_SCOPE' | 'OUT_OF_SCOPE';
 
 export type CooperationProjectDirectoryRecord = {
   id: string;
@@ -17,56 +18,120 @@ export type CooperationProjectDirectoryRecord = {
   endDate: string;
   source: CooperationProjectSourceType;
   availability: CooperationProjectAvailability;
+  syncScope?: CooperationProjectSyncScope;
+  availabilityOverriddenAt?: string;
   sourceUpdatedAt?: string;
   localUpdatedAt: string;
   syncedAt?: string;
 };
 
+export type ManualCooperationProjectInput = Pick<
+  CooperationProjectDirectoryRecord,
+  'name' | 'projectType' | 'initiatorName' | 'availability'
+>;
+
+export const manualCooperationProjectRecordFor = ({
+  input,
+  identity,
+  previous,
+  updatedAt,
+}: {
+  input: ManualCooperationProjectInput;
+  identity: Pick<CooperationProjectDirectoryRecord, 'id' | 'projectCode'>;
+  previous?: CooperationProjectDirectoryRecord;
+  updatedAt: string;
+}): CooperationProjectDirectoryRecord => ({
+  ...(previous ?? {
+    ...identity,
+    projectStatus: 'ACTIVE',
+    startDate: '',
+    endDate: '',
+  }),
+  ...input,
+  source: 'MANUAL',
+  localUpdatedAt: updatedAt,
+});
+
+export const duplicateActiveCooperationProjectFor = (
+  records: readonly CooperationProjectDirectoryRecord[],
+  input: Pick<ManualCooperationProjectInput, 'name' | 'availability'>,
+  editingId?: string,
+) => input.availability === 'ACTIVE'
+  ? records.find((record) => record.id !== editingId
+    && record.availability === 'ACTIVE'
+    && record.name.trim().toLowerCase() === input.name.trim().toLowerCase())
+  : undefined;
+
 export type CooperationProjectDirectoryStore = {
-  version: 1;
+  version: 2;
   typeAllowlist: string[];
   records: CooperationProjectDirectoryRecord[];
   lastSyncedAt?: string;
 };
 
-export const COOPERATION_PROJECT_DIRECTORY_STORAGE_KEY = 'comets-pay:cooperation-project-directory:v1';
+export const COOPERATION_PROJECT_DIRECTORY_STORAGE_KEY = 'comets-pay:cooperation-project-directory:v2';
+export const LEGACY_COOPERATION_PROJECT_DIRECTORY_STORAGE_KEY = 'comets-pay:cooperation-project-directory:v1';
 
 export const emptyCooperationProjectDirectoryStore = (): CooperationProjectDirectoryStore => ({
-  version: 1,
+  version: 2,
   typeAllowlist: [],
   records: [],
 });
 
-const isRecord = (value: unknown): value is CooperationProjectDirectoryRecord => {
-  if (!value || typeof value !== 'object') return false;
-  const record = value as Partial<CooperationProjectDirectoryRecord>;
-  return typeof record.id === 'string' && typeof record.projectCode === 'string'
+const normalizeRecord = (value: unknown): CooperationProjectDirectoryRecord | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as Omit<Partial<CooperationProjectDirectoryRecord>, 'availability'> & {
+    availability?: CooperationProjectAvailability | 'OUT_OF_SCOPE';
+    sourceAvailability?: CooperationProjectAvailability | 'OUT_OF_SCOPE';
+  };
+  const valid = typeof record.id === 'string' && typeof record.projectCode === 'string'
     && typeof record.name === 'string' && typeof record.projectType === 'string'
     && typeof record.projectStatus === 'string' && typeof record.initiatorName === 'string'
     && typeof record.startDate === 'string' && typeof record.endDate === 'string'
     && ['FEISHU', 'MANUAL'].includes(record.source ?? '')
     && ['ACTIVE', 'OUT_OF_SCOPE', 'DISABLED'].includes(record.availability ?? '')
     && typeof record.localUpdatedAt === 'string';
+  if (!valid) return undefined;
+  const { sourceAvailability, ...rest } = record;
+  const syncScope = record.source === 'FEISHU'
+    ? (record.syncScope ?? (sourceAvailability === 'OUT_OF_SCOPE' || record.availability === 'OUT_OF_SCOPE'
+      ? 'OUT_OF_SCOPE'
+      : 'IN_SCOPE'))
+    : undefined;
+  return {
+    ...rest,
+    source: record.source as CooperationProjectSourceType,
+    availability: record.availability === 'ACTIVE' ? 'ACTIVE' : 'DISABLED',
+    syncScope,
+  } as CooperationProjectDirectoryRecord;
+};
+
+const parseStore = (raw: string): CooperationProjectDirectoryStore | undefined => {
+  const parsed = JSON.parse(raw) as { version?: number; typeAllowlist?: unknown; records?: unknown; lastSyncedAt?: unknown };
+  if (![1, 2].includes(parsed.version ?? 0) || !Array.isArray(parsed.typeAllowlist) || !Array.isArray(parsed.records)
+    || !parsed.typeAllowlist.every((item) => typeof item === 'string')) return undefined;
+  const records = parsed.records.map(normalizeRecord);
+  if (records.some((record) => !record)) return undefined;
+  return {
+    version: 2,
+    typeAllowlist: [...new Set(parsed.typeAllowlist as string[])],
+    records: records as CooperationProjectDirectoryRecord[],
+    lastSyncedAt: typeof parsed.lastSyncedAt === 'string' ? parsed.lastSyncedAt : undefined,
+  };
 };
 
 export const loadCooperationProjectDirectory = (storage: Pick<Storage, 'getItem'>): CooperationProjectDirectoryStore => {
-  try {
-    const raw = storage.getItem(COOPERATION_PROJECT_DIRECTORY_STORAGE_KEY);
-    if (!raw) return emptyCooperationProjectDirectoryStore();
-    const parsed = JSON.parse(raw) as Partial<CooperationProjectDirectoryStore>;
-    if (parsed.version !== 1 || !Array.isArray(parsed.typeAllowlist) || !Array.isArray(parsed.records)
-      || !parsed.typeAllowlist.every((item) => typeof item === 'string') || !parsed.records.every(isRecord)) {
-      return emptyCooperationProjectDirectoryStore();
+  for (const key of [COOPERATION_PROJECT_DIRECTORY_STORAGE_KEY, LEGACY_COOPERATION_PROJECT_DIRECTORY_STORAGE_KEY]) {
+    try {
+      const raw = storage.getItem(key);
+      if (!raw) continue;
+      const store = parseStore(raw);
+      if (store) return store;
+    } catch {
+      // Try the legacy key before falling back to an empty directory.
     }
-    return {
-      version: 1,
-      typeAllowlist: [...new Set(parsed.typeAllowlist)],
-      records: parsed.records,
-      lastSyncedAt: typeof parsed.lastSyncedAt === 'string' ? parsed.lastSyncedAt : undefined,
-    };
-  } catch {
-    return emptyCooperationProjectDirectoryStore();
   }
+  return emptyCooperationProjectDirectoryStore();
 };
 
 export const saveCooperationProjectDirectory = (
@@ -86,7 +151,13 @@ export const synchronizeFeishuDirectory = ({ current, incoming, internalIdFor, s
   )));
   const retained = current.map((record) => (
     record.source === 'FEISHU' && record.externalProjectId && !incomingIds.has(record.externalProjectId)
-      ? { ...record, availability: 'OUT_OF_SCOPE' as const, localUpdatedAt: syncedAt, syncedAt }
+      ? {
+        ...record,
+        availability: record.availabilityOverriddenAt ? record.availability : 'DISABLED' as const,
+        syncScope: 'OUT_OF_SCOPE' as const,
+        localUpdatedAt: syncedAt,
+        syncedAt,
+      }
       : record
   ));
   const nextById = new Map(retained.map((record) => [record.id, record]));
@@ -106,7 +177,9 @@ export const synchronizeFeishuDirectory = ({ current, incoming, internalIdFor, s
       startDate: source.startDate,
       endDate: source.endDate,
       source: 'FEISHU',
-      availability: 'ACTIVE',
+      availability: previous?.availabilityOverriddenAt ? previous.availability : 'ACTIVE',
+      syncScope: 'IN_SCOPE',
+      availabilityOverriddenAt: previous?.availabilityOverriddenAt,
       sourceUpdatedAt: source.updatedAt,
       localUpdatedAt: syncedAt,
       syncedAt,

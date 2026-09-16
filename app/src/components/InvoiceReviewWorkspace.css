@@ -181,6 +181,7 @@
 .invoice-review-status-chip.is-success { border-color: #c9e2d6; background: #edf8f3; color: #2c7156; }
 .invoice-review-issue-count.is-pending { border-color: #d9dde4; background: #f4f5f7; color: #656d7a; }
 .invoice-review-status-chip.is-danger { border-color: #ecc8cc; background: #fcedef; color: #a43e48; }
+.invoice-review-status-chip.is-neutral { border-color: #dce1e7; background: #f4f6f8; color: #66707d; }
 
 .invoice-review-tabs {
   display: grid;
@@ -322,6 +323,7 @@
 }
 .invoice-review-field-row.is-warning { border-left-color: #d49a43; background: #fffdf8; }
 .invoice-review-field-row.is-danger { border-left-color: #c95862; background: #fffafb; }
+.invoice-review-field-row.is-neutral { border-left-color: #aeb6c2; background: #fafbfc; }
 .invoice-review-field-name { display: grid; gap: 7px; min-width: 0; padding-left: 10px; }
 .invoice-review-field-name > strong { color: #343945; font-size: 11px; line-height: 1.45; }
 .invoice-review-field-name .invoice-review-status-chip { justify-self: start; min-height: 23px; padding: 3px 6px; font-size: 9.5px; white-space: normal; }
@@ -332,7 +334,7 @@
 .invoice-review-row-actions { display: flex; min-width: 0; max-width: 100%; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
 .invoice-review-row-actions button { flex: 0 0 auto; min-height: 28px; padding: 2px 5px; color: #6b5570; font-size: 9.5px; white-space: nowrap; }
 .invoice-review-row-actions button[aria-expanded='true'] svg:last-child { transform: rotate(180deg); }
-.invoice-review-evidence-grid { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin: 0 10px; overflow: hidden; border: 1px solid #e3e0e5; border-radius: 7px; background: #e3e0e5; }
+.invoice-review-evidence-grid { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin: 0 10px; overflow: hidden; border: 1px solid #e3e0e5; border-radius: 7px; background: #e3e0e5; }
 .invoice-review-evidence-grid > div { display: grid; gap: 4px; background: #faf9fb; padding: 11px; }
 .invoice-review-evidence-grid span { color: #777080; font-size: 9.5px; }
 .invoice-review-evidence-grid strong { color: #37333b; font-size: 11px; overflow-wrap: anywhere; }
@@ -790,7 +792,7 @@
   .invoice-review-summary-list > div,
   .invoice-review-account-grid,
   .invoice-review-contract-list dl,
-  .invoice-review-evidence-grid { grid-template-columns: minmax(0, 1fr); }
+  .invoice-review-evidence-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .invoice-review-account-grid > div:nth-child(even) { border-left: 0; padding-left: 0; }
   .invoice-review-summary-list > div { gap: 5px; }
   .invoice-review-summary-list button { justify-self: start; }
@@ -807,6 +809,7 @@
 
 @media (max-width: 640px) {
   .contract-metric-grid.invoice-review-metric-grid { grid-template-columns: minmax(0, 1fr); }
+  .invoice-review-evidence-grid { grid-template-columns: minmax(0, 1fr); }
   .invoice-review-field-modal .modal-content { padding: 16px; }
   .invoice-review-field-dialog-intro { grid-template-columns: minmax(0, 1fr); }
   .invoice-review-return-modal .modal-content { padding: 16px; }

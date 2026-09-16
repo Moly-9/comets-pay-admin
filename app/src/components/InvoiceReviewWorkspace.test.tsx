@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  externalInvoiceEvidenceItems,
   InvoiceReviewReturnDialogContent,
   InvoiceReviewWorkspace,
 } from './InvoiceReviewWorkspace';
@@ -20,6 +21,24 @@ const baseProps = {
 };
 
 describe('InvoiceReviewWorkspace', () => {
+  it('keeps uploaded source text out of the external comparison cards', () => {
+    const items = externalInvoiceEvidenceItems({
+      sourceValue: '2026-08-22',
+      recognizedValue: '2026-08-22',
+      confirmedValue: '2026-08-22',
+      pageNumber: 1,
+      mediaReview: '无需额外复核',
+    });
+
+    expect(items.map((item) => item.label)).toEqual([
+      '系统首次 OCR',
+      '达人最终确认值',
+      '纠正与复核',
+    ]);
+    expect(JSON.stringify(items)).not.toContain('原始 Invoice 原文');
+    expect(JSON.stringify(items)).not.toContain('第 1 页');
+  });
+
   it('keeps the four audit tabs stable for an internal Invoice', () => {
     const html = renderToStaticMarkup(
       <InvoiceReviewWorkspace
@@ -195,6 +214,22 @@ describe('InvoiceReviewWorkspace', () => {
     expect(html.match(/合同为预算金额/g)).toHaveLength(1);
     expect(html).toContain('合同为预算金额，Invoice 按实际验收金额结算。');
     expect(html).toContain('生成 Invoice 时填写 · 媒介测试');
+  });
+
+  it('renders shared contract content when an external Invoice has linked contracts', () => {
+    const html = renderToStaticMarkup(
+      <InvoiceReviewWorkspace
+        {...baseProps}
+        sourceType="EXTERNAL_UPLOADED"
+        initialTab="contract"
+        noContract={false}
+        contractChecks={[]}
+        contractContent={<div data-testid="external-contract-content">外部合同匹配与签名</div>}
+      />,
+    );
+
+    expect(html).toContain('external-contract-content');
+    expect(html).toContain('外部合同匹配与签名');
   });
 
   it('uses one return-dialog structure while keeping external handling options source-specific', () => {

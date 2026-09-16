@@ -251,8 +251,13 @@ describe('CollaborationInvoiceDrawer', () => {
     expect(html).toContain('关联合同');
     expect(html).toContain('CON-COLLABORATION');
     expect(html).toContain('Launch Project Contract');
+    expect(html).toContain('付款就绪度');
+    expect(html).not.toContain('合同状态');
+    expect(html).not.toContain('签署状态');
+    expect(html).not.toContain('Invoice 版本');
     expect(html).toContain('请款信息');
     expect(html).toContain('REQ-COLLABORATION');
+    expect(html).not.toContain('审批轮次');
     expect(html).toContain('合作交付');
     expect(html).toContain('YouTube launch video');
     expect(html).not.toContain('付款信息');

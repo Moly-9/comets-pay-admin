@@ -3,7 +3,6 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { CreatorId, EngagementId, ProjectId } from '../businessWorkflow';
 import { createExternalInvoiceCollection } from '../invoice/externalInvoiceCollection';
-import { createDocumentPayoutSnapshot } from '../payoutAccounts';
 import { INITIAL_INVOICE_BILLING_SETTINGS } from '../data';
 import type { CreatorProfile } from '../types';
 import {
@@ -41,18 +40,15 @@ const creator: CreatorProfile = {
     paypalEmail: 'external@example.com',
   }],
 };
-const defaultAccount = creator.payoutAccounts[0];
-
 const record = createExternalInvoiceCollection({
   projectId: 'project-external-metrics' as ProjectId,
   projectName: 'External Invoice Prototype',
   engagementId: 'engagement-external-metrics' as EngagementId,
   creatorId,
   creatorName: 'External Creator',
+  creatorLegalName: creator.contact.legalName,
   creatorHandle: '@external',
   contractIds: [],
-  presetPayoutAccountId: 'payout-account-external',
-  presetPayoutAccountSnapshot: createDocumentPayoutSnapshot(defaultAccount, creatorId),
   expected: {
     amount: 5400,
     currency: 'USD',
@@ -83,6 +79,7 @@ describe('ExternalInvoiceCollectionDetailPage', () => {
         onSubmit={() => undefined}
         onReviewField={() => undefined}
         onReturn={() => undefined}
+        onConfirmInvoiceSignature={() => undefined}
         onApprove={() => undefined}
         onSaveReviewProgress={() => undefined}
         onBack={() => undefined}
@@ -94,14 +91,15 @@ describe('ExternalInvoiceCollectionDetailPage', () => {
     expect(html).toContain('当前状态');
     expect(html).toContain('Invoice金额');
     expect(html).toContain('付款渠道');
-    expect(html).toContain('PayPal · 本地清算不适用 · 国家待补充');
+    expect(html).toContain('待选择 · 待选择 · 待选择');
     expect(html.indexOf('Invoice类型')).toBeLessThan(html.indexOf('当前状态'));
     expect(html).not.toContain('external-progress-section');
     expect(html).not.toContain('OCR 识别中和待确认识别结果只在这里作为步骤展示');
     expect(html).toContain('invoice-review-workspace');
     expect(html).toContain('收集任务与校验基准');
     expect(html).toContain('预计币种&amp;金额');
-    expect(html).toContain('开票主体');
+    expect(html).toContain('From');
+    expect(html).toContain('Bill To');
     expect(html).toContain('External Creator LLC');
     expect(html).toContain('无合同');
     expect(html).not.toContain('PayPal · 邮箱账户');
@@ -122,7 +120,7 @@ describe('ExternalInvoiceCollectionCreatePage', () => {
       />,
     );
 
-    expect(html).toContain('aria-label="\u9009\u62e9\u5916\u90e8 Invoice \u4ed8\u6b3e\u4e3b\u4f53"');
+    expect(html).toContain('aria-label="\u9009\u62e9\u5916\u90e8 Invoice Bill To"');
   });
 
   it('uses the shared contract selector and a display-name-only creator selection', () => {
@@ -134,7 +132,14 @@ describe('ExternalInvoiceCollectionCreatePage', () => {
     expect(option.searchText).toContain('External Creator LLC');
     expect(externalCreateSource).toContain("搜索达人名称、频道ID、频道链接...");
     expect(externalCreateSource).toContain('<InvoiceContractSelector');
-    expect(externalCreateSource).toContain('selectedLabel: reference.name');
+    expect(externalCreateSource).toContain('creators.map(externalInvoiceCreatorSearchOption)');
+    expect(externalCreateSource.indexOf('>达人档案 <')).toBeLessThan(
+      externalCreateSource.indexOf('>合作项目 <'),
+    );
+    expect(externalCreateSource).toContain('disabled={!selectedCreator}');
+    expect(externalCreateSource).toContain("field === 'INVOICE_DATE'");
+    expect(externalCreateSource).toContain("'NOT_CHECKED'");
+    expect(externalCreateSource).toContain('仅记录，不参与系统校验');
   });
 
   it('removes the orange inner focus state while keeping the shared lavender focus ring', () => {

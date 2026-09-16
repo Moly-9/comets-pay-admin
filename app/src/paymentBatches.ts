@@ -36,8 +36,22 @@ import {
 import { aggregatePaymentStatus } from './paymentStatusFilters';
 import { prototypeRecipientReceivedAmountFor } from './prototypePaymentResults';
 import { nextPaymentBusinessCode } from './paymentNumbering';
+import { paymentExpenditureTotalsForValues } from './paymentAttempts';
 
-export type PaymentBatchStatus = PaymentBatchPrototypeStatus;
+export type PaymentBatchPurpose = 'NORMAL' | 'REVERSAL' | 'RETRY';
+
+export const PAYMENT_BATCH_PURPOSE_LABELS: Readonly<Record<PaymentBatchPurpose, string>> = {
+  NORMAL: '正常付款',
+  REVERSAL: '冲退付款',
+  RETRY: '重新付款',
+};
+
+export const paymentBatchPurposeLabel = (purpose: PaymentBatchPurpose) => (
+  PAYMENT_BATCH_PURPOSE_LABELS[purpose]
+);
+
+export type PaymentBatchReversalStatus = '冲退处理中' | '已冲退' | '冲退失败';
+export type PaymentBatchStatus = PaymentBatchPrototypeStatus | PaymentBatchReversalStatus;
 
 export type PaymentBatchContractSnapshot = Readonly<{
   contractId: ContractId;
@@ -107,12 +121,16 @@ export type PaymentBatchItemSnapshot = Readonly<{
   paymentReason: string;
   transactionReference: string;
   description: string;
-  paymentStatus: Payout['status'];
+  paymentStatus: Payout['status'] | PaymentBatchReversalStatus;
   paidAt?: string;
   transferFeeAmount?: number;
   transferFeeCurrency?: InvoiceCurrency;
   actualPaidAmount?: number;
   actualPaidCurrency?: InvoiceCurrency;
+  /** 渠道返回的冲退金额快照；保存正数。 */
+  refundAmount?: number;
+  refundCurrency?: InvoiceCurrency;
+  refundedAt?: string;
   recipientReceivedAmount?: number;
   recipientReceivedCurrency?: InvoiceCurrency;
   postTransactionBalance?: number;
@@ -148,6 +166,9 @@ export type PaymentBatchRequestSnapshot = Readonly<{
 export type PaymentBatchRecord = Readonly<{
   paymentBatchId: PaymentBatchId;
   paymentBatchCode: string;
+  purpose: PaymentBatchPurpose;
+  sourcePaymentBatchId?: PaymentBatchId;
+  sourcePaymentBatchCode?: string;
   paymentOrderCode: string;
   sourcePaymentOrderCode?: string;
   paymentAttemptNumber: number;
@@ -274,6 +295,9 @@ type CreatePaymentBatchRecordInput = PaymentBatchSourceData & Readonly<{
   paidAt: string;
   status: PaymentBatchStatus;
   lifecycle: readonly string[];
+  purpose?: PaymentBatchPurpose;
+  sourcePaymentBatchId?: PaymentBatchId;
+  sourcePaymentBatchCode?: string;
   itemStatus?: Payout['status'];
   paymentOrderCode?: string;
   sourcePaymentOrderCode?: string;
@@ -333,6 +357,7 @@ const historicalPaymentBatchRecord = (
   return {
     paymentBatchId,
     paymentBatchCode: seed.paymentBatchCode,
+    purpose: 'NORMAL',
     paymentOrderCode: seed.paymentListCode,
     paymentAttemptNumber: 1,
     request: {
@@ -419,6 +444,9 @@ const historicalPaymentBatchRecord = (
       transferFeeCurrency: payout.transferFeeCurrency,
       actualPaidAmount: payout.actualPaidAmount,
       actualPaidCurrency: payout.actualPaidCurrency,
+      refundAmount: payout.refundAmount,
+      refundCurrency: payout.refundCurrency,
+      refundedAt: payout.refundedAt,
       recipientReceivedAmount: recipientResult.recipientReceivedAmount,
       recipientReceivedCurrency: recipientResult.recipientReceivedCurrency,
       postTransactionBalance: failed ? undefined : payout.postTransactionBalance,
@@ -802,6 +830,9 @@ const snapshotItem = ({
     transferFeeCurrency: hasFinalizedResult ? payout.transferFeeCurrency : undefined,
     actualPaidAmount: hasFinalizedResult ? payout.actualPaidAmount : undefined,
     actualPaidCurrency: hasFinalizedResult ? payout.actualPaidCurrency : undefined,
+    refundAmount: hasFailedResult ? payout.refundAmount : undefined,
+    refundCurrency: hasFailedResult ? payout.refundCurrency : undefined,
+    refundedAt: hasFailedResult ? payout.refundedAt : undefined,
     recipientReceivedAmount: hasFinalizedResult ? recipientResult.recipientReceivedAmount : undefined,
     recipientReceivedCurrency: hasFinalizedResult ? recipientResult.recipientReceivedCurrency : undefined,
     postTransactionBalance: hasSuccessfulResult ? payout.postTransactionBalance : undefined,
@@ -868,13 +899,21 @@ export const createPaymentBatchRecord = ({
     1,
     paymentAttemptNumber ?? (resolvedPaymentOrderCode === resolvedSourcePaymentOrderCode ? 1 : 2),
   );
+  const resolvedPurpose = batch.purpose ?? (resolvedPaymentAttemptNumber > 1 ? 'RETRY' : 'NORMAL');
+  if (resolvedPurpose === 'RETRY') {
+    if (!batch.sourcePaymentBatchId || !batch.sourcePaymentBatchCode) {
+      throw new Error('重新付款批次必须关联原付款批次');
+    }
+    if (resolvedPaymentOrderCode !== resolvedSourcePaymentOrderCode) {
+      throw new Error('重新付款必须沿用原付款单号');
+    }
+  }
   return {
     ...batch,
+    purpose: resolvedPurpose,
     submittedAt: batch.paidAt,
     paymentOrderCode: resolvedPaymentOrderCode,
-    sourcePaymentOrderCode: resolvedPaymentAttemptNumber > 1
-      ? resolvedSourcePaymentOrderCode
-      : undefined,
+    sourcePaymentOrderCode,
     paymentAttemptNumber: resolvedPaymentAttemptNumber,
     request: snapshotRequest(request),
     items: payouts.map((payout) => snapshotItem({
@@ -949,6 +988,7 @@ export const createPaymentExecutionBatchRecord = ({
     paidAt: submittedAt,
     status: '付款处理中',
     lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED'],
+    purpose: 'NORMAL',
     itemStatus: '付款处理中',
   });
   const selectedPayoutIds = new Set(payouts.map((payout) => payout.id));
@@ -1091,6 +1131,7 @@ export const paymentBatchItemForAttempt = (
   batch: PaymentBatchRecord,
   item: PaymentBatchItemSnapshot,
 ): PaymentBatchItemSnapshot => {
+  if (batch.purpose === 'REVERSAL') return item;
   const attempt = paymentAttemptForBatchItem(batch, item);
   if (!attempt) return item;
   return {
@@ -1108,6 +1149,9 @@ export const paymentBatchItemForAttempt = (
     transferFeeCurrency: attempt.transferFeeCurrency,
     actualPaidAmount: attempt.actualPaidAmount,
     actualPaidCurrency: attempt.actualPaidCurrency,
+    refundAmount: attempt.refundAmount,
+    refundCurrency: attempt.refundCurrency,
+    refundedAt: attempt.refundedAt,
     failure: attempt.status === '付款失败' && (attempt.errorCode || attempt.providerResponse)
       ? {
           code: attempt.errorCode || '未记录',
@@ -1147,6 +1191,27 @@ export const paymentBatchFinancialSummary = (
   batch: PaymentBatchRecord,
 ): PaymentBatchFinancialSummary => {
   const items = batch.items.map((item) => paymentBatchItemForAttempt(batch, item));
+  const expenditureTotals = items.reduce<Map<InvoiceCurrency, number>>((result, item) => {
+    if (
+      item.paymentStatus !== '已付款'
+      && item.paymentStatus !== '付款失败'
+      && item.paymentStatus !== '已退回'
+      && item.paymentStatus !== '已冲退'
+    ) return result;
+    paymentExpenditureTotalsForValues({
+      principalAmount: item.amount,
+      principalCurrency: item.currency,
+      feeBearer: item.feeBearer,
+      transferFeeAmount: item.transferFeeAmount,
+      transferFeeCurrency: item.transferFeeCurrency,
+      actualPaidAmount: item.actualPaidAmount,
+      actualPaidCurrency: item.actualPaidCurrency,
+    }).forEach(({ currency, amount }) => {
+      const invoiceCurrency = currency as InvoiceCurrency;
+      result.set(invoiceCurrency, Math.round(((result.get(invoiceCurrency) ?? 0) + amount + Number.EPSILON) * 100) / 100);
+    });
+    return result;
+  }, new Map());
   return {
     items,
     paymentAmounts: paymentBatchMoneyTotals(items, (item) => item.amount, (item) => item.currency),
@@ -1155,11 +1220,7 @@ export const paymentBatchFinancialSummary = (
       (item) => item.transferFeeAmount,
       (item) => item.transferFeeCurrency,
     ),
-    actualPaidAmounts: paymentBatchMoneyTotals(
-      items,
-      (item) => item.actualPaidAmount,
-      (item) => item.actualPaidCurrency,
-    ),
+    actualPaidAmounts: [...expenditureTotals.entries()].map(([currency, amount]) => ({ currency, amount })),
   };
 };
 
@@ -1172,7 +1233,7 @@ export const paymentBatchAmountLabel = (batch: Pick<PaymentBatchRecord, 'items'>
 
 export const paymentBatchStatusCounts = (batch: Pick<PaymentBatchRecord, 'items'>) => batch.items.reduce(
   (counts, item) => {
-    if (item.paymentStatus === '已付款') counts.succeeded += 1;
+    if (item.paymentStatus === '已付款' || item.paymentStatus === '已冲退') counts.succeeded += 1;
     else if (item.paymentStatus === '付款失败' || item.paymentStatus === '已退回') counts.failed += 1;
     else counts.processing += 1;
     return counts;
@@ -1286,6 +1347,9 @@ export const applyPaymentResultToCurrentBatch = ({
       transferFeeCurrency: currentAttempt?.transferFeeCurrency,
       actualPaidAmount: currentAttempt?.actualPaidAmount,
       actualPaidCurrency: currentAttempt?.actualPaidCurrency,
+      refundAmount: currentAttempt?.refundAmount ?? payout.refundAmount,
+      refundCurrency: currentAttempt?.refundCurrency ?? payout.refundCurrency,
+      refundedAt: currentAttempt?.refundedAt ?? payout.refundedAt,
       recipientReceivedAmount: 0,
       recipientReceivedCurrency: item.receiveCurrency,
       paymentAttempts: normalizedAttempts,
@@ -1296,7 +1360,10 @@ export const applyPaymentResultToCurrentBatch = ({
       } : undefined,
     };
   });
-  const status = aggregatePaymentStatus(items.map((item) => item.paymentStatus), target.status);
+  const status = aggregatePaymentStatus(
+    items.map((item) => item.paymentStatus),
+    '付款处理中',
+  );
   const updatedBatch: PaymentBatchRecord = {
     ...target,
     status,
@@ -1310,6 +1377,79 @@ export const applyPaymentResultToCurrentBatch = ({
     )),
     updatedBatchId: target.paymentBatchId,
   };
+};
+
+export const upsertPaymentReversalBatch = ({
+  batches,
+  sourcePaymentBatchId,
+  paymentBatchId,
+  paymentBatchCode,
+  refundedAt,
+}: {
+  batches: readonly PaymentBatchRecord[];
+  sourcePaymentBatchId: PaymentBatchId;
+  paymentBatchId: PaymentBatchId;
+  paymentBatchCode: string;
+  refundedAt: string;
+}): readonly PaymentBatchRecord[] => {
+  const sourceBatch = batches.find((batch) => batch.paymentBatchId === sourcePaymentBatchId);
+  if (!sourceBatch || sourceBatch.purpose === 'REVERSAL') return batches;
+  const refundableItems = sourceBatch.items.filter((item) => (
+    item.paymentStatus === '付款失败' || item.paymentStatus === '已退回'
+  ));
+  if (!refundableItems.length) return batches;
+
+  const existing = batches.find((batch) => (
+    batch.purpose === 'REVERSAL' && batch.sourcePaymentBatchId === sourcePaymentBatchId
+  ));
+  const reversalBatchId = existing?.paymentBatchId ?? paymentBatchId;
+  const reversalBatchCode = existing?.paymentBatchCode ?? paymentBatchCode;
+  const items = refundableItems.map((item): PaymentBatchItemSnapshot => {
+    const hasRefundResult = item.refundAmount !== undefined && Boolean(item.refundCurrency);
+    return {
+      ...item,
+      paymentBatchId: reversalBatchId,
+      paymentBatchCode: reversalBatchCode,
+      paymentSubmittedAt: item.refundedAt ?? refundedAt,
+      amount: 0,
+      transferFeeAmount: 0,
+      transferFeeCurrency: item.refundCurrency ?? item.currency,
+      actualPaidAmount: hasRefundResult ? -Math.abs(item.refundAmount!) : undefined,
+      actualPaidCurrency: item.refundCurrency,
+      paymentStatus: hasRefundResult ? '已冲退' : '冲退处理中',
+      paidAt: item.refundedAt,
+      recipientReceivedAmount: 0,
+      recipientReceivedCurrency: item.receiveCurrency,
+      postTransactionBalance: undefined,
+      postTransactionBalanceCurrency: undefined,
+    };
+  });
+  const completed = items.every((item) => item.paymentStatus === '已冲退');
+  const reversal: PaymentBatchRecord = {
+    paymentBatchId: reversalBatchId,
+    paymentBatchCode: reversalBatchCode,
+    purpose: 'REVERSAL',
+    sourcePaymentBatchId: sourceBatch.paymentBatchId,
+    sourcePaymentBatchCode: sourceBatch.paymentBatchCode,
+    paymentOrderCode: sourceBatch.paymentOrderCode,
+    paymentAttemptNumber: sourceBatch.paymentAttemptNumber,
+    request: sourceBatch.request,
+    provider: sourceBatch.provider,
+    fundingAccountId: sourceBatch.fundingAccountId,
+    sourceCurrency: sourceBatch.sourceCurrency,
+    payer: sourceBatch.payer,
+    submittedAt: refundedAt,
+    paidAt: refundedAt,
+    status: completed ? '已冲退' : '冲退处理中',
+    lifecycle: completed
+      ? ['CREATED', 'REFUND_CONFIRMED', 'REVERSED']
+      : ['CREATED', 'REFUND_PENDING'],
+    items,
+  };
+  if (existing) {
+    return batches.map((batch) => batch.paymentBatchId === existing.paymentBatchId ? reversal : batch);
+  }
+  return [reversal, ...batches];
 };
 
 export const createInitialPaymentBatches = ({
@@ -1396,6 +1536,7 @@ export const createInitialPaymentBatches = ({
       sourceCurrency: groupedPayouts[0].currency,
       payer: financePayers[index % financePayers.length],
       paidAt,
+      purpose: 'NORMAL',
       status,
       lifecycle: status === '已付款'
         ? ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'COMPLETED']
@@ -1444,14 +1585,40 @@ export const createInitialPaymentBatches = ({
       sourceCurrency: retryPayout.currency,
       payer: PAYMENT_BATCH_RETRY_DEMO.payer,
       paidAt: PAYMENT_BATCH_RETRY_DEMO.submittedAt,
+      purpose: 'RETRY',
+      sourcePaymentBatchId: originalFailedBatch?.paymentBatchId,
+      sourcePaymentBatchCode: originalFailedBatch?.paymentBatchCode,
       status: '已付款',
       lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED', 'COMPLETED'],
       itemStatus: '已付款',
-      paymentOrderCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentOrderCode,
+      paymentOrderCode: originalFailedBatch?.paymentOrderCode
+        ?? PAYMENT_BATCH_RETRY_DEMO.retryPaymentOrderCode,
       paymentAttemptNumber: 2,
     }),
-    ...initialAttempts,
-  ] : initialAttempts;
+    ...initialAttempts.reduce<PaymentBatchRecord[]>((records, sourceBatch, index) => {
+      if (!sourceBatch.items.some((item) => item.paymentStatus === '付款失败')) return records;
+      const sequence = String(101 + index).padStart(3, '0');
+      return [...upsertPaymentReversalBatch({
+        batches: records,
+        sourcePaymentBatchId: sourceBatch.paymentBatchId,
+        paymentBatchId: `payment_batch_fixture_reversal_${sequence}` as PaymentBatchId,
+        paymentBatchCode: `BAT-20260805-${sequence}`,
+        refundedAt: sourceBatch.items.find((item) => item.refundedAt)?.refundedAt
+          ?? sourceBatch.paidAt,
+      })];
+    }, [...initialAttempts]),
+  ] : initialAttempts.reduce<PaymentBatchRecord[]>((records, sourceBatch, index) => {
+    if (!sourceBatch.items.some((item) => item.paymentStatus === '付款失败')) return records;
+    const sequence = String(101 + index).padStart(3, '0');
+    return [...upsertPaymentReversalBatch({
+      batches: records,
+      sourcePaymentBatchId: sourceBatch.paymentBatchId,
+      paymentBatchId: `payment_batch_fixture_reversal_${sequence}` as PaymentBatchId,
+      paymentBatchCode: `BAT-20260805-${sequence}`,
+      refundedAt: sourceBatch.items.find((item) => item.refundedAt)?.refundedAt
+        ?? sourceBatch.paidAt,
+    })];
+  }, [...initialAttempts]);
   const historicalBatches = createHistoricalPaymentBatchRecords(payouts, scenarioBatches);
 
   return [...scenarioBatches, ...historicalBatches];

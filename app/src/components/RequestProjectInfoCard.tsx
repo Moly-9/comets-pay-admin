@@ -59,7 +59,7 @@ export function RequestProjectInfoCard({
         <div><dt>{requestCodeLabel}</dt><dd>{requestCode}</dd></div>
         <div><dt>关联项目</dt><dd>{cooperationProjectName}<small className="cell-subtext">{cooperationProjectCode || '待同步'}</small></dd></div>
         <div><dt>品牌</dt><dd>{brand || '未填写（非必填）'}</dd></div>
-        <div><dt>负责 PM</dt><dd>{pm}</dd></div>
+        <div><dt>负责 PM</dt><dd>{pm || '未指定'}</dd></div>
         <div><dt>付款渠道</dt><dd>{paymentChannel || '待补充'}</dd></div>
         <div><dt>付款主体</dt><dd>{paymentEntity || '待补充'}</dd></div>
         <div><dt>项目费用归属</dt><dd>{projectCostAttribution || '待补充'}</dd></div>

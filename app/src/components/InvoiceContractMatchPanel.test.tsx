@@ -9,7 +9,7 @@ const issue = (
   message: string,
 ): InvoiceContractMatchIssue => ({
   field: severity === 'BLOCKER' ? 'PUBLISHER' : 'AMOUNT',
-  label: severity === 'BLOCKER' ? '收款主体' : '应付金额',
+  label: severity === 'BLOCKER' ? 'From' : '应付金额',
   severity,
   contractIds: [],
   contractValue: '合同值',
@@ -18,8 +18,8 @@ const issue = (
 });
 
 const checks = (state: InvoiceContractMatchCheck['state']): InvoiceContractMatchCheck[] => ([
-  { field: 'PUBLISHER', label: '收款主体', contractValue: 'A', invoiceValue: 'A', state: 'MATCH', message: '合同与 Invoice 一致。' },
-  { field: 'ADVERTISER', label: '付款主体', contractValue: 'B', invoiceValue: 'B', state: 'MATCH', message: '合同与 Invoice 一致。' },
+  { field: 'PUBLISHER', label: 'From', contractValue: 'A', invoiceValue: 'A', state: 'MATCH', message: '合同与 Invoice 一致。' },
+  { field: 'ADVERTISER', label: 'Bill To', contractValue: 'B', invoiceValue: 'B', state: 'MATCH', message: '合同与 Invoice 一致。' },
   { field: 'AMOUNT', label: '应付金额', contractValue: 'USD 100', invoiceValue: 'USD 120', state, message: '金额不一致。' },
   { field: 'CURRENCY', label: '币种', contractValue: 'USD', invoiceValue: 'USD', state: 'MATCH', message: '合同与 Invoice 一致。' },
   { field: 'PAYMENT_ACCOUNT', label: '付款账户', contractValue: 'A', invoiceValue: 'A', state: 'MATCH', message: '合同与 Invoice 一致。' },

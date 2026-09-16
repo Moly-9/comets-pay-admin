@@ -378,6 +378,7 @@ export function InvoiceBuilderPage({
     value: cooperationProjectIdFor(project),
     label: project.name,
     description: `${project.cooperationProjectCode ?? project.projectCode ?? project.id} · ${project.brand} · 飞书合作项目`,
+    searchText: `${project.name} ${project.brand} ${project.cooperationProjectCode ?? ''} ${project.projectCode ?? ''}`,
   }));
   const billingEntityOptions = [
     ...(!matchedBillingEntity && editSnapshot ? [{
@@ -844,7 +845,15 @@ export function InvoiceBuilderPage({
               </div>
               <div className={`invoice-form-control ${errors.project ? 'has-error' : ''}`}>
                 <span>合作项目 *</span>
-                <SelectField ariaLabel="合作项目" variant="form" value={selectedProjectId} placeholder={creatorId ? '选择飞书合作项目' : '请先选择达人'} options={projectOptions} onChange={selectProject} disabled={!creatorId || isEditing} />
+                <SearchableComboBox
+                  ariaLabel="合作项目"
+                  value={selectedProjectId}
+                  placeholder={creatorId ? '搜索项目名称、编号或品牌' : '请先选择达人'}
+                  options={projectOptions}
+                  onChange={selectProject}
+                  onClear={() => selectProject('')}
+                  disabled={!creatorId || isEditing}
+                />
                 {errors.project ? <small>{errors.project}</small> : null}
               </div>
             </div>
@@ -933,7 +942,7 @@ export function InvoiceBuilderPage({
             </div>
             <div className="invoice-form-subtitle">From</div>
             <div className="invoice-form-grid">
-              <label className={errors.legalName ? 'has-error' : ''}><span>真实姓名 / Real Name *</span><input value={from.legalName} onChange={(event) => setFrom((current) => ({ ...current, legalName: event.target.value }))} /><small>{errors.legalName}</small></label>
+              <label className={errors.legalName ? 'has-error' : ''}><span>真实姓名 / 公司名称 · Real Name / Company Name *</span><input value={from.legalName} onChange={(event) => setFrom((current) => ({ ...current, legalName: event.target.value }))} /><small>{errors.legalName}</small></label>
               <label className={errors.phone ? 'has-error' : ''}><span>联系电话 / Tel *</span><input value={from.phone} onChange={(event) => setFrom((current) => ({ ...current, phone: event.target.value }))} /><small>{errors.phone}</small></label>
               <label className={errors.email ? 'has-error' : ''}><span>联系邮箱 / Email *</span><input type="email" value={from.email} onChange={(event) => setFrom((current) => ({ ...current, email: event.target.value }))} /><small>{errors.email}</small></label>
               <label className={`full-width ${errors.address ? 'has-error' : ''}`}><span>联系地址 / Address *</span><textarea value={from.address} onChange={(event) => setFrom((current) => ({ ...current, address: event.target.value }))} /><small>{errors.address}</small></label>

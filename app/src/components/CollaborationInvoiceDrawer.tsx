@@ -23,6 +23,8 @@ import {
 import {
   CONTRACT_TYPE_LABELS,
   formatContractMoney,
+  getContractReadiness,
+  getContractValidity,
   type ContractRecord,
 } from '../contracts';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
@@ -60,15 +62,9 @@ const projectCodeFor = (row: CollaborationInvoiceRow) => row.project?.cooperatio
   ?? row.projectLinkId
   ?? '未记录';
 
-const contractLifecycleLabel = (contract: ContractRecord) => {
-  if (contract.lifecycle === 'EDITING_DRAFT') return '编辑中';
-  if (contract.lifecycle === 'GENERATED_DRAFT') return '待上传';
-  if (contract.lifecycle === 'UPLOADED_PENDING_CONFIRMATION') return '待人工确认';
-  if (contract.lifecycle === 'RECOGNITION_CONFIRMED') return '待发送签署';
-  if (contract.lifecycle === 'SENT_FOR_SIGNATURE') return '待签署';
-  if (contract.lifecycle === 'CONFIRMED') return '已确认';
-  return contract.status ?? (contract.signed ? '已签署' : '待签署');
-};
+const contractPaymentReadinessLabel = (contract: ContractRecord) => (
+  getContractValidity(contract).expired ? '已失效' : getContractReadiness(contract).label
+);
 
 const contractPeriodLabel = (contract: ContractRecord) => {
   if (contract.isLongTerm) return '长期有效';
@@ -302,7 +298,6 @@ export function CollaborationInvoiceDrawer({
               <div><dt>Invoice 类型</dt><dd>{row.invoiceType === 'EXTERNAL' ? '外部 Invoice' : '内部 Invoice'}</dd></div>
               <div><dt>Invoice 日期</dt><dd>{row.invoiceDate || '未记录'}</dd></div>
               <div><dt>Invoice 金额</dt><dd>{formatMoney(row.currency, row.amount)}</dd></div>
-              <div><dt>Invoice 版本</dt><dd>V{row.invoice?.version ?? row.payout?.invoiceVersion ?? 1}</dd></div>
             </dl>
             <div className="collaboration-description-list">
               <span>合作交付</span>
@@ -323,8 +318,7 @@ export function CollaborationInvoiceDrawer({
                       <em>{CONTRACT_TYPE_LABELS[contract.contractType ?? 'INDEPENDENT']}</em>
                     </header>
                     <dl className="collaboration-detail-grid">
-                      <div><dt>合同状态</dt><dd>{contractLifecycleLabel(contract)}</dd></div>
-                      <div><dt>签署状态</dt><dd>{contract.signed ? '已签署' : '待签署'}</dd></div>
+                      <div><dt>付款就绪度</dt><dd>{contractPaymentReadinessLabel(contract)}</dd></div>
                       <div><dt>合同金额</dt><dd>{formatContractMoney(contract)}</dd></div>
                       <div><dt>有效期</dt><dd>{contractPeriodLabel(contract)}</dd></div>
                     </dl>
@@ -352,7 +346,6 @@ export function CollaborationInvoiceDrawer({
               <div><dt>请款编号</dt><dd>{row.request?.requestCode ?? row.request?.id ?? '未发起'}</dd></div>
               <div><dt>发起人</dt><dd>{row.request?.media ?? '未记录'}</dd></div>
               <div><dt>本轮请款时间</dt><dd>{row.requestSubmittedAt ? formatDateTime(row.requestSubmittedAt) : '未发起'}</dd></div>
-              <div><dt>审批轮次</dt><dd>{row.request?.approval ? `第 ${row.request.approval.round} 轮` : '未发起'}</dd></div>
               <div><dt>付款清单编号</dt><dd>{row.paymentList?.paymentListCode ?? '未生成'}</dd></div>
               <div><dt>请款金额</dt><dd>{formatMoney(requestCurrency, requestAmount)}</dd></div>
             </dl>

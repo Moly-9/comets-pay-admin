@@ -22,6 +22,10 @@ describe('ContractUploadWizard contract naming', () => {
     expect(source).toContain('<small>选择后沿用历史生成合同 ID</small>');
     expect(source).not.toMatch(/onChange=\{[^}]*setDraftContractId[^}]*setContractName/);
     expect(source).not.toContain('对应生成草稿');
+    expect(source.indexOf('<span>合作达人 *</span>')).toBeLessThan(
+      source.indexOf('<span>合作项目 *</span>'),
+    );
+    expect(source).toContain('disabled={!selectedCreator}');
     expect(styles).toMatch(/\.creator-search-combobox \.contract-search-option > \.creator-identity\s*{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\);/s);
     expect(styles).toMatch(/\.creator-search-combobox \.contract-search-option \.creator-social-accounts\s*{[^}]*flex-wrap:\s*nowrap;[^}]*overflow:\s*hidden;/s);
   });

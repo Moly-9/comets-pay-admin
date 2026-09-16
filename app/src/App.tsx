@@ -50,6 +50,7 @@ import {
 } from './permissions';
 import {
   executeMockBatchSubmission,
+  selectBatchWizardPayouts,
   type MockBatchSubmission,
 } from './batchTransfers';
 import {
@@ -61,6 +62,7 @@ import {
   paymentBatchItemAttemptNumber,
   paymentBatchItemOrderCode,
   paymentBatchItemSourceOrderCode,
+  upsertPaymentReversalBatch,
 } from './paymentBatches';
 import { BatchWizardPage } from './pages/BatchWizardPage';
 import { AuthPage } from './pages/AuthPage';
@@ -105,13 +107,16 @@ import {
   upsertInvoiceCreationDraft,
 } from './invoice/invoiceCreationDrafts';
 import { hasInvoiceSignatureEvidence } from './invoice/invoiceSignature';
+import { resolveGeneratedInvoiceContractMatch } from './invoice/invoiceContractMatching';
 import {
   buildApprovedExternalInvoice,
+  confirmExternalInvoiceSignature,
   correctExternalInvoiceRecognition,
   createExternalInvoiceCollection,
   publishExternalInvoiceCollection,
   reviewExternalInvoiceField,
   returnExternalInvoice,
+  saveExternalInvoiceContractMatchReview,
   simulateExternalInvoiceUpload,
   submitExternalInvoiceForReview,
   type ExternalInvoiceActor,
@@ -128,6 +133,8 @@ import {
 import {
   updateCreatorProjectCounts,
   upsertGeneratedInvoiceEngagements,
+  upsertProjectCreatorEngagements,
+  type ProjectCreatorEngagementInput,
 } from './invoice/invoiceEngagements';
 import {
   buildRequestFinanceReview,
@@ -182,7 +189,6 @@ import {
   beginPaymentListEdit,
   canEditProject,
   clearPaymentListItems,
-  confirmPaymentExecutionAccountOverride,
   createAuditEvent,
   createPrototypeCode,
   createPrototypeId,
@@ -234,6 +240,7 @@ import {
   paymentRequestProviderForChannel,
   paymentRequestSubmissionIssues,
   paymentRequestCancellationIssue,
+  findExistingEngagementId,
   requestOwningInvoice,
   type PaymentRequestCreatorLink,
 } from './paymentRequestProjects';
@@ -254,12 +261,15 @@ import {
 } from './paymentListWorkbook';
 import type { ProjectSummary } from './pages/ProjectDetailPage';
 import {
+  duplicateActiveCooperationProjectFor,
   emptyCooperationProjectDirectoryStore,
   loadCooperationProjectDirectory,
+  manualCooperationProjectRecordFor,
   saveCooperationProjectDirectory,
   synchronizeFeishuDirectory,
   type CooperationProjectDirectoryRecord,
   type CooperationProjectDirectoryStore,
+  type ManualCooperationProjectInput,
 } from './cooperationProjectDirectory';
 import type { FeishuProjectMetadata } from './cooperationProjects';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
@@ -272,11 +282,10 @@ import {
   withPaymentAttemptSnapshot,
 } from './paymentAttempts';
 import { findPaymentListItemForPayout } from './paymentCreatorIdentity';
-import { nextPaymentBusinessCode, reservePaymentBusinessCodes } from './paymentNumbering';
+import { nextPaymentBusinessCode } from './paymentNumbering';
 import {
   beginPaymentFailureAccountRecovery,
   completePaymentFailureRevalidation,
-  confirmPaymentFailureAccountChange,
   isPaymentFailureRetryCandidate,
   isPaymentFailureRetryReady,
   markPaymentFailureAccountChanged,
@@ -292,7 +301,7 @@ import {
   createRequestApprovalState,
   REQUEST_APPROVAL_STATUS_LABEL,
   requestApprovalAllowsInvoicePayoutOverride,
-  requestApprovalHasScopedReturnItems,
+  requestApprovalReturnEditScope,
   requestApprovalReturnItemForContract,
   requestApprovalReturnItemForInvoice,
   requestApprovalReturnItemForInvoiceEdit,
@@ -469,6 +478,7 @@ const directoryRecordFromProject = (project: ProjectSummary): CooperationProject
   endDate: project.endDate ?? '2026-12-31',
   source: project.source ?? (project.externalProjectId ? 'FEISHU' : 'MANUAL'),
   availability: project.availability ?? 'ACTIVE',
+  syncScope: project.externalProjectId ? 'IN_SCOPE' : undefined,
   sourceUpdatedAt: project.sourceUpdatedAt,
   localUpdatedAt: project.localUpdatedAt ?? project.syncedAt ?? new Date(0).toISOString(),
   syncedAt: project.syncedAt,
@@ -805,7 +815,9 @@ export default function App() {
     snapshot: InvoiceBatchDraftState,
     meaningful: boolean,
   ) => {
-    if (!meaningful || !snapshot.rows.some((row) => row.status !== 'GENERATED')) {
+    const hasPendingContent = snapshot.rows.some((row) => row.status !== 'GENERATED')
+      || (!snapshot.rows.length && Boolean(snapshot.selectedCreatorIds.length));
+    if (!meaningful || !hasPendingContent) {
       const draftId = activeInvoiceCreationDraftIdRef.current;
       if (!draftId) return;
       updateInvoiceCreationDraftCollection((current) => removeInvoiceCreationDraft(current, draftId));
@@ -914,6 +926,23 @@ export default function App() {
     ]);
   }, [currentUser]);
 
+  const persistProjectCreatorEngagements = useCallback((
+    associations: ProjectCreatorEngagementInput[],
+    occurredAt = nowIso(),
+  ) => {
+    if (!associations.length) return;
+    setProjects((currentProjects) => {
+      const nextProjects = upsertProjectCreatorEngagements({
+        projects: currentProjects,
+        creators,
+        associations,
+        occurredAt,
+      });
+      setCreators((currentCreators) => updateCreatorProjectCounts(currentCreators, nextProjects));
+      return nextProjects;
+    });
+  }, [creators]);
+
   const approvalInvalidatedRequest = useCallback((
     request: RequestProjectSummary,
     summary: string,
@@ -960,54 +989,24 @@ export default function App() {
 
   const uploadContracts = useCallback((inputs: ContractUploadInput[]) => {
     const engagementByKey = new Map<string, EngagementId>();
-    const projectUpdates = new Map<string, ProjectSummary>();
     const resolvedInputs = inputs.map((input) => {
       const projectKey = String(input.cooperationProjectId ?? input.projectId);
       const engagementKey = `${projectKey}:${input.creatorId}`;
-      const existingProject = projectUpdates.get(projectKey)
-        ?? projects.find((project) => getProjectId(project) === input.projectId);
+      const existingProject = projects.find((project) => getProjectId(project) === input.projectId);
       let engagementId = input.engagementId;
       if (!engagementId) {
         engagementId = engagementByKey.get(engagementKey)
-          ?? existingProject?.creatorProfiles?.find((reference) => (
-            reference.creatorId === input.creatorId && reference.status !== 'removed'
-          ))?.engagementId;
+          ?? (existingProject ? findExistingEngagementId({
+            project: existingProject,
+            creatorId: input.creatorId,
+            contracts,
+            invoices: generatedInvoices,
+          }) : undefined);
       }
-      if (!engagementId) {
-        engagementId = createPrototypeId('engagement') as EngagementId;
-        const creator = creators.find((candidate) => candidate.id === input.creatorId);
-        if (existingProject && creator) {
-          const occurredAt = nowIso();
-          const activeCreatorCount = existingProject.creatorProfiles?.filter((reference) => reference.status !== 'removed').length;
-          const nextProject: ProjectSummary = {
-            ...existingProject,
-            creators: (activeCreatorCount ?? existingProject.creators) + 1,
-            creatorProfiles: [
-              ...(existingProject.creatorProfiles ?? []),
-              {
-                creatorId: input.creatorId,
-                engagementId,
-                projectId: getProjectId(existingProject),
-                status: 'active',
-                createdAt: occurredAt,
-                updatedAt: occurredAt,
-                name: creator.name,
-                handle: input.creatorHandle,
-                platform: input.creatorPlatform,
-                socialAccountId: input.creatorSocialAccountId,
-              },
-            ],
-          };
-          projectUpdates.set(projectKey, nextProject);
-        }
-      }
+      if (!engagementId) engagementId = createPrototypeId('engagement') as EngagementId;
       engagementByKey.set(engagementKey, engagementId);
       return { ...input, engagementId };
     });
-
-    if (projectUpdates.size) {
-      setProjects((current) => current.map((project) => projectUpdates.get(String(getProjectId(project))) ?? project));
-    }
 
     const frameworkIdsByUploadKey = new Map<string, ContractId>();
     const orderedInputs = [...resolvedInputs].sort((left, right) => {
@@ -1032,6 +1031,14 @@ export default function App() {
       recordsByInput.set(input, record);
     });
     const records = resolvedInputs.map((input) => recordsByInput.get(input)!).filter(Boolean);
+    persistProjectCreatorEngagements(resolvedInputs.map((input) => ({
+      projectId: input.projectId,
+      creatorId: input.creatorId,
+      engagementId: input.engagementId,
+      creatorHandle: input.creatorHandle,
+      creatorSocialAccountId: input.creatorSocialAccountId,
+      creatorPlatform: input.creatorPlatform,
+    })));
     setContracts((current) => {
       const replaced = new Map(records.filter((record) => record.uploadedFromDraftId).map((record) => [record.contractId, record]));
       return [
@@ -1052,7 +1059,7 @@ export default function App() {
       });
     });
     return records;
-  }, [contracts, creators, currentUser.account, projects, registerProjectMutation]);
+  }, [contracts, currentUser.account, generatedInvoices, persistProjectCreatorEngagements, projects, registerProjectMutation]);
 
   const bindFrameworkContract = useCallback((ioContractId: ContractId, frameworkContractId?: ContractId) => {
     const ioContract = contracts.find((contract) => (contract.contractId ?? contract.id) === ioContractId);
@@ -1097,6 +1104,14 @@ export default function App() {
         || contract.id === model.contractNumber)
     ));
     const record = createEditingContractDraft(model, existingDraft, currentUser.account);
+    persistProjectCreatorEngagements([{
+      projectId: model.projectId,
+      creatorId: model.creatorId,
+      engagementId: model.engagementId,
+      creatorHandle: model.creatorHandle,
+      creatorSocialAccountId: model.creatorSocialAccountId,
+      creatorPlatform: model.creatorPlatform,
+    }]);
     setContracts((current) => existingDraft
       ? current.map((contract) => (contract.contractId ?? contract.id) === (existingDraft.contractId ?? existingDraft.id) ? record : contract)
       : [record, ...current]);
@@ -1104,7 +1119,7 @@ export default function App() {
     setContractBuilderDirty(false);
     notify('合同草稿已保存', `${record.name} 已保存到草稿箱，可稍后继续编辑。`);
     return record;
-  }, [contracts, currentUser.account, editingContractDraftId, notify]);
+  }, [contracts, currentUser.account, editingContractDraftId, notify, persistProjectCreatorEngagements]);
 
   const generateContract = useCallback((model: ContractGenerationModel, files: ContractGeneratedFiles) => {
     const existingDraft = contracts.find((contract) => (
@@ -1114,40 +1129,14 @@ export default function App() {
     ));
     const projectKey = String(model.cooperationProjectId ?? model.projectId);
     const existingProject = projects.find((project) => getProjectId(project) === projectKey);
-    const existingReference = existingProject?.creatorProfiles?.find((reference) => (
-      reference.creatorId === model.creatorId && reference.status !== 'removed'
-    ));
-    const resolvedEngagementId = existingReference?.engagementId
+    const resolvedEngagementId = (existingProject ? findExistingEngagementId({
+      project: existingProject,
+      creatorId: model.creatorId,
+      contracts,
+      invoices: generatedInvoices,
+    }) : undefined)
       || model.engagementId
       || createPrototypeId('engagement') as EngagementId;
-    if (existingProject && !existingReference) {
-      const creator = creators.find((candidate) => candidate.id === model.creatorId);
-      if (creator) {
-        const occurredAt = nowIso();
-        const activeCreatorCount = existingProject.creatorProfiles?.filter((reference) => reference.status !== 'removed').length;
-        setProjects((current) => current.map((project) => getProjectId(project) === projectKey
-          ? {
-              ...project,
-              creators: (activeCreatorCount ?? project.creators) + 1,
-              creatorProfiles: [
-                ...(project.creatorProfiles ?? []),
-                {
-                  creatorId: model.creatorId,
-                  engagementId: resolvedEngagementId,
-                  projectId: getProjectId(project),
-                  status: 'active',
-                  createdAt: occurredAt,
-                  updatedAt: occurredAt,
-                  name: creator.name,
-                  handle: model.creatorHandle,
-                  platform: model.creatorPlatform ?? model.platform,
-                  socialAccountId: model.creatorSocialAccountId,
-                },
-              ],
-            }
-          : project));
-      }
-    }
     const resolvedModel = { ...model, engagementId: resolvedEngagementId };
     const documentUrl = URL.createObjectURL(files.pdfBlob);
     const record = createGeneratedContractDraft(resolvedModel, existingDraft?.generationVersion ?? 1, documentUrl, {
@@ -1157,6 +1146,14 @@ export default function App() {
       pageCount: files.pageCount,
       uploadedByAccount: currentUser.account,
     });
+    persistProjectCreatorEngagements([{
+      projectId: resolvedModel.projectId,
+      creatorId: resolvedModel.creatorId,
+      engagementId: resolvedEngagementId,
+      creatorHandle: resolvedModel.creatorHandle,
+      creatorSocialAccountId: resolvedModel.creatorSocialAccountId,
+      creatorPlatform: resolvedModel.creatorPlatform,
+    }]);
     setContracts((current) => existingDraft
       ? current.map((contract) => (contract.contractId ?? contract.id) === (existingDraft.contractId ?? existingDraft.id) ? record : contract)
       : [record, ...current]);
@@ -1171,7 +1168,7 @@ export default function App() {
       summary: `已生成合同${files.variant === 'FORMAL' ? '正式文件' : '草稿'} ${record.id}`,
     });
     return record;
-  }, [contracts, creators, currentUser.account, editingContractDraftId, projects, registerProjectMutation]);
+  }, [contracts, currentUser.account, editingContractDraftId, generatedInvoices, persistProjectCreatorEngagements, projects, registerProjectMutation]);
 
   const updateContract = useCallback((updated: ContractRecord) => {
     if (updated.isTemplate && !canEditContractTemplate(currentUser)) {
@@ -2444,8 +2441,8 @@ export default function App() {
         paymentChannel: request.paymentChannel,
       }),
     ];
-    if (!request.cooperationProjectId || !request.paymentRequestProjectId || !request.pm || !request.generatedDetail?.reason) {
-      issues.unshift('项目必填资料不完整，请检查关联项目、PM 和付款事由');
+    if (!request.cooperationProjectId || !request.paymentRequestProjectId || !request.generatedDetail?.reason) {
+      issues.unshift('项目必填资料不完整，请检查关联项目和付款事由');
     }
     const invoiceIds = paymentRequestInvoiceIds(creatorLinks);
     const duplicateInvoiceId = invoiceIds.find((invoiceId) => (
@@ -2468,7 +2465,7 @@ export default function App() {
     }
 
     const submittedAt = nowIso();
-    const approval = createRequestApprovalState(submittedAt, request.approval);
+    const approval = createRequestApprovalState(submittedAt, request.approval, request.pm);
     const paymentListId = requestList.paymentListId;
     const paymentListCode = requestList.paymentListCode;
     const sourcePayoutIds = new Set(
@@ -2521,7 +2518,10 @@ export default function App() {
       }),
       ...current,
     ]);
-    notify('申请已提交', `${request.requestCode ?? request.id} 已进入 PM 审批。`);
+    notify(
+      '申请已提交',
+      `${request.requestCode ?? request.id} 已进入${approval.status === 'PENDING_PM' ? ' PM 审批' : '媒介负责人审批'}。`,
+    );
   };
 
   const cancelMediaPaymentRequest = (request: RequestProjectSummary, reason: string) => {
@@ -3086,10 +3086,13 @@ export default function App() {
       ...payout,
       status: '付款失败',
       paidAt: undefined,
-      transferFeeAmount: undefined,
-      transferFeeCurrency: undefined,
-      actualPaidAmount: undefined,
-      actualPaidCurrency: undefined,
+      transferFeeAmount: failedPaymentResult.transferFeeAmount,
+      transferFeeCurrency: failedPaymentResult.transferFeeCurrency,
+      actualPaidAmount: failedPaymentResult.actualPaidAmount,
+      actualPaidCurrency: failedPaymentResult.actualPaidCurrency,
+      refundAmount: payout.amount,
+      refundCurrency: payout.currency,
+      refundedAt: occurredAt,
       recipientReceivedAmount: undefined,
       recipientReceivedCurrency: undefined,
       paymentFailure: {
@@ -3120,8 +3123,11 @@ export default function App() {
       occurredAt,
       transferFeeAmount: failedPaymentResult.transferFeeAmount,
       transferFeeCurrency: failedPaymentResult.transferFeeCurrency,
-      actualPaidAmount: failedPaymentResult.transferFeeAmount,
-      actualPaidCurrency: failedPaymentResult.transferFeeCurrency,
+      actualPaidAmount: failedPaymentResult.actualPaidAmount,
+      actualPaidCurrency: failedPaymentResult.actualPaidCurrency,
+      refundAmount: payout.amount,
+      refundCurrency: payout.currency,
+      refundedAt: occurredAt,
       recipientReceivedAmount: 0,
       recipientReceivedCurrency: failedPaymentResult.recipientReceivedCurrency,
       errorCode: baseUpdated.paymentFailure?.errorCode,
@@ -3132,7 +3138,13 @@ export default function App() {
       notify('无法记录付款失败', paymentBatchAttemptIssueMessage(batchUpdate.issue));
       return;
     }
-    setPaymentBatches([...batchUpdate.batches]);
+    setPaymentBatches([...upsertPaymentReversalBatch({
+      batches: batchUpdate.batches,
+      sourcePaymentBatchId: batchUpdate.updatedBatchId,
+      paymentBatchId: createPrototypeId('batch') as PaymentBatchId,
+      paymentBatchCode: createPrototypeCode('BAT'),
+      refundedAt: occurredAt,
+    })]);
     setPayouts((current) => current.map((item) => item.id === payout.id ? updated : item));
     setSelectedPayout((current) => current?.id === payout.id ? updated : current);
     notify('已记录付款失败', '请由财务选择问题类型并退回媒介，当前不可直接重试付款。');
@@ -3542,8 +3554,9 @@ export default function App() {
           const identity = {
             payoutAccountVersion: recovery.reportedPayoutAccountVersion,
             accountFingerprint: recovery.reportedAccountFingerprint,
-            status: 'READY_FOR_VALIDATION' as const,
+            status: 'VALIDATED' as const,
             updatedAt: occurredAt,
+            validatedAt: occurredAt,
           };
           return account.provider === 'Airwallex'
             ? { ...account, ...identity, beneficiaryId: recovery.reportedExternalBeneficiaryId ?? account.beneficiaryId }
@@ -3559,13 +3572,34 @@ export default function App() {
           : {
               ...list,
               items: list.items.map((item) => item.invoiceId === linkedInvoice.invoiceId
-                ? { ...item, requiresRevalidation: true, validationIssues: ['达人已更新账户，待重新校验'] }
+                ? {
+                    ...item,
+                    snapshot: {
+                      ...item.snapshot,
+                      payoutAccountVersion: recovery.reportedPayoutAccountVersion,
+                      accountFingerprint: recovery.reportedAccountFingerprint,
+                      externalBeneficiaryId: recovery.reportedExternalBeneficiaryId
+                        ?? item.snapshot.externalBeneficiaryId,
+                      validationStatus: 'VALIDATED',
+                      paymentDetails: item.snapshot.paymentDetails ? {
+                        ...item.snapshot.paymentDetails,
+                        payoutAccountVersion: recovery.reportedPayoutAccountVersion,
+                        accountFingerprint: recovery.reportedAccountFingerprint,
+                        externalBeneficiaryId: recovery.reportedExternalBeneficiaryId
+                          ?? item.snapshot.paymentDetails.externalBeneficiaryId,
+                        validationStatus: 'VALIDATED',
+                      } : undefined,
+                    },
+                    requiresRevalidation: false,
+                    validationIssues: [],
+                    lastValidatedAt: occurredAt,
+                  }
                 : item),
-              updatedAt: nowIso(),
+              updatedAt: occurredAt,
             })));
       }
       setPayouts((current) => current.map((candidate) => candidate.id === payoutId ? updated : candidate));
-      notify('已收到达人模拟反馈', '账户版本已更新，该笔付款仍需重新校验。');
+      notify('已收到达人模拟反馈', '达人端已完成账户校验，该笔付款可重试。');
       return true;
     } catch (error) {
       notify('无法记录达人反馈', error instanceof Error ? error.message : '请先完成失败通知。');
@@ -3649,57 +3683,18 @@ export default function App() {
           ? { ...account, status: 'VALIDATED' as const, updatedAt: occurredAt }
           : account),
       })));
-      const pendingFinance = {
+      const readyForRetry = {
         ...updated,
         provider: effectiveAccount.provider as Payout['provider'],
         account: effectiveAccount.accountSummary,
         transferMethod: effectiveAccount.transferMethod,
         localClearingSystem: effectiveAccount.localClearingSystem,
       };
-      setPayouts((current) => current.map((candidate) => candidate.id === payoutId ? pendingFinance : candidate));
-      notify('失败款资料校验通过', '新执行账户已校验，等待财务确认后才能加入付款批次。');
+      setPayouts((current) => current.map((candidate) => candidate.id === payoutId ? readyForRetry : candidate));
+      notify('失败款资料校验通过', '达人端账户校验结果已同步，该笔付款可直接加入新批次。');
       return true;
     } catch (error) {
       notify('资料校验未通过', error instanceof Error ? error.message : '账户快照仍需处理。');
-      return false;
-    }
-  };
-
-  const confirmPaymentFailureExecutionAccount = (payoutId: string) => {
-    if (!['finance', 'admin', 'owner'].includes(currentUser.roleKey)) {
-      notify('暂无确认权限', '新执行账户完成校验后，需要由财务确认。');
-      return false;
-    }
-    const payout = payouts.find((candidate) => candidate.id === payoutId);
-    const linkedInvoice = generatedInvoices.find((invoice) => invoice.sourcePayoutId === payoutId);
-    if (!payout || !linkedInvoice) return false;
-    try {
-      const occurredAt = nowIso();
-      const actor = { account: currentUser.account, name: currentUser.name };
-      const confirmedPayout = confirmPaymentFailureAccountChange(payout, actor, occurredAt);
-      const sourceList = paymentLists.find((list) => list.items.some((item) => (
-        list.paymentRequestProjectId === payout.paymentRequestProjectId
-        && item.invoiceId === linkedInvoice.invoiceId
-      )));
-      const sourceItem = sourceList?.items.find((item) => item.invoiceId === linkedInvoice.invoiceId);
-      if (!sourceList || !sourceItem) throw new Error('未找到失败款对应的付款清单明细。');
-      const confirmedItem = confirmPaymentExecutionAccountOverride(sourceItem, actor, occurredAt);
-      setPaymentLists((current) => current.map((list) => {
-        if (list.paymentListId !== sourceList.paymentListId) return list;
-        return {
-          ...list,
-          items: list.items.map((item) => item.invoiceId === linkedInvoice.invoiceId
-            ? confirmedItem
-            : item),
-          updatedAt: occurredAt,
-        };
-      }));
-      setPayouts((current) => current.map((candidate) => candidate.id === payoutId ? confirmedPayout : candidate));
-      setSelectedPayout((current) => current?.id === payoutId ? confirmedPayout : current);
-      notify('财务已确认新执行账户', '该笔失败款已可加入新的付款批次，Invoice 签署快照保持不变。');
-      return true;
-    } catch (error) {
-      notify('无法确认执行账户', error instanceof Error ? error.message : '新执行账户尚未满足确认条件。');
       return false;
     }
   };
@@ -3718,9 +3713,19 @@ export default function App() {
     try {
       const record = createExternalInvoiceCollection({
         ...input,
+        creator: creators.find((candidate) => candidate.id === input.creatorId),
+        contracts,
         actor: externalInvoiceActor(),
         publish,
       });
+      persistProjectCreatorEngagements([{
+        projectId: record.projectId,
+        creatorId: record.creatorId,
+        engagementId: record.engagementId,
+        creatorHandle: record.creatorHandle,
+        creatorSocialAccountId: record.creatorSocialAccountId,
+        creatorPlatform: record.creatorPlatform,
+      }]);
       setExternalInvoices((current) => [record, ...current]);
       setInvoiceTab('upload');
       notify(
@@ -3749,6 +3754,7 @@ export default function App() {
         record,
         externalInvoiceActor(),
         occurredAt,
+        creators.find((creator) => creator.id === record.creatorId),
       ));
       const updatedById = new Map(updated.map((record) => [record.invoiceId, record]));
       setExternalInvoices((current) => current.map((candidate) => updatedById.get(candidate.invoiceId) ?? candidate));
@@ -3901,7 +3907,50 @@ export default function App() {
     }
   };
 
-  const approveExternalInvoiceTask = (invoiceId: string) => {
+  const saveExternalInvoiceContractMatchTask = (invoiceId: string, reason: string) => {
+    if (!hasPermission(currentUser, 'invoice_media_review')) {
+      notify('暂无审核权限', `${currentUser.role}不能保存外部 Invoice 合同差异说明。`);
+      return;
+    }
+    const record = externalInvoices.find((candidate) => String(candidate.invoiceId) === invoiceId);
+    const creator = record ? creators.find((candidate) => candidate.id === record.creatorId) : undefined;
+    if (!record) return;
+    try {
+      const updated = saveExternalInvoiceContractMatchReview({
+        record,
+        creator,
+        contracts,
+        reason,
+        actor: externalInvoiceActor(),
+      });
+      setExternalInvoices((current) => current.map((candidate) => (
+        candidate.invoiceId === record.invoiceId ? updated : candidate
+      )));
+      notify('合同差异说明已保存', '匹配结果、说明、操作人和时间已写入当前前端原型审核记录。');
+    } catch (error) {
+      notify('合同差异说明未保存', error instanceof Error ? error.message : '当前合同匹配结果无法保存。');
+    }
+  };
+
+  const confirmExternalInvoiceSignatureTask = (invoiceId: string) => {
+    if (!hasPermission(currentUser, 'invoice_media_review')) {
+      notify('暂无审核权限', `${currentUser.role}不能确认外部 Invoice 签名。`);
+      return;
+    }
+    const record = externalInvoices.find((candidate) => String(candidate.invoiceId) === invoiceId);
+    if (!record) return;
+    try {
+      const updated = confirmExternalInvoiceSignature(record, externalInvoiceActor());
+      setExternalInvoices((current) => current.map((candidate) => (
+        candidate.invoiceId === record.invoiceId ? updated : candidate
+      )));
+      notify('Invoice 签名已确认', '确认已绑定当前文件版本；重新上传后需要重新确认。');
+    } catch (error) {
+      notify('签名确认失败', error instanceof Error ? error.message : '当前 Invoice 无法确认签名。');
+    }
+  };
+
+  const approveExternalInvoiceTask = (invoiceId: string, contractMatchReason = '') => {
     const record = externalInvoices.find((candidate) => String(candidate.invoiceId) === invoiceId);
     const creator = record ? creators.find((candidate) => candidate.id === record.creatorId) : undefined;
     if (!record || !creator) return;
@@ -3915,6 +3964,7 @@ export default function App() {
           .flatMap((candidate) => candidate.invoiceNumber ? [candidate.invoiceNumber] : []),
         reservedSourceInvoiceNumbers: externalInvoices.filter((candidate) => candidate.invoiceId !== record.invoiceId)
           .flatMap((candidate) => candidate.sourceInvoiceNumber ? [candidate.sourceInvoiceNumber] : []),
+        contractMatchReason,
         actor: externalInvoiceActor(),
       });
       const paymentCode = nextPaymentBusinessCode('PMT', payouts.map((payout) => payout.paymentCode));
@@ -3947,13 +3997,19 @@ export default function App() {
     }
     try {
       const creatorEmail = creators.find((creator) => creator.id === payout.creatorId)?.contact.email;
+      const generatedInvoice = generatedInvoices.find((record) => record.sourcePayoutId === payout.id);
+      const contractMatchReadiness = action === 'APPROVE_MEDIA' && generatedInvoice
+        ? resolveGeneratedInvoiceContractMatch(generatedInvoice, contracts)
+        : undefined;
       const updated = applyInvoiceReviewAction(
         payout,
         action,
         { account: currentUser.account, name: currentUser.name, role: currentUser.role },
         reason,
-        undefined,
-        creatorEmail,
+        {
+          notificationEmail: creatorEmail,
+          contractMatchReadiness,
+        },
       );
       setPayouts((current) => current.map((item) => (
         item.id === payout.id ? updated : item
@@ -4120,6 +4176,8 @@ export default function App() {
         linkedPayout,
         record,
         { account: currentUser.account, name: currentUser.name, role: currentUser.role },
+        undefined,
+        contracts,
       );
       setPayouts((current) => current.map((payout) => (
         payout.id === linkedPayout.id ? updatedPayout : payout
@@ -4282,9 +4340,16 @@ export default function App() {
     )
   );
 
+  const requestHasScopedEditRestriction = (request: RequestProjectSummary) => (
+    requestApprovalReturnEditScope(
+      request.approval,
+      requestHasPaymentFailureRecovery(request),
+    ) === 'scoped'
+  );
+
   const requestWholeResourceEditable = (request: RequestProjectSummary) => (
     requestResourceEditable(request)
-    && !requestApprovalHasScopedReturnItems(request.approval)
+    && !requestHasScopedEditRestriction(request)
   );
 
   const paymentListItemEditable = (
@@ -4293,7 +4358,7 @@ export default function App() {
   ) => (
     requestResourceEditable(request)
     && (
-      requestApprovalHasScopedReturnItems(request.approval)
+      requestHasScopedEditRestriction(request)
         ? Boolean(requestApprovalReturnItemForPaymentListEdit(request.approval, invoiceId))
         : !requestHasPaymentFailureRecovery(request)
       || Boolean(paymentFailurePayoutForInvoice(request, invoiceId))
@@ -4306,7 +4371,7 @@ export default function App() {
   ) => (
     requestResourceEditable(request)
     && (
-      !requestApprovalHasScopedReturnItems(request.approval)
+      !requestHasScopedEditRestriction(request)
       || Boolean(requestApprovalReturnItemForContract(request.approval, contractId))
     )
   );
@@ -4316,7 +4381,7 @@ export default function App() {
     && request.creatorLinks?.some((link) => link.invoiceIds.includes(invoiceId))
     && requestResourceEditable(request)
     && (
-      !requestApprovalHasScopedReturnItems(request.approval)
+      !requestHasScopedEditRestriction(request)
       || Boolean(requestApprovalReturnItemForInvoiceEdit(request.approval, invoiceId))
     )
   ));
@@ -4660,7 +4725,7 @@ export default function App() {
         return;
       }
       const occurredAt = nowIso();
-      const updated = applyPaymentExecutionAccountOverride(
+      const pendingUpdate = applyPaymentExecutionAccountOverride(
         item,
         createDocumentPayoutSnapshot(account, creator.id),
         {
@@ -4670,6 +4735,14 @@ export default function App() {
           changedAt: occurredAt,
         },
       );
+      const updated = revalidatePaymentListItem(pendingUpdate, occurredAt, {
+        payoutAccountId: getPayoutAccountId(account),
+        payoutAccountVersion: getPayoutAccountVersion(account),
+        accountFingerprint: getPayoutAccountFingerprint(account),
+        provider: account.provider,
+        externalBeneficiaryId: account.provider === 'Airwallex' ? account.beneficiaryId : undefined,
+        validationStatus: account.status,
+      });
       setPaymentLists((current) => current.map((candidate) => {
         if (candidate.paymentListId !== paymentListId) return candidate;
         const items = candidate.items.map((paymentItem) => (
@@ -4689,7 +4762,7 @@ export default function App() {
         externalBeneficiaryId: account.provider === 'Airwallex' ? account.beneficiaryId : undefined,
       }, occurredAt);
       setPayouts((current) => current.map((candidate) => candidate.id === changed.id ? changed : candidate));
-      markPaymentListEdit(request, `已更换 Invoice ${invoiceId} 的本次执行账户，Invoice 签署账户保持不变`);
+      markPaymentListEdit(request, `已更换 Invoice ${invoiceId} 的本次执行账户，达人端校验通过，Invoice 签署账户保持不变`);
     },
     onRevalidatePaymentItem: (request, paymentListId, invoiceId) => {
       const list = requestListFor(request, paymentListId);
@@ -4723,7 +4796,7 @@ export default function App() {
         !requestResourceEditable(request)
         || requestHasPaymentFailureRecovery(request)
         || !list
-        || (requestApprovalHasScopedReturnItems(request.approval) && !scopedPaymentListReturn)
+        || (requestHasScopedEditRestriction(request) && !scopedPaymentListReturn)
       ) return;
       setPaymentLists((current) => current.map((candidate) => candidate.paymentListId === paymentListId
         ? beginPaymentListEdit(candidate)
@@ -4741,7 +4814,7 @@ export default function App() {
         || requestHasPaymentFailureRecovery(request)
         || !list
         || list.status !== 'draft'
-        || (requestApprovalHasScopedReturnItems(request.approval) && !scopedPaymentListReturn)
+        || (requestHasScopedEditRestriction(request) && !scopedPaymentListReturn)
       ) return;
       const expectedInvoiceIds = paymentRequestInvoiceIds(request.creatorLinks ?? []);
       const validation = await mockValidatePaymentList({
@@ -4819,7 +4892,7 @@ export default function App() {
   };
 
   const createBatch = (submission: MockBatchSubmission) => {
-    const selected = payouts.filter((payout) => (
+    const selected = batchReadyPayouts.filter((payout) => (
       submission.items.some((item) => item.payoutId === payout.id)
     ));
     const ineligible = selected.filter((payout) => (
@@ -4831,7 +4904,14 @@ export default function App() {
     }
     const retryItems = selected.filter(isPaymentFailureRetryReady);
     if (retryItems.length > 0 && retryItems.length !== selected.length) {
-      notify('无法创建付款批次', '首次付款和重新付款需要分别创建付款批次及付款单。');
+      notify('无法创建付款批次', '正常付款和重新付款需要分别创建付款批次。');
+      return;
+    }
+    const retrySourceBatchIds = new Set(retryItems
+      .map((payout) => payout.currentPaymentAttempt?.paymentBatchId)
+      .filter((batchId): batchId is PaymentBatchId => Boolean(batchId)));
+    if (retrySourceBatchIds.size > 1) {
+      notify('无法创建付款批次', '重新付款的明细必须来自同一个失败批次。');
       return;
     }
     const execution = executeMockBatchSubmission(submission);
@@ -4840,47 +4920,25 @@ export default function App() {
       .toISOString()
       .slice(0, 16);
     const isRetryBatch = retryItems.length > 0;
-    let retryPaymentOrderCode: string | undefined;
-    let retryPaymentCodesByPayoutId = new Map<string, string>();
-    try {
-      retryPaymentOrderCode = isRetryBatch ? nextPaymentBusinessCode('PAY', [
-        ...paymentLists.map((item) => item.paymentListCode),
-        ...paymentBatches.map((item) => item.paymentOrderCode),
-      ]) : undefined;
-      if (isRetryBatch) {
-        const reservedPaymentCodes = [
-          ...payouts.flatMap((payout) => [
-            payout.paymentCode,
-            payout.currentPaymentAttempt?.paymentCode,
-            ...(payout.paymentAttempts ?? []).map((attempt) => attempt.paymentCode),
-          ]),
-          ...paymentBatches.flatMap((batch) => batch.items.map((item) => item.paymentCode)),
-        ];
-        const retryPaymentCodes = reservePaymentBusinessCodes(
-          'PMT',
-          reservedPaymentCodes,
-          retryItems.length,
-          now,
-        );
-        retryPaymentCodesByPayoutId = new Map(retryItems.map((payout, index) => (
-          [payout.id, retryPaymentCodes[index]]
-        )));
-      }
-    } catch (error) {
-      notify('无法创建付款批次', error instanceof Error ? error.message : '付款编号生成失败。');
-      return;
-    }
+    const retrySourceBatchId = retryItems[0]?.currentPaymentAttempt?.paymentBatchId;
+    const retrySourceBatch = isRetryBatch
+      ? paymentBatches.find((batch) => (
+          batch.purpose !== 'REVERSAL'
+          && batch.paymentBatchId === retrySourceBatchId
+        )) ?? paymentBatches.find((batch) => (
+          batch.purpose !== 'REVERSAL'
+          && retryItems.some((payout) => batch.items.some((item) => item.payoutId === payout.id))
+        ))
+      : undefined;
+    const retryPaymentOrderCode = retrySourceBatch?.paymentOrderCode
+      ?? retryItems[0]?.currentPaymentAttempt?.paymentOrderCode;
     const retryAttemptNumber = isRetryBatch
       ? Math.max(...retryItems.map((payout) => payout.currentPaymentAttempt?.attemptNumber ?? 1)) + 1
       : undefined;
-    const selectedForBatch = selected.map((payout) => {
-      const paymentCode = retryPaymentCodesByPayoutId.get(payout.id);
-      return paymentCode ? { ...payout, paymentCode } : payout;
-    });
     let batchRecord: ReturnType<typeof createPaymentBatchRecord>;
     try {
       batchRecord = createPaymentBatchRecord({
-        payouts: selectedForBatch,
+        payouts: selected,
         requests: requestProjects,
         generatedInvoices,
         paymentLists,
@@ -4892,6 +4950,9 @@ export default function App() {
         sourceCurrency: execution.sourceCurrency,
         payer: currentUser.name,
         paidAt: localPaymentTime,
+        purpose: isRetryBatch ? 'RETRY' : 'NORMAL',
+        sourcePaymentBatchId: retrySourceBatch?.paymentBatchId,
+        sourcePaymentBatchCode: retrySourceBatch?.paymentBatchCode,
         status: '付款处理中',
         lifecycle: execution.lifecycle,
         itemStatus: '付款处理中',
@@ -4906,16 +4967,17 @@ export default function App() {
       return;
     }
     setPayouts((current) => current.map((payout) => {
-      if (!selected.some((item) => item.id === payout.id)) return payout;
+      const submittedPayout = selected.find((item) => item.id === payout.id);
+      if (!submittedPayout) return payout;
       const batchItem = batchRecord.items.find((item) => item.payoutId === payout.id)!;
-      return isPaymentFailureRetryReady(payout)
+      return isPaymentFailureRetryReady(submittedPayout)
         ? markPaymentFailureRetrySubmitted(
-            payout,
+            submittedPayout,
             execution.batchId,
             execution.batchCode,
             localPaymentTime,
             {
-              paymentCode: batchItem.paymentCode || retryPaymentCodesByPayoutId.get(payout.id)!,
+              paymentCode: batchItem.paymentCode || submittedPayout.paymentCode || '付款编号待补全',
               paymentOrderCode: paymentBatchItemOrderCode(batchItem),
               sourcePaymentOrderCode: paymentBatchItemSourceOrderCode(batchItem),
               attemptNumber: paymentBatchItemAttemptNumber(batchItem),
@@ -5018,19 +5080,15 @@ export default function App() {
     }
   };
   const saveManualCooperationProject = (
-    draft: Pick<CooperationProjectDirectoryRecord, 'name' | 'projectType' | 'projectStatus' | 'initiatorName' | 'startDate' | 'endDate'>,
+    draft: ManualCooperationProjectInput,
     editingId?: string,
   ) => {
-    const duplicate = projectDirectory.records.find((record) => record.id !== editingId
-      && record.availability === 'ACTIVE' && record.name.trim().toLowerCase() === draft.name.trim().toLowerCase());
+    const duplicate = duplicateActiveCooperationProjectFor(projectDirectory.records, draft, editingId);
     if (duplicate && !window.confirm(`已存在同名可用项目“${duplicate.name}”。仍要作为独立项目保存吗？`)) return '已取消保存，同名项目不会自动合并。';
     const occurredAt = nowIso();
     const previous = editingId ? projectDirectory.records.find((record) => record.id === editingId && record.source === 'MANUAL') : undefined;
-    const record: CooperationProjectDirectoryRecord = {
-      ...(previous ?? { id: createPrototypeId('project'), projectCode: createPrototypeCode('PRJ'), source: 'MANUAL' as const, availability: 'ACTIVE' as const }),
-      ...draft,
-      localUpdatedAt: occurredAt,
-    };
+    const identity = previous ?? { id: createPrototypeId('project'), projectCode: createPrototypeCode('PRJ') };
+    const record = manualCooperationProjectRecordFor({ input: draft, identity, previous, updatedAt: occurredAt });
     setProjectDirectory((current) => ({ ...current, records: previous
       ? current.records.map((item) => item.id === record.id ? record : item)
       : [record, ...current.records] }));
@@ -5040,35 +5098,24 @@ export default function App() {
     notify(previous ? '项目已更新' : '项目已添加', `${record.projectCode} 已保存。`);
     return undefined;
   };
-  const disableManualCooperationProject = (id: string) => {
-    if (!window.confirm('停用后该项目不再进入新请款候选，历史关联仍保留。确认停用？')) return;
+  const updateCooperationProjectAvailability = (id: string, availability: 'ACTIVE' | 'DISABLED') => {
+    if (availability === 'DISABLED' && !window.confirm('停用后该项目不再进入新请款候选，历史关联仍保留。确认停用？')) return;
     const occurredAt = nowIso();
-    setProjectDirectory((current) => ({ ...current, records: current.records.map((record) => record.id === id ? { ...record, availability: 'DISABLED', localUpdatedAt: occurredAt } : record) }));
-    setProjects((current) => current.map((project) => String(project.cooperationProjectId ?? project.id) === id ? { ...project, availability: 'DISABLED', localUpdatedAt: occurredAt } : project));
-    notify('项目已停用', '历史请款、合同和 Invoice 关联不受影响。');
-  };
-  const updateCooperationProjectStatus = (id: string, projectStatus: 'ACTIVE' | 'ARCHIVED') => {
-    const occurredAt = nowIso();
-    setProjectDirectory((current) => ({
-      ...current,
-      records: current.records.map((record) => record.id === id ? {
-        ...record,
-        projectStatus,
-        localUpdatedAt: occurredAt,
-        ...(record.source === 'FEISHU' ? { statusOverriddenAt: occurredAt } : {}),
-      } : record),
-    }));
-    setProjects((current) => current.map((project) => String(project.cooperationProjectId ?? project.id) === id ? {
-      ...project,
-      status: projectStatus,
+    setProjectDirectory((current) => ({ ...current, records: current.records.map((record) => record.id === id ? {
+      ...record,
+      availability,
+      availabilityOverriddenAt: occurredAt,
       localUpdatedAt: occurredAt,
-    } : project));
-    notify('项目状态已更新', `已改为${projectStatus === 'ACTIVE' ? '进行中' : '已归档'}。`);
+    } : record) }));
+    setProjects((current) => current.map((project) => String(project.cooperationProjectId ?? project.id) === id ? { ...project, availability, localUpdatedAt: occurredAt } : project));
+    notify(availability === 'ACTIVE' ? '项目已设为可用' : '项目已停用', availability === 'ACTIVE'
+      ? '该项目已恢复进入新请款的关联项目候选。'
+      : '历史请款、合同和 Invoice 关联不受影响。');
   };
   const manageableCooperationProjects = projects.filter((project) => (
     canManageCooperationProjectFor(currentUser, project)
   ));
-  const batchReadyPayouts = payouts
+  const batchReadyPayouts = selectBatchWizardPayouts(payouts
     .filter((payout) => isPayoutEligibleForBatch(payout) || isPaymentFailureRetryCandidate(payout))
     .map((payout) => {
       const invoice = generatedInvoices.find((record) => record.sourcePayoutId === payout.id);
@@ -5077,7 +5124,7 @@ export default function App() {
         : undefined;
       return paymentItem ? payoutWithPaymentListSnapshot(payout, paymentItem) : payout;
     })
-    .sort((left, right) => Number(isPaymentFailureRetryCandidate(right)) - Number(isPaymentFailureRetryCandidate(left)));
+    .sort((left, right) => Number(isPaymentFailureRetryCandidate(right)) - Number(isPaymentFailureRetryCandidate(left))));
   const paymentDetailRequest = paymentDetailRequestId
     ? requestProjects.find((request) => request.id === paymentDetailRequestId)
     : undefined;
@@ -5146,8 +5193,7 @@ export default function App() {
           onAllowlistChange={(typeAllowlist) => setProjectDirectory((current) => ({ ...current, typeAllowlist }))}
           onSync={() => { void synchronizeCooperationProjects(); }}
           onSaveManual={saveManualCooperationProject}
-          onDisable={disableManualCooperationProject}
-          onProjectStatusChange={updateCooperationProjectStatus}
+          onAvailabilityChange={updateCooperationProjectAvailability}
         />
       );
       break;
@@ -5358,6 +5404,7 @@ export default function App() {
           contracts={contracts}
           invoiceBillingSettings={invoiceBillingSettings}
           projects={projects}
+          creationProjects={manageableCooperationProjects}
           generatedInvoices={generatedInvoices}
           creationDrafts={accountInvoiceCreationDrafts}
           externalInvoices={externalInvoices}
@@ -5402,6 +5449,8 @@ export default function App() {
           onSubmitExternalInvoice={submitExternalInvoiceTask}
           onReviewExternalInvoiceField={reviewExternalInvoiceTaskField}
           onReturnExternalInvoice={returnExternalInvoiceTask}
+          onSaveExternalInvoiceContractMatch={saveExternalInvoiceContractMatchTask}
+          onConfirmExternalInvoiceSignature={confirmExternalInvoiceSignatureTask}
           onApproveExternalInvoice={approveExternalInvoiceTask}
           canCreateInvoice={canGenerateInvoices}
           canManageInvoice={canGenerateInvoices}
@@ -5597,6 +5646,7 @@ export default function App() {
       pageContent = (
         <BatchWizardPage
           payouts={batchReadyPayouts}
+          requests={requestProjects}
           generatedInvoices={generatedInvoices}
           paymentLists={paymentLists}
           creators={creators}
@@ -5850,9 +5900,7 @@ export default function App() {
           onAdvance={advancePayout}
           onPaymentFailed={failPayout}
           onReturn={returnPayout}
-          onConfirmAccountChange={confirmPaymentFailureExecutionAccount}
           canExecutePayout={canExecutePayouts}
-          canConfirmAccountChange={['finance', 'admin', 'owner'].includes(currentUser.roleKey)}
           contract={selectedPayoutContract}
           onViewContract={openContractFromPayout}
           onViewInvoice={openInvoiceFromPayout}

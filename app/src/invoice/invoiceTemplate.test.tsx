@@ -74,6 +74,7 @@ describe('Invoice template project visibility', () => {
     });
     expect(html).toContain('Date of Invoice:');
     expect(html).toContain('Creator Name');
+    expect(html).toContain('Real Name / Company Name:');
     expect(html).toContain('<b>Date:</b> 14 Aug 2026');
     expect(html).toContain('Currency:');
     expect(html).not.toContain('Project:');
@@ -110,6 +111,7 @@ describe('Invoice template project visibility', () => {
 
     expect(documentXml).toContain('Date of Invoice');
     expect(documentXml).toContain('Creator Name');
+    expect(documentXml).toContain('Real Name / Company Name');
     expect(documentXml).toContain('Date');
     expect(documentXml).toContain('14 Aug 2026');
     expect(documentXml).toContain('Currency');
@@ -138,6 +140,7 @@ describe('Invoice template project visibility', () => {
 
     expect(text).toContain('Date of Invoice:');
     expect(text).toContain('Creator Name');
+    expect(text).toContain('Real Name / Company Name');
     expect(text).toContain('Date:');
     expect(text).toContain('14 Aug 2026');
     expect(text).toContain('Currency:');

@@ -1,4 +1,4 @@
-import type { ContractRecord } from '../contracts';
+import { isConfirmedContract, type ContractRecord } from '../contracts';
 import { accountDisplayValue } from '../accountPresentation';
 import {
   createPrototypeId,
@@ -20,6 +20,7 @@ import type {
   InvoiceCurrency,
   InvoiceDocumentModel,
   InvoiceEntity,
+  InvoiceContractMatchIssue,
   InvoiceNotificationDelivery,
   DocumentPayoutSnapshot,
   Payout,
@@ -27,6 +28,10 @@ import type {
 import { formatInvoiceNumber, invoiceDatePart, nextInvoiceNumber } from './invoiceUtils';
 import { createInvoicePaymentFreezeSnapshot } from '../invoicePaymentFreeze';
 import { createInvoiceNotificationDeliveries } from './invoiceNotification';
+import {
+  createInvoiceContractMatchReview,
+  evaluateInvoiceContractMatch,
+} from './invoiceContractMatching';
 
 export type ExternalInvoiceCollectionStatus =
   | 'DRAFT'
@@ -40,7 +45,7 @@ export type ExternalInvoiceCollectionStatus =
   | 'RECOGNITION_FAILED'
   | 'CANCELLED';
 
-export type ExternalInvoiceListStatus = '待发布' | '待上传' | '待重新上传' | '待审核' | '已通过';
+export type ExternalInvoiceListStatus = '待发布' | '待上传' | '待重新上传' | '待审核' | '待发起请款';
 
 export type ExternalInvoiceScenario =
   | 'NORMAL'
@@ -76,8 +81,8 @@ export const EXTERNAL_INVOICE_REVIEW_FIELD_ORDER = EXTERNAL_INVOICE_FIELD_ORDER.
 export const EXTERNAL_INVOICE_FIELD_LABEL: Record<ExternalInvoiceFieldKey, string> = {
   SOURCE_INVOICE_NUMBER: '票面 Invoice Number',
   INVOICE_DATE: 'Date of Invoice',
-  PUBLISHER: '开票主体',
-  ADVERTISER: '付款主体',
+  PUBLISHER: 'From',
+  ADVERTISER: 'Bill To',
   DESCRIPTION: 'Description',
   AMOUNT: '总金额',
   CURRENCY: '币种',
@@ -172,6 +177,8 @@ export type ExternalInvoiceReviewAction =
   | 'FILE_UPLOADED'
   | 'RECOGNITION_CORRECTED'
   | 'FIELD_REVIEWED'
+  | 'CONTRACT_MATCH_REVIEWED'
+  | 'INVOICE_SIGNATURE_CONFIRMED'
   | 'SUBMITTED'
   | 'RETURNED_FOR_CORRECTION'
   | 'RETURNED_FOR_REUPLOAD'
@@ -198,18 +205,41 @@ export type ExternalInvoiceExpectedValues = {
   dueDate: string;
 };
 
+export type ExternalInvoiceContractMatchStage = 'CREATION' | 'MEDIA_REVIEW';
+
+export type ExternalInvoiceContractMatchReview = {
+  reviewId: string;
+  stage: ExternalInvoiceContractMatchStage;
+  fileVersionId?: string;
+  fingerprint: string;
+  result: 'MATCHED' | 'NOT_APPLICABLE' | 'BLOCKED' | 'APPROVED_WITH_REASON' | 'REASON_REQUIRED';
+  issues: InvoiceContractMatchIssue[];
+  reason?: string;
+  reviewedBy: ExternalInvoiceActor;
+  reviewedAt: string;
+};
+
+export type ExternalInvoiceSignatureConfirmation = {
+  confirmationId: string;
+  fileVersionId: string;
+  confirmedBy: ExternalInvoiceActor;
+  confirmedAt: string;
+};
+
 export type ExternalInvoiceCollectionInput = {
   projectId: ProjectId;
   projectName: string;
   engagementId: EngagementId;
   creatorId: CreatorId;
   creatorName: string;
+  creatorLegalName: string;
   creatorHandle: string;
   creatorSocialAccountId?: string;
   creatorPlatform?: string;
   contractIds: ContractId[];
-  presetPayoutAccountId: string;
-  presetPayoutAccountSnapshot: DocumentPayoutSnapshot;
+  presetPayoutAccountId?: string;
+  presetPayoutAccountSnapshot?: DocumentPayoutSnapshot;
+  contractMatchReason?: string;
   expected: ExternalInvoiceExpectedValues;
 };
 
@@ -223,12 +253,13 @@ export type ExternalInvoiceCollectionRecord = {
   engagementId: EngagementId;
   creatorId: CreatorId;
   creatorName: string;
+  creatorLegalNameSnapshot: string;
   creatorHandle: string;
   creatorSocialAccountId?: string;
   creatorPlatform?: string;
   contractIds: ContractId[];
-  presetPayoutAccountId: string;
-  presetPayoutAccountSnapshot: DocumentPayoutSnapshot;
+  presetPayoutAccountId?: string;
+  presetPayoutAccountSnapshot?: DocumentPayoutSnapshot;
   expected: ExternalInvoiceExpectedValues;
   status: ExternalInvoiceCollectionStatus;
   selectedPayoutAccountId?: string;
@@ -236,6 +267,8 @@ export type ExternalInvoiceCollectionRecord = {
   recognitionSnapshots: ExternalInvoiceRecognitionSnapshot[];
   confirmedSnapshots: ExternalInvoiceConfirmedSnapshot[];
   mediaFieldReviews: ExternalInvoiceMediaFieldReview[];
+  contractMatchReviews: ExternalInvoiceContractMatchReview[];
+  invoiceSignatureConfirmations: ExternalInvoiceSignatureConfirmation[];
   reviewHistory: ExternalInvoiceReviewEvent[];
   createdBy: ExternalInvoiceActor;
   createdAt: string;
@@ -276,7 +309,7 @@ export const externalInvoiceListStatus = (
     return '待重新上传';
   }
   if (status === 'WAITING_MEDIA_REVIEW') return '待审核';
-  if (status === 'APPROVED') return '已通过';
+  if (status === 'APPROVED') return '待发起请款';
   return '待上传';
 };
 
@@ -306,36 +339,259 @@ export const currentExternalInvoiceFieldReview = (
   ));
 };
 
+const emptyPayoutSnapshot = (): DocumentPayoutSnapshot => ({
+  bankCountry: '',
+  accountName: '',
+  accountType: '',
+  swiftCode: '',
+  accountNumber: '',
+  iban: '',
+  beneficiaryType: '',
+  bankName: '',
+  bankStreetAddress: '',
+  bankCity: '',
+  bankState: '',
+  bankPostalCode: '',
+  intermediaryBankCountry: '',
+  intermediaryBankCode: '',
+  transferRemarks: '',
+  paypalUsername: '',
+  paypalEmail: '',
+});
+
+const externalInvoiceContractModel = ({
+  record,
+  creator,
+  account,
+}: {
+  record: Pick<ExternalInvoiceCollectionRecord,
+    | 'invoiceNumber'
+    | 'creatorHandle'
+    | 'creatorSocialAccountId'
+    | 'creatorPlatform'
+    | 'creatorName'
+    | 'creatorId'
+    | 'engagementId'
+    | 'projectId'
+    | 'projectName'
+    | 'contractIds'
+    | 'expected'
+    | 'creatorLegalNameSnapshot'> & Partial<Pick<ExternalInvoiceCollectionRecord, 'confirmedSnapshots'>>;
+  creator?: CreatorProfile;
+  account?: CreatorPayoutAccount;
+}): InvoiceDocumentModel => {
+  const confirmation = record.confirmedSnapshots?.[record.confirmedSnapshots.length - 1];
+  const payment = account
+    ? createDocumentPayoutSnapshot(account, record.creatorId)
+    : emptyPayoutSnapshot();
+  const amount = Number(confirmation?.values.AMOUNT ?? record.expected.amount);
+  return {
+    invoiceNumber: record.invoiceNumber ?? '',
+    invoiceDate: confirmation?.values.INVOICE_DATE ?? '',
+    billTo: {
+      ...record.expected.billTo,
+      name: confirmation?.values.ADVERTISER ?? record.expected.billTo.name,
+    },
+    creatorHandle: record.creatorHandle,
+    creatorSocialAccountId: record.creatorSocialAccountId,
+    creatorPlatform: record.creatorPlatform,
+    creatorName: record.creatorName,
+    creatorId: record.creatorId,
+    engagementId: record.engagementId,
+    projectId: record.projectId,
+    cooperationProjectId: record.projectId,
+    projectName: record.projectName,
+    contractIds: [...record.contractIds],
+    from: {
+      ...(creator?.contact ?? { legalName: '', address: '', phone: '', email: '' }),
+      legalName: confirmation?.values.PUBLISHER
+        ?? creator?.contact.legalName
+        ?? record.creatorLegalNameSnapshot,
+    },
+    currency: (confirmation?.values.CURRENCY ?? record.expected.currency) as InvoiceCurrency,
+    items: [{
+      id: 'external-contract-match-line',
+      description: confirmation?.values.DESCRIPTION ?? record.expected.description,
+      unitPrice: Number.isFinite(amount) ? amount : 0,
+      quantity: 1,
+      lineTotal: Number.isFinite(amount) ? amount : 0,
+    }],
+    payoutAccountId: payment.payoutAccountId,
+    payoutAccountVersion: payment.payoutAccountVersion,
+    payoutProvider: payment.payoutProvider,
+    payoutAccountFingerprint: payment.accountFingerprint,
+    paymentMethod: account?.provider === 'PayPal' ? 'paypal' : 'bank',
+    payment,
+  };
+};
+
+const contractMatchFingerprint = (issues: InvoiceContractMatchIssue[]) => JSON.stringify(
+  issues.map((issue) => ({
+    field: issue.field,
+    severity: issue.severity,
+    contractIds: issue.contractIds,
+    contractValue: issue.contractValue,
+    invoiceValue: issue.invoiceValue,
+  })),
+);
+
+const selectedExternalContracts = (
+  record: Pick<ExternalInvoiceCollectionRecord, 'contractIds'>,
+  contracts: ContractRecord[],
+) => contracts.filter((contract) => (
+  contract.contractId && record.contractIds.includes(contract.contractId)
+));
+
+export const evaluateExternalInvoiceContractMatch = ({
+  record,
+  creator,
+  contracts,
+  reason,
+}: {
+  record: ExternalInvoiceCollectionRecord;
+  creator?: CreatorProfile;
+  contracts: ContractRecord[];
+  reason?: string;
+}): ReturnType<typeof evaluateInvoiceContractMatch> & { fingerprint: string; effectiveReason: string } => {
+  const confirmation = currentExternalInvoiceConfirmation(record);
+  const account = confirmation
+    ? eligibleInvoicePayoutAccounts(creator).find((candidate) => (
+        getPayoutAccountId(candidate) === confirmation.payoutAccountId
+      ))
+    : undefined;
+  const selectedContracts = selectedExternalContracts(record, contracts);
+  const base = evaluateInvoiceContractMatch(
+    selectedContracts,
+    externalInvoiceContractModel({ record, creator, account }),
+    '',
+    { paymentAccountPending: !confirmation },
+  );
+  const fingerprint = contractMatchFingerprint(base.issues);
+  const inheritedReason = [...(record.contractMatchReviews ?? [])].reverse().find((review) => (
+    review.fingerprint === fingerprint && review.reason
+  ))?.reason ?? '';
+  const effectiveReason = reason === undefined ? inheritedReason : reason;
+  return {
+    ...evaluateInvoiceContractMatch(
+      selectedContracts,
+      externalInvoiceContractModel({ record, creator, account }),
+      effectiveReason,
+      { paymentAccountPending: !confirmation },
+    ),
+    fingerprint,
+    effectiveReason,
+  };
+};
+
+export const evaluateExternalInvoiceCreationContractMatch = ({
+  creator,
+  creatorId,
+  creatorHandle,
+  projectId,
+  projectName,
+  engagementId,
+  contractIds,
+  contracts,
+  expected,
+  reason = '',
+}: {
+  creator: CreatorProfile;
+  creatorId: CreatorId;
+  creatorHandle: string;
+  projectId: ProjectId;
+  projectName: string;
+  engagementId: EngagementId;
+  contractIds: ContractId[];
+  contracts: ContractRecord[];
+  expected: ExternalInvoiceExpectedValues;
+  reason?: string;
+}) => evaluateInvoiceContractMatch(
+  contracts.filter((contract) => contract.contractId && contractIds.includes(contract.contractId)),
+  externalInvoiceContractModel({
+    record: {
+      creatorHandle,
+      creatorName: creator.name,
+      creatorLegalNameSnapshot: creator.contact.legalName,
+      creatorId,
+      engagementId,
+      projectId,
+      projectName,
+      contractIds,
+      expected,
+    },
+    creator,
+  }),
+  reason,
+  { paymentAccountPending: true },
+);
+
+const createExternalContractMatchReview = ({
+  record,
+  creator,
+  contracts,
+  reason,
+  stage,
+  actor,
+  reviewedAt,
+}: {
+  record: ExternalInvoiceCollectionRecord;
+  creator?: CreatorProfile;
+  contracts: ContractRecord[];
+  reason?: string;
+  stage: ExternalInvoiceContractMatchStage;
+  actor: ExternalInvoiceActor;
+  reviewedAt: string;
+}): ExternalInvoiceContractMatchReview => {
+  const match = evaluateExternalInvoiceContractMatch({ record, creator, contracts, reason });
+  return {
+    reviewId: createPrototypeId('audit'),
+    stage,
+    fileVersionId: currentExternalInvoiceConfirmation(record)
+      ? record.sourceFileVersions[record.sourceFileVersions.length - 1]?.fileVersionId
+      : undefined,
+    fingerprint: match.fingerprint,
+    result: match.result,
+    issues: match.issues,
+    reason: match.reasonRequiredIssues.length && match.reasonValid
+      ? match.effectiveReason.trim()
+      : undefined,
+    reviewedBy: actor,
+    reviewedAt,
+  };
+};
+
 export const createExternalInvoiceCollection = ({
   projectId,
   projectName,
   engagementId,
   creatorId,
   creatorName,
+  creatorLegalName,
   creatorHandle,
   creatorSocialAccountId,
   creatorPlatform,
   contractIds,
   presetPayoutAccountId,
   presetPayoutAccountSnapshot,
+  contractMatchReason,
   expected,
+  creator,
+  contracts = [],
   actor,
   publish,
   occurredAt = new Date().toISOString(),
 }: ExternalInvoiceCollectionInput & {
   actor: ExternalInvoiceActor;
   publish: boolean;
+  creator?: CreatorProfile;
+  contracts?: ContractRecord[];
   occurredAt?: string;
 }): ExternalInvoiceCollectionRecord => {
-  if (
-    !presetPayoutAccountId
-    || presetPayoutAccountSnapshot.payoutAccountId !== presetPayoutAccountId
-    || !['VALIDATED', 'VERIFIED'].includes(presetPayoutAccountSnapshot.validationStatus ?? '')
-  ) {
-    throw new Error('请先在达人档案中设置默认且已审核的收款账户。');
-  }
+  if (creator && creator.id !== creatorId) throw new Error('达人档案与当前 creatorId 不一致。');
+  const currentCreatorLegalName = creator?.contact.legalName.trim() ?? creatorLegalName.trim();
+  if (!currentCreatorLegalName) throw new Error('达人档案 Real Name / Company Name 待补充。');
   const status: ExternalInvoiceCollectionStatus = publish ? 'WAITING_UPLOAD' : 'DRAFT';
-  return {
+  const record: ExternalInvoiceCollectionRecord = {
     invoiceId: createPrototypeId('invoice') as InvoiceId,
     invoiceType: 'EXTERNAL',
     projectId,
@@ -343,18 +599,23 @@ export const createExternalInvoiceCollection = ({
     engagementId,
     creatorId,
     creatorName,
+    creatorLegalNameSnapshot: currentCreatorLegalName,
     creatorHandle,
     creatorSocialAccountId,
     creatorPlatform,
     contractIds,
-    presetPayoutAccountId,
-    presetPayoutAccountSnapshot: { ...presetPayoutAccountSnapshot },
+    ...(presetPayoutAccountId && presetPayoutAccountSnapshot ? {
+      presetPayoutAccountId,
+      presetPayoutAccountSnapshot: { ...presetPayoutAccountSnapshot },
+    } : {}),
     expected: { ...expected, billTo: { ...expected.billTo } },
     status,
     sourceFileVersions: [],
     recognitionSnapshots: [],
     confirmedSnapshots: [],
     mediaFieldReviews: [],
+    contractMatchReviews: [],
+    invoiceSignatureConfirmations: [],
     reviewHistory: [{
       eventId: createPrototypeId('audit'),
       action: 'CREATED',
@@ -373,14 +634,45 @@ export const createExternalInvoiceCollection = ({
     createdAt: occurredAt,
     publishedAt: publish ? occurredAt : undefined,
   };
+  const selectedContracts = selectedExternalContracts(record, contracts);
+  if (contractIds.length && selectedContracts.length !== contractIds.length) {
+    throw new Error('部分关联合同已失效，请重新选择。');
+  }
+  const match = evaluateExternalInvoiceContractMatch({
+    record,
+    creator,
+    contracts,
+    reason: contractMatchReason,
+  });
+  if (match.blockerIssues.length) throw new Error(match.blockerIssues[0].message);
+  if (match.reasonRequiredIssues.length && !match.reasonValid) {
+    throw new Error('合同存在金额或币种差异，请填写 1–300 字可放行差异说明。');
+  }
+  return {
+    ...record,
+    contractMatchReviews: [createExternalContractMatchReview({
+      record,
+      creator,
+      contracts,
+      reason: contractMatchReason,
+      stage: 'CREATION',
+      actor,
+      reviewedAt: occurredAt,
+    })],
+  };
 };
 
 export const publishExternalInvoiceCollection = (
   record: ExternalInvoiceCollectionRecord,
   actor: ExternalInvoiceActor,
   occurredAt = new Date().toISOString(),
+  creator?: CreatorProfile,
 ): ExternalInvoiceCollectionRecord => {
   if (record.status !== 'DRAFT') throw new Error('只有待发布的外部 Invoice 可以发布。');
+  if (creator && creator.id !== record.creatorId) throw new Error('达人档案与当前 creatorId 不一致。');
+  if (!(creator?.contact.legalName ?? record.creatorLegalNameSnapshot ?? '').trim()) {
+    throw new Error('达人档案 Real Name / Company Name 待补充。');
+  }
   return {
     ...record,
     status: 'WAITING_UPLOAD',
@@ -403,15 +695,9 @@ const payoutAccountSourceValue = (account: CreatorPayoutAccount, creatorId: Crea
     : `${snapshot.accountName} / ${snapshot.iban || snapshot.accountNumber}`;
 };
 
-const payoutAccountPublisher = (account: CreatorPayoutAccount, creatorId: CreatorId) => {
-  const snapshot = createDocumentPayoutSnapshot(account, creatorId);
-  return account.provider === 'PayPal'
-    ? snapshot.paypalUsername
-    : snapshot.accountName;
-};
-
 const sourceValuesForScenario = (
   record: ExternalInvoiceCollectionRecord,
+  creator: CreatorProfile,
   account: CreatorPayoutAccount,
   scenario: ExternalInvoiceScenario,
   invoiceDate: string,
@@ -423,7 +709,7 @@ const sourceValuesForScenario = (
   return {
     SOURCE_INVOICE_NUMBER: `MCN-${invoiceDate.replace(/-/g, '')}-${String(record.sourceFileVersions.length + 1).padStart(2, '0')}`,
     INVOICE_DATE: invoiceDate,
-    PUBLISHER: payoutAccountPublisher(account, record.creatorId),
+    PUBLISHER: creator.contact.legalName,
     ADVERTISER: record.expected.billTo.name,
     DESCRIPTION: record.expected.description,
     AMOUNT: sourceAmount.toFixed(2),
@@ -535,7 +821,8 @@ export const simulateExternalInvoiceUpload = ({
     getPayoutAccountId(candidate) === payoutAccountId
   ));
   if (!account) throw new Error('请选择达人档案中已验证且可用于 Invoice 的收款账户。');
-  const sourceValues = sourceValuesForScenario(record, account, scenario, invoiceDate);
+  if (!creator.contact.legalName.trim()) throw new Error('达人档案 Real Name / Company Name 待补充。');
+  const sourceValues = sourceValuesForScenario(record, creator, account, scenario, invoiceDate);
   const recognitionValues = recognitionValuesForScenario(sourceValues, scenario);
   const version = record.sourceFileVersions.length + 1;
   const fileVersionId = createPrototypeId('item');
@@ -642,7 +929,6 @@ export const correctExternalInvoiceRecognition = (
 export const externalInvoiceValidationIssues = ({
   record,
   creator,
-  contracts = [],
 }: {
   record: ExternalInvoiceCollectionRecord;
   creator?: CreatorProfile;
@@ -675,10 +961,16 @@ export const externalInvoiceValidationIssues = ({
     addMismatch('CURRENCY', record.expected.currency, confirmation.values.CURRENCY, '币种与媒介发起时的预期币种不一致。');
   }
   if (!sameText(confirmation.values.ADVERTISER, record.expected.billTo.name)) {
-    addMismatch('ADVERTISER', record.expected.billTo.name, confirmation.values.ADVERTISER, '付款主体与媒介发起时的付款主体不一致。');
+    addMismatch('ADVERTISER', record.expected.billTo.name, confirmation.values.ADVERTISER, 'Bill To 与发起任务时选择的开票主体名称不一致。');
   }
   if (!sameText(confirmation.values.DESCRIPTION, record.expected.description)) {
     addMismatch('DESCRIPTION', record.expected.description, confirmation.values.DESCRIPTION, '合作内容与媒介发起时的校验基准不一致。');
+  }
+  const creatorLegalName = creator?.contact.legalName.trim() ?? '';
+  if (!creatorLegalName) {
+    addMismatch('PUBLISHER', '达人档案 Real Name / Company Name', confirmation.values.PUBLISHER, '达人档案 Real Name / Company Name 待补充。');
+  } else if (!sameText(confirmation.values.PUBLISHER, creatorLegalName)) {
+    addMismatch('PUBLISHER', creatorLegalName, confirmation.values.PUBLISHER, 'From 与达人档案 Real Name / Company Name 不一致。');
   }
   if (!account) {
     issues.push({
@@ -690,59 +982,136 @@ export const externalInvoiceValidationIssues = ({
       message: '选定账户已失效或不属于当前达人档案。',
     });
   } else {
-    const expectedPublisher = payoutAccountPublisher(account, record.creatorId);
     const expectedAccount = payoutAccountSourceValue(account, record.creatorId);
-    if (!sameText(confirmation.values.PUBLISHER, expectedPublisher)) {
-      addMismatch('PUBLISHER', expectedPublisher, confirmation.values.PUBLISHER, '开票主体与选定收款账户主体不一致。');
-    }
     if (!sameText(confirmation.values.PAYMENT_ACCOUNT, expectedAccount)) {
       addMismatch('PAYMENT_ACCOUNT', expectedAccount, confirmation.values.PAYMENT_ACCOUNT, '票面收款账户与达人选择的账户不一致。');
     }
   }
-
-  const selectedContracts = contracts.filter((contract) => (
-    contract.contractId && record.contractIds.includes(contract.contractId)
-  ));
-  if (account && selectedContracts.some((contract) => {
-    const contractAccountId = contract.payoutAccountId || contract.paymentSnapshot?.payoutAccountId;
-    return Boolean(contractAccountId && contractAccountId !== getPayoutAccountId(account));
-  })) {
-    issues.push({
-      fieldKey: 'PAYMENT_ACCOUNT',
-      label: '合同账户提醒',
-      severity: 'WARNING',
-      expectedValue: selectedContracts.map((contract) => contract.accountName || contract.id).join('；'),
-      actualValue: payoutAccountSourceValue(account, record.creatorId),
-      message: '关联合同的账户信息与达人本次选择不同，请媒介结合原文件确认。',
-    });
-  }
   return issues;
+};
+
+export const currentExternalInvoiceSignatureConfirmation = (
+  record: ExternalInvoiceCollectionRecord,
+) => {
+  const currentFileVersionId = record.sourceFileVersions[record.sourceFileVersions.length - 1]?.fileVersionId;
+  if (!currentFileVersionId) return undefined;
+  return [...(record.invoiceSignatureConfirmations ?? [])].reverse().find((item) => (
+    item.fileVersionId === currentFileVersionId
+  ));
+};
+
+export const confirmExternalInvoiceSignature = (
+  record: ExternalInvoiceCollectionRecord,
+  actor: ExternalInvoiceActor,
+  occurredAt = new Date().toISOString(),
+): ExternalInvoiceCollectionRecord => {
+  if (record.status !== 'WAITING_MEDIA_REVIEW') {
+    throw new Error('只有待审核的外部 Invoice 可以确认签名。');
+  }
+  const fileVersionId = record.sourceFileVersions[record.sourceFileVersions.length - 1]?.fileVersionId;
+  if (!fileVersionId) throw new Error('当前 Invoice 缺少有效文件版本。');
+  if (currentExternalInvoiceSignatureConfirmation(record)) return record;
+  return {
+    ...record,
+    invoiceSignatureConfirmations: [...(record.invoiceSignatureConfirmations ?? []), {
+      confirmationId: createPrototypeId('audit'),
+      fileVersionId,
+      confirmedBy: actor,
+      confirmedAt: occurredAt,
+    }],
+    reviewHistory: [...record.reviewHistory, {
+      eventId: createPrototypeId('audit'),
+      action: 'INVOICE_SIGNATURE_CONFIRMED',
+      actor,
+      occurredAt,
+      fromStatus: record.status,
+      toStatus: record.status,
+    }],
+  };
+};
+
+export const saveExternalInvoiceContractMatchReview = ({
+  record,
+  creator,
+  contracts,
+  reason,
+  actor,
+  occurredAt = new Date().toISOString(),
+}: {
+  record: ExternalInvoiceCollectionRecord;
+  creator?: CreatorProfile;
+  contracts: ContractRecord[];
+  reason: string;
+  actor: ExternalInvoiceActor;
+  occurredAt?: string;
+}): ExternalInvoiceCollectionRecord => {
+  if (record.status !== 'WAITING_MEDIA_REVIEW') {
+    throw new Error('只有待审核的外部 Invoice 可以保存合同差异说明。');
+  }
+  const match = evaluateExternalInvoiceContractMatch({ record, creator, contracts, reason });
+  if (match.blockerIssues.length) throw new Error(match.blockerIssues[0].message);
+  if (match.reasonRequiredIssues.length && !match.reasonValid) {
+    throw new Error('请填写 1–300 字合同差异说明。');
+  }
+  const review = createExternalContractMatchReview({
+    record,
+    creator,
+    contracts,
+    reason,
+    stage: 'MEDIA_REVIEW',
+    actor,
+    reviewedAt: occurredAt,
+  });
+  return {
+    ...record,
+    contractMatchReviews: [...(record.contractMatchReviews ?? []), review],
+    reviewHistory: [...record.reviewHistory, {
+      eventId: createPrototypeId('audit'),
+      action: 'CONTRACT_MATCH_REVIEWED',
+      actor,
+      occurredAt,
+      reason: review.reason,
+      fromStatus: record.status,
+      toStatus: record.status,
+    }],
+  };
 };
 
 export const externalInvoiceReviewReadiness = ({
   record,
   creator,
   contracts = [],
+  contractMatchReason,
 }: {
   record: ExternalInvoiceCollectionRecord;
   creator?: CreatorProfile;
   contracts?: ContractRecord[];
+  contractMatchReason?: string;
 }): ExternalInvoiceReviewReadiness => {
   const recognition = currentExternalInvoiceRecognition(record);
   const confirmation = currentExternalInvoiceConfirmation(record);
   const validationBlockers = externalInvoiceValidationIssues({ record, creator, contracts })
     .filter((issue) => issue.severity === 'BLOCKER');
-  const selectedContracts = contracts.filter((contract) => (
-    contract.contractId && record.contractIds.includes(contract.contractId)
-  ));
-  const contractSubjectBlockers = confirmation ? selectedContracts.flatMap((contract) => [
-    ...(contract.publisher && !sameText(contract.publisher, confirmation.values.PUBLISHER)
-      ? [`合同 ${contract.id} 的开票主体与 Invoice 不一致`]
+  const selectedContracts = selectedExternalContracts(record, contracts);
+  const missingContractCount = Math.max(0, record.contractIds.length - selectedContracts.length);
+  const contractMatch = evaluateExternalInvoiceContractMatch({
+    record,
+    creator,
+    contracts,
+    reason: contractMatchReason,
+  });
+  const contractMatchBlockers = [
+    ...contractMatch.blockerIssues.map((issue) => `${issue.label}：${issue.message}`),
+    ...(contractMatch.reasonRequiredIssues.length && !contractMatch.reasonValid
+      ? ['合同存在可放行差异，请填写 1–300 字说明']
       : []),
-    ...(contract.advertiser && !sameText(contract.advertiser, confirmation.values.ADVERTISER)
-      ? [`合同 ${contract.id} 的付款主体与 Invoice 不一致`]
-      : []),
-  ]) : [];
+    ...(missingContractCount ? [`${missingContractCount} 份关联合同已失效`] : []),
+  ];
+  const unsignedContracts = selectedContracts.filter((contract) => !isConfirmedContract(contract));
+  const currentFileVersionId = record.sourceFileVersions[record.sourceFileVersions.length - 1]?.fileVersionId;
+  const invoiceSignatureConfirmed = Boolean(currentFileVersionId && (record.invoiceSignatureConfirmations ?? []).some((item) => (
+    item.fileVersionId === currentFileVersionId
+  )));
   const correctedCriticalFields = confirmation?.corrections
     .filter((correction) => (
       correction.evidenceMatched && EXTERNAL_INVOICE_CRITICAL_FIELDS.includes(correction.fieldKey)
@@ -751,7 +1120,6 @@ export const externalInvoiceReviewReadiness = ({
   const pendingCriticalFields = correctedCriticalFields.filter((fieldKey) => (
     currentExternalInvoiceFieldReview(record, fieldKey)?.decision !== 'CONFIRMED_CORRECTION'
   ));
-  const currentFileVersionId = record.sourceFileVersions[record.sourceFileVersions.length - 1]?.fileVersionId;
   const currentFieldReviews = (record.mediaFieldReviews ?? []).filter((review) => (
     review.fileVersionId === currentFileVersionId
   ));
@@ -761,20 +1129,23 @@ export const externalInvoiceReviewReadiness = ({
   const blockers = [
     ...(!recognition || !confirmation ? ['识别结果或达人确认值不完整'] : []),
     ...validationBlockers.map((issue) => `${issue.label}：${issue.message}`),
-    ...contractSubjectBlockers,
     ...pendingCriticalFields.map((fieldKey) => `${EXTERNAL_INVOICE_FIELD_LABEL[fieldKey]}的达人纠正值待确认`),
     ...reviewBlockers,
+    ...contractMatchBlockers,
+    ...unsignedContracts.map((contract) => `合同 ${contract.id} 尚未完成签署`),
+    ...(!invoiceSignatureConfirmed ? ['请确认当前版本 Invoice 已签名'] : []),
     ...(!currentFileVersionId ? ['当前文件版本无效'] : []),
   ];
-  const total = 6;
+  const total = 7;
   const incompleteGroups = [
     !recognition || !confirmation,
-    validationBlockers.some((issue) => issue.fieldKey === 'AMOUNT' || issue.fieldKey === 'CURRENCY'),
+    validationBlockers.some((issue) => ['AMOUNT', 'CURRENCY', 'DESCRIPTION'].includes(issue.fieldKey)),
     validationBlockers.some((issue) => issue.fieldKey === 'PUBLISHER' || issue.fieldKey === 'ADVERTISER')
-      || contractSubjectBlockers.length > 0,
+      || contractMatch.blockerIssues.length > 0,
     validationBlockers.some((issue) => issue.fieldKey === 'PAYMENT_ACCOUNT' || issue.fieldKey === 'PAYOUT_ACCOUNT_STATUS'),
     pendingCriticalFields.length > 0 || reviewBlockers.length > 0,
-    !currentFileVersionId,
+    contractMatchBlockers.length > 0 || unsignedContracts.length > 0,
+    !currentFileVersionId || !invoiceSignatureConfirmed,
   ].filter(Boolean).length;
   return {
     canApprove: record.status === 'WAITING_MEDIA_REVIEW' && blockers.length === 0,
@@ -809,16 +1180,28 @@ export const submitExternalInvoiceForReview = ({
   const blockers = externalInvoiceValidationIssues({ record, creator, contracts })
     .filter((issue) => issue.severity === 'BLOCKER');
   if (blockers.length) throw new Error(blockers[0].message);
+  const contractMatch = evaluateExternalInvoiceContractMatch({ record, creator, contracts: contracts ?? [] });
+  if (contractMatch.blockerIssues.length) throw new Error(contractMatch.blockerIssues[0].message);
   const confirmation = currentExternalInvoiceConfirmation(record)!;
   const sourceInvoiceNumber = confirmation.values.SOURCE_INVOICE_NUMBER.trim();
   const invoiceDate = confirmation.values.INVOICE_DATE;
   const candidateNumber = nextInvoiceNumber(occupiedInvoices, invoiceDate, reservedInvoiceNumbers);
   const submitter = nowActor(actor);
+  const contractMatchReview = createExternalContractMatchReview({
+    record,
+    creator,
+    contracts: contracts ?? [],
+    reason: contractMatch.effectiveReason,
+    stage: 'MEDIA_REVIEW',
+    actor: submitter,
+    reviewedAt: occurredAt,
+  });
   return {
     ...record,
     status: 'WAITING_MEDIA_REVIEW',
     invoiceNumber: candidateNumber,
     sourceInvoiceNumber,
+    contractMatchReviews: [...(record.contractMatchReviews ?? []), contractMatchReview],
     reviewHistory: [...record.reviewHistory, {
       eventId: createPrototypeId('audit'),
       action: 'SUBMITTED',
@@ -863,6 +1246,7 @@ export const buildApprovedExternalInvoice = ({
   contracts = [],
   occupiedInvoices,
   reservedInvoiceNumbers = [],
+  contractMatchReason,
   actor,
   occurredAt = new Date().toISOString(),
 }: {
@@ -872,6 +1256,7 @@ export const buildApprovedExternalInvoice = ({
   occupiedInvoices: GeneratedInvoiceRecord[];
   reservedInvoiceNumbers?: string[];
   reservedSourceInvoiceNumbers?: string[];
+  contractMatchReason?: string;
   actor: ExternalInvoiceActor;
   occurredAt?: string;
 }): {
@@ -880,7 +1265,7 @@ export const buildApprovedExternalInvoice = ({
   payout: Payout;
 } => {
   if (record.status !== 'WAITING_MEDIA_REVIEW') throw new Error('只有待审核的外部 Invoice 可以审核通过。');
-  const readiness = externalInvoiceReviewReadiness({ record, creator, contracts });
+  const readiness = externalInvoiceReviewReadiness({ record, creator, contracts, contractMatchReason });
   if (!readiness.canApprove) throw new Error(readiness.blockers[0] ?? '外部 Invoice 尚未完成复核。');
   const confirmation = currentExternalInvoiceConfirmation(record);
   if (!confirmation) throw new Error('外部 Invoice 缺少达人确认数据。');
@@ -942,6 +1327,12 @@ export const buildApprovedExternalInvoice = ({
     freezeStage: 'EXTERNAL_APPROVED',
     frozenAt: occurredAt,
   });
+  const finalContractMatch = evaluateExternalInvoiceContractMatch({
+    record,
+    creator,
+    contracts,
+    reason: contractMatchReason,
+  });
   const invoice: GeneratedInvoiceRecord = {
     id: invoiceNumber,
     invoiceId: record.invoiceId,
@@ -953,6 +1344,18 @@ export const buildApprovedExternalInvoice = ({
     paymentFreezeSnapshot,
     validationStatus: 'valid',
     version: record.sourceFileVersions.length,
+    contractMatchReviews: [createInvoiceContractMatchReview({
+      contracts: selectedExternalContracts(record, contracts),
+      model: snapshot,
+      version: record.sourceFileVersions.length,
+      reason: finalContractMatch.effectiveReason,
+      actor: {
+        account: actor.account,
+        name: actor.name,
+        role: actor.role,
+      },
+      reviewedAt: occurredAt,
+    })],
   };
   const provider: Payout['provider'] = account.provider;
   const rawAccount = account.provider === 'PayPal'
@@ -989,11 +1392,21 @@ export const buildApprovedExternalInvoice = ({
     invoicePaymentFreezeSnapshot: paymentFreezeSnapshot,
     accent: creator.accent,
   };
+  const finalContractReview = createExternalContractMatchReview({
+    record,
+    creator,
+    contracts,
+    reason: contractMatchReason,
+    stage: 'MEDIA_REVIEW',
+    actor,
+    reviewedAt: occurredAt,
+  });
   const collection: ExternalInvoiceCollectionRecord = {
     ...record,
     invoiceNumber,
     status: 'APPROVED',
     approvedAt: occurredAt,
+    contractMatchReviews: [...(record.contractMatchReviews ?? []), finalContractReview],
     reviewHistory: [...record.reviewHistory, {
       eventId: createPrototypeId('audit'),
       action: 'APPROVED',

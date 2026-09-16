@@ -21,6 +21,7 @@ import {
 import { INITIAL_CREATORS, INITIAL_PROJECTS } from './pages/OperationalPages';
 import { demoAccountName } from './demoCreatorNames';
 import { normalizeLegacyPaymentOrderCode } from './paymentNumbering';
+import { createInvoiceContractMatchReview } from './invoice/invoiceContractMatching';
 import type {
   ContractId,
   CreatorId,
@@ -466,7 +467,7 @@ export const PROJECT_DEMO_CONTRACTS: ContractRecord[] = DEMO_CONTRACT_SPECS.map(
   };
 });
 
-type ContractManagementDemoBucket = 'attention' | 'draft' | 'signature';
+type ContractManagementDemoBucket = 'attention' | 'draft' | 'upload' | 'signature';
 
 type ContractManagementDemoSpec = {
   bucket: ContractManagementDemoBucket;
@@ -516,7 +517,7 @@ const CONTRACT_MANAGEMENT_DEMO_SPECS: ContractManagementDemoSpec[] = [
     title: '多平台推广合作草稿',
   },
   {
-    bucket: 'signature',
+    bucket: 'upload',
     contractId: 'contract_fixture_management_signature_01' as ContractId,
     contractCode: 'CON-20260909-MGT-S01',
     ioNumber: 'IO-20260909-MGT-S01',
@@ -525,7 +526,7 @@ const CONTRACT_MANAGEMENT_DEMO_SPECS: ContractManagementDemoSpec[] = [
     title: 'Instagram 图文合作协议',
   },
   {
-    bucket: 'signature',
+    bucket: 'upload',
     contractId: 'contract_fixture_management_signature_02' as ContractId,
     contractCode: 'CON-20260909-MGT-S02',
     ioNumber: 'IO-20260909-MGT-S02',
@@ -533,11 +534,21 @@ const CONTRACT_MANAGEMENT_DEMO_SPECS: ContractManagementDemoSpec[] = [
     amount: 3300,
     title: 'Reels 内容制作协议',
   },
+  {
+    bucket: 'signature',
+    contractId: 'contract_fixture_management_sent_signature_01' as ContractId,
+    contractCode: 'CON-20260915-MGT-S01',
+    ioNumber: 'IO-20260915-MGT-S01',
+    creatorIndex: 6,
+    amount: 3000,
+    title: 'YouTube 视频合作签署协议',
+  },
 ];
 
 const CONTRACT_MANAGEMENT_DEMO_DATE = '2026-09-09';
 const CONTRACT_MANAGEMENT_DEMO_END_DATE = '2027-12-31';
 const CONTRACT_MANAGEMENT_DEMO_DOCUMENT_URL = '/contracts/26-kol-standard-terms-template.pdf';
+const CONTRACT_MANAGEMENT_DEMO_SIGNATURE_SENT_AT = '2026-09-15T02:30:00.000Z';
 
 const contractManagementGenerationModel = (
   spec: ContractManagementDemoSpec,
@@ -628,6 +639,26 @@ export const CONTRACT_MANAGEMENT_DEMO_CONTRACTS: ContractRecord[] = CONTRACT_MAN
   }
 
   if (spec.bucket === 'signature') {
+    return {
+      ...generated,
+      documentNote: '合同识别信息已确认并发送给达人，当前等待达人完成签署。',
+      signed: false,
+      status: '待签署',
+      updated: CONTRACT_MANAGEMENT_DEMO_SIGNATURE_SENT_AT.slice(0, 10),
+      lifecycle: 'SENT_FOR_SIGNATURE',
+      extractionStage: 'applied',
+      sentForSignatureAt: CONTRACT_MANAGEMENT_DEMO_SIGNATURE_SENT_AT,
+      issues: [{
+        id: 'signature',
+        label: '等待达人签署',
+        description: '合同已发送给 C 端达人，完成签署前不能参与付款流程。',
+        severity: 'blocker',
+        source: '达人签署',
+      }],
+    };
+  }
+
+  if (spec.bucket === 'upload') {
     return {
       ...generated,
       status: '待回传',
@@ -871,6 +902,31 @@ const createInvoiceModel = (
 export const PROJECT_DEMO_INVOICES: GeneratedInvoiceRecord[] = demoReferences.map((reference, index) => {
   const creator = creatorForReference(reference.creatorId);
   const snapshot = createInvoiceModel(creator, reference, index);
+  const selectedContracts = PROJECT_DEMO_CONTRACTS.filter((contract) => (
+    Boolean(contract.contractId && snapshot.contractIds?.includes(contract.contractId))
+  ));
+  const initialContractMatchReview = createInvoiceContractMatchReview({
+    contracts: selectedContracts,
+    model: snapshot,
+    version: 1,
+    actor: { account: 'fixture.media', name: '原型媒介', role: '媒介账号' },
+    reviewedAt: DEMO_TIMESTAMP,
+    historicalMigration: true,
+  });
+  const contractMatchReview = initialContractMatchReview.result === 'REASON_REQUIRED'
+    ? createInvoiceContractMatchReview({
+        contracts: selectedContracts,
+        model: snapshot,
+        version: 1,
+        reason: '合同冻结资料与 Invoice 当前结算资料存在历史快照差异，已按本次实际结算信息复核。',
+        actor: { account: 'fixture.media', name: '原型媒介', role: '媒介账号' },
+        reviewedAt: DEMO_TIMESTAMP,
+        historicalMigration: true,
+      })
+    : initialContractMatchReview;
+  if (contractMatchReview.result === 'BLOCKED' || contractMatchReview.result === 'REASON_REQUIRED') {
+    throw new Error(`Invoice ${snapshot.invoiceNumber} 的合同匹配演示数据不完整`);
+  }
 
   return {
     id: snapshot.invoiceNumber,
@@ -881,6 +937,7 @@ export const PROJECT_DEMO_INVOICES: GeneratedInvoiceRecord[] = demoReferences.ma
     snapshot,
     validationStatus: 'valid',
     version: 1,
+    contractMatchReviews: [contractMatchReview],
   };
 });
 
@@ -1110,7 +1167,10 @@ const createPrototypeInvoice = (
   creatorIndex: number,
 ): GeneratedInvoiceRecord => {
   const creator = creatorForReference(reference.creatorId);
-  const account = prototypePaymentAccount(creator);
+  const account = project.id === 'PRJ-260801-07' && creatorIndex === 1
+    ? eligibleInvoicePayoutAccounts(creator).find((candidate) => candidate.provider === 'PayPal')
+      ?? prototypePaymentAccount(creator)
+    : prototypePaymentAccount(creator);
   const payment = createDocumentPayoutSnapshot(account, creator.id);
   const provider = account?.provider === 'PayPal' ? 'PayPal' : 'Airwallex';
   const amount = prototypeInvoiceAmounts.get(reference.engagementId) ?? 0;
@@ -1176,6 +1236,7 @@ const createRequestInvoiceAssociationFixture = ({
   description,
   generatedAt,
   contractIds,
+  contractMatchReason,
 }: {
   source: GeneratedInvoiceRecord;
   invoiceId: InvoiceId;
@@ -1185,17 +1246,9 @@ const createRequestInvoiceAssociationFixture = ({
   description: string;
   generatedAt: string;
   contractIds?: ContractId[];
-}): GeneratedInvoiceRecord => ({
-  ...source,
-  id: invoiceNumber,
-  invoiceId,
-  sourcePayoutId,
-  status: '已通过',
-  generatedAt,
-  validationStatus: 'valid',
-  version: 1,
-  revisions: undefined,
-  snapshot: {
+  contractMatchReason?: string;
+}): GeneratedInvoiceRecord => {
+  const snapshot: InvoiceDocumentModel = {
     ...source.snapshot,
     invoiceNumber,
     invoiceDate: generatedAt.slice(0, 10),
@@ -1207,8 +1260,39 @@ const createRequestInvoiceAssociationFixture = ({
       quantity: 1,
       lineTotal: amount,
     }],
-  },
-});
+  };
+  const selectedContractIds = new Set(snapshot.contractIds ?? []);
+  const selectedContracts = [
+    ...PROJECT_DEMO_CONTRACTS,
+    ...REQUEST_CONTRACT_ASSOCIATION_FIXTURES,
+  ].filter((contract) => Boolean(contract.contractId && selectedContractIds.has(contract.contractId)));
+  const contractMatchReview = createInvoiceContractMatchReview({
+    contracts: selectedContracts,
+    model: snapshot,
+    version: 1,
+    reason: contractMatchReason,
+    actor: { account: 'fixture.media', name: '原型媒介', role: '媒介账号' },
+    reviewedAt: generatedAt,
+    historicalMigration: true,
+  });
+  if (contractMatchReview.result === 'BLOCKED' || contractMatchReview.result === 'REASON_REQUIRED') {
+    throw new Error(`关联 Invoice ${invoiceNumber} 缺少有效合同差异说明或存在主体阻断`);
+  }
+
+  return {
+    ...source,
+    id: invoiceNumber,
+    invoiceId,
+    sourcePayoutId,
+    status: '已通过',
+    generatedAt,
+    validationStatus: 'valid',
+    version: 1,
+    revisions: undefined,
+    snapshot,
+    contractMatchReviews: [contractMatchReview],
+  };
+};
 
 const associationInvoiceSourceFor = (projectId: ProjectId, creatorId: CreatorId) => (
   ALL_PROJECT_PROTOTYPE_INVOICES.find((invoice) => (
@@ -1236,6 +1320,7 @@ export const REQUEST_INVOICE_ASSOCIATION_FIXTURES: GeneratedInvoiceRecord[] = [
     amount: 1250,
     description: '二次发布素材授权服务费（合成演示数据）',
     generatedAt: '2026-08-06T09:20:00.000Z',
+    contractMatchReason: '本次 Invoice 仅结算二次发布素材授权，金额低于关联合同整体金额。',
   }),
   createRequestInvoiceAssociationFixture({
     source: associationInvoiceSources.yuki!,
@@ -1246,6 +1331,7 @@ export const REQUEST_INVOICE_ASSOCIATION_FIXTURES: GeneratedInvoiceRecord[] = [
     description: '追加短视频内容服务费（合成演示数据）',
     generatedAt: '2026-08-06T10:05:00.000Z',
     contractIds: ['contract_fixture_301164_06' as ContractId],
+    contractMatchReason: '本次 Invoice 仅结算追加短视频内容，金额低于关联合同整体金额。',
   }),
   createRequestInvoiceAssociationFixture({
     source: associationInvoiceSources.sara!,

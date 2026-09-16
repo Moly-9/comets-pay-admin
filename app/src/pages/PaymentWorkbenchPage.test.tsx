@@ -102,6 +102,28 @@ describe('PaymentWorkbenchPage currency overview', () => {
     expect(html.includes('aria-label="查看本月已付款币种详情"')).toBe(paidOverview.length > 4);
   });
 
+  it('uses attempt debits minus confirmed refunds for total expenditure', () => {
+    const scenario = applyPaymentBatchPrototypeScenario({
+      payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
+      requests: INITIAL_COMPLETE_REQUEST_RESOURCES.requests,
+      generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+      paymentLists: INITIAL_COMPLETE_REQUEST_RESOURCES.paymentLists,
+    });
+    const paidRows = buildPaymentProjectRows({
+      tab: 'paid',
+      payouts: scenario.payouts,
+      requests: scenario.requests,
+      generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+    });
+    const retryRow = paidRows.find((row) => row.requestCode === 'REQ-202607-000011');
+
+    expect(retryRow?.actualPaidTotals).toContainEqual({
+      currency: 'HKD',
+      amount: 76_623.48,
+      count: 5,
+    });
+  });
+
   it('maps every supported currency to a flag asset for the detail list', () => {
     expect(CURRENCY_FLAG_PATHS).toEqual({
       USD: '/currency-flags/us.svg',
@@ -142,6 +164,8 @@ describe('PaymentWorkbenchPage currency overview', () => {
     expect(html).toContain('>EUR\u00a0200<');
     expect(html).toContain('>GBP\u00a0300<');
     expect(html).toContain('>HKD\u00a0400<');
+    expect(html).toContain('USD 100 ｜ EUR 200 ｜ GBP 300 ｜ HKD 400');
+    expect(html).not.toContain('USD 100 · EUR 200');
   });
 
   it('renders the USD zero-value fallback when no review request exists', () => {
@@ -180,7 +204,7 @@ describe('PaymentWorkbenchPage currency overview', () => {
     }]);
 
     expect(html).toContain('待审核<span>1</span>');
-    const headings = ['项目编号', '付款渠道', '付款主体', '关联项目', '请款金额及币种', '转账手续费及币种', '实际付款金额及币种', '实际付款日期', '发起人', '项目状态', '操作'];
+    const headings = ['项目编号', '付款渠道', '付款主体', '关联项目', '请款金额及币种', '转账手续费及币种', '总支出金额及币种', '最后付款日期', '发起人', '项目状态', '操作'];
     expect(headings.every((heading) => html.includes(`>${heading}</th>`))).toBe(true);
     expect(headings.map((heading) => html.indexOf(`>${heading}</th>`))).toEqual(
       [...headings.map((heading) => html.indexOf(`>${heading}</th>`))].sort((left, right) => left - right),
@@ -227,7 +251,7 @@ describe('PaymentWorkbenchPage currency overview', () => {
     expect(buildPaymentProjectRows({ ...input, tab: 'review' })).toHaveLength(8);
     expect(buildPaymentProjectRows({ ...input, tab: 'payment' })).toHaveLength(2);
     expect(buildPaymentProjectRows({ ...input, tab: 'paid' })).toHaveLength(5);
-    expect(buildPaymentProjectRows({ ...input, tab: 'returned' })).toHaveLength(1);
+    expect(buildPaymentProjectRows({ ...input, tab: 'returned' })).toHaveLength(3);
 
     expect(buildPaymentProjectRows({ ...input, tab: 'paid' })).toContainEqual(expect.objectContaining({
       requestCode: 'REQ-202607-000015',
@@ -244,10 +268,12 @@ describe('PaymentWorkbenchPage currency overview', () => {
       status: '已退回',
       actionLabel: '查看详情',
       payouts: expect.arrayContaining([
-        expect.objectContaining({ id: 'payout_fixture_16_01', status: '已退回' }),
-        expect.objectContaining({ id: 'payout_fixture_16_02', status: '已退回' }),
+        expect.objectContaining({ id: 'payout_fixture_16_01', status: '未进入付款' }),
+        expect.objectContaining({ id: 'payout_fixture_16_02', status: '未进入付款' }),
       ]),
     }));
+    expect(buildPaymentProjectRows({ ...input, tab: 'returned' }).map((row) => row.requestCode))
+      .not.toContain('REQ-202607-000019');
 
     const reviewRows = buildPaymentProjectRows({ ...input, tab: 'review' });
     expect(reviewRows.map((row) => row.approvalStatus)).toEqual([
@@ -317,8 +343,11 @@ describe('PaymentWorkbenchPage currency overview', () => {
       generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
     };
     const waitingRow = buildPaymentProjectRows({ ...input, tab: 'payment' })[0];
+    const financeReturnApproval = input.requests.find((request) => (
+      request.requestCode === 'REQ-202607-000016'
+    ))?.approval;
     const returnedRequests = input.requests.map((request) => request.id === waitingRow.requestId
-      ? { ...request, lifecycle: 'RETURNED' as const }
+      ? { ...request, lifecycle: 'RETURNED' as const, approval: financeReturnApproval }
       : request);
 
     expect(buildPaymentProjectRows({ ...input, requests: returnedRequests, tab: 'returned' }))

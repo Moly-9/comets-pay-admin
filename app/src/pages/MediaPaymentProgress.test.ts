@@ -166,6 +166,21 @@ describe('My Projects payment request progress', () => {
     expect(stepFor(progress, '渠道打款')).toMatchObject({ state: 'pending' });
   });
 
+  it('omits the PM step for an unassigned request approval flow', () => {
+    const progress = progressFor(baseRequest({
+      pm: '',
+      lifecycle: 'SUBMITTED',
+      status: '媒介负责人审批中',
+      approval: approval('PENDING_PROJECT_OWNER'),
+    }));
+
+    expect(progress.map((step) => step.label)).not.toContain('PM 审批');
+    expect(stepFor(progress, '媒介负责人审批')).toMatchObject({
+      state: 'current',
+      description: '第 2 轮 · 等待媒介负责人审批',
+    });
+  });
+
   it.each([
     ['PENDING_PM', 'PM 审批'],
     ['PENDING_PROJECT_OWNER', '媒介负责人审批'],

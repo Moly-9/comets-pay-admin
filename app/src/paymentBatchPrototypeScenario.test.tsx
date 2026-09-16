@@ -50,7 +50,7 @@ describe('payment batch prototype scenario', () => {
     expect(buildPaymentProjectRows({ ...input, tab: 'review' })).toHaveLength(8);
     expect(buildPaymentProjectRows({ ...input, tab: 'payment' })).toHaveLength(2);
     expect(buildPaymentProjectRows({ ...input, tab: 'paid' })).toHaveLength(5);
-    expect(buildPaymentProjectRows({ ...input, tab: 'returned' })).toHaveLength(1);
+    expect(buildPaymentProjectRows({ ...input, tab: 'returned' })).toHaveLength(3);
 
     const paidRows = buildPaymentProjectRows({ ...input, tab: 'paid' });
     expect(paidRows.filter((row) => row.status === '付款处理中')).toHaveLength(1);
@@ -126,7 +126,7 @@ describe('payment batch prototype scenario', () => {
       status: '已付款',
       currentPaymentAttempt: {
         paymentBatchCode: PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
-        paymentCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentCode,
+        paymentCode: expect.stringMatching(/^PMT-/),
         paymentOrderCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentOrderCode,
         sourcePaymentOrderCode: originalPaymentOrderCode,
         attemptNumber: 2,
@@ -141,20 +141,23 @@ describe('payment batch prototype scenario', () => {
       },
     });
     expect(originalPaymentOrderCode).toBeTruthy();
-    expect(retriedPayout?.currentPaymentAttempt?.paymentOrderCode).not.toBe(originalPaymentOrderCode);
+    expect(retriedPayout?.currentPaymentAttempt?.paymentOrderCode).toBe(originalPaymentOrderCode);
+    const stablePaymentCode = retriedPayout?.currentPaymentAttempt?.paymentCode;
+    expect(stablePaymentCode).toBeTruthy();
     expect(retriedPayout?.paymentAttempts).toEqual([
       expect.objectContaining({
         paymentBatchCode: PAYMENT_BATCH_RETRY_DEMO.originalBatchCode,
-        paymentCode: expect.not.stringMatching(PAYMENT_BATCH_RETRY_DEMO.retryPaymentCode),
+        paymentCode: stablePaymentCode,
         attemptNumber: 1,
         status: '付款失败',
-        actualPaidAmount: 30.58,
+        actualPaidAmount: 15_318.58,
         transferFeeAmount: 30.58,
+        refundAmount: 15_288,
         errorCode: 'BENEFICIARY_UNAVAILABLE',
       }),
       expect.objectContaining({
         paymentBatchCode: PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
-        paymentCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentCode,
+        paymentCode: stablePaymentCode,
         attemptNumber: 2,
         status: '已付款',
         actualPaidAmount: 15_318.58,

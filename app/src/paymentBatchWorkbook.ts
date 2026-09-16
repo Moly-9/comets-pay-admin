@@ -1,6 +1,7 @@
 import {
   paymentBatchFinancialSummary,
   paymentBatchMoneyTotalsLabel,
+  paymentBatchPurposeLabel,
   type PaymentBatchRecord,
 } from './paymentBatches';
 import { paymentProviderDisplayName } from './paymentProviderPresentation';
@@ -9,6 +10,7 @@ const PAYMENT_BATCH_WORKBOOK_MIME = 'application/vnd.openxmlformats-officedocume
 
 export const PAYMENT_BATCH_WORKBOOK_HEADERS = [
   '付款批次号',
+  '批次用途',
   '项目编号',
   '付款渠道',
   '付款主体',
@@ -18,8 +20,8 @@ export const PAYMENT_BATCH_WORKBOOK_HEADERS = [
   '成本类型明细①',
   '请款金额及币种',
   '转账手续费及币种',
-  '实际付款金额及币种',
-  '实际付款日期',
+  '总支出金额及币种',
+  '最后付款日期',
   '项目状态（固定）',
   '发起人',
   '项目PM',
@@ -32,6 +34,7 @@ export type PaymentBatchWorkbookEntry = Readonly<{
 
 export type PaymentBatchWorkbookRow = Readonly<{
   paymentBatchCode: string;
+  purpose: string;
   requestCode: string;
   provider: string;
   paymentEntity: string;
@@ -71,7 +74,7 @@ const paymentResultDate = (
 const paymentResultTotal = (
   batch: PaymentBatchRecord,
   totals: ReturnType<typeof paymentBatchFinancialSummary>['actualPaidAmounts'],
-) => batch.status === '付款处理中'
+) => batch.status === '付款处理中' || batch.status === '冲退处理中'
   ? '待渠道回写'
   : paymentBatchMoneyTotalsLabel(totals);
 
@@ -81,6 +84,7 @@ export const buildPaymentBatchWorkbookRows = (
   const summary = paymentBatchFinancialSummary(batch);
   return {
     paymentBatchCode: batch.paymentBatchCode,
+    purpose: paymentBatchPurposeLabel(batch.purpose),
     requestCode: batch.request.requestCode,
     provider: paymentProviderDisplayName(batch.provider),
     paymentEntity: textOrFallback(batch.request.paymentEntity),
@@ -114,22 +118,23 @@ export const createPaymentBatchWorkbook = async (
   });
   sheet.columns = [
     { header: PAYMENT_BATCH_WORKBOOK_HEADERS[0], key: 'paymentBatchCode', width: 24 },
-    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[1], key: 'requestCode', width: 24 },
-    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[2], key: 'provider', width: 16 },
-    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[3], key: 'paymentEntity', width: 28 },
-    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[4], key: 'projectCostAttribution', width: 34 },
-    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[5], key: 'projectName', width: 34 },
-    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[6], key: 'costType', width: 18 },
-    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[7], key: 'costTypeDetail', width: 22 },
-    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[8], key: 'paymentAmount', width: 24 },
-    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[9], key: 'transferFeeAmount', width: 24 },
-    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[10], key: 'actualPaidAmount', width: 26 },
-    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[11], key: 'actualPaymentDate', width: 18 },
-    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[12], key: 'requestStatus', width: 18 },
-    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[13], key: 'initiator', width: 18 },
-    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[14], key: 'projectPm', width: 18 },
+    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[1], key: 'purpose', width: 16 },
+    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[2], key: 'requestCode', width: 24 },
+    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[3], key: 'provider', width: 16 },
+    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[4], key: 'paymentEntity', width: 28 },
+    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[5], key: 'projectCostAttribution', width: 34 },
+    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[6], key: 'projectName', width: 34 },
+    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[7], key: 'costType', width: 18 },
+    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[8], key: 'costTypeDetail', width: 22 },
+    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[9], key: 'paymentAmount', width: 24 },
+    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[10], key: 'transferFeeAmount', width: 24 },
+    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[11], key: 'actualPaidAmount', width: 26 },
+    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[12], key: 'actualPaymentDate', width: 18 },
+    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[13], key: 'requestStatus', width: 18 },
+    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[14], key: 'initiator', width: 18 },
+    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[15], key: 'projectPm', width: 18 },
   ];
-  sheet.autoFilter = { from: 'A1', to: 'O1' };
+  sheet.autoFilter = { from: 'A1', to: 'P1' };
   sheet.getRow(1).height = 34;
   sheet.getRow(1).font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
   sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4D5664' } };

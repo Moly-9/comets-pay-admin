@@ -23,6 +23,7 @@ import {
   paymentBatchMoneyTotalsLabel,
   paymentBatchStatusCounts,
   paymentExecutionDatesForPayouts,
+  upsertPaymentReversalBatch,
 } from './paymentBatches';
 import {
   PAYMENT_BATCH_PARTIAL_FAILURE_DEMO,
@@ -420,12 +421,15 @@ describe('payment batch snapshots', () => {
       status: '付款处理中',
       lifecycle: ['CREATED', 'ITEMS_ADDED', 'QUOTED', 'SUBMITTED'],
       itemStatus: '付款处理中',
-      paymentOrderCode: 'PAY-RETRY-002',
+      purpose: 'RETRY',
+      sourcePaymentBatchId: frozenFailedBatch.paymentBatchId,
+      sourcePaymentBatchCode: frozenFailedBatch.paymentBatchCode,
+      paymentOrderCode: 'PAY-TEST-001',
       paymentAttemptNumber: 2,
     });
     expect(retryBatch.items[0].failure).toBeUndefined();
     expect(retryBatch.items[0]).toMatchObject({
-      paymentOrderCode: 'PAY-RETRY-002',
+      paymentOrderCode: 'PAY-TEST-001',
       sourcePaymentOrderCode: 'PAY-TEST-001',
       paymentAttemptNumber: 2,
     });
@@ -434,6 +438,21 @@ describe('payment batch snapshots', () => {
       sourcePaymentOrderCode: 'PAY-TEST-001',
       paymentAttemptNumber: 1,
     });
+    expect(() => createPaymentBatchRecord({
+      ...input,
+      payouts: [failedPayout],
+      paymentBatchId: 'payment_batch_attempt_invalid' as PaymentBatchId,
+      paymentBatchCode: 'BAT-ATTEMPT-INVALID',
+      paidAt: '2026-08-12T09:00:00.000Z',
+      status: '付款处理中',
+      lifecycle: ['CREATED', 'SUBMITTED'],
+      itemStatus: '付款处理中',
+      purpose: 'RETRY',
+      sourcePaymentBatchId: frozenFailedBatch.paymentBatchId,
+      sourcePaymentBatchCode: frozenFailedBatch.paymentBatchCode,
+      paymentOrderCode: 'PAY-NEW-ORDER',
+      paymentAttemptNumber: 2,
+    })).toThrow('重新付款必须沿用原付款单号');
 
     const succeededPayout: Payout = {
       ...failedPayout,
@@ -444,7 +463,7 @@ describe('payment batch snapshots', () => {
         paymentBatchId: retryBatch.paymentBatchId,
         paymentBatchCode: retryBatch.paymentBatchCode,
         submittedAt: retryBatch.paidAt,
-        paymentOrderCode: 'PAY-RETRY-002',
+        paymentOrderCode: 'PAY-TEST-001',
         sourcePaymentOrderCode: 'PAY-TEST-001',
         attemptNumber: 2,
       },
@@ -457,6 +476,91 @@ describe('payment batch snapshots', () => {
     expect(succeededAttempt.batches[0].status).toBe('已付款');
     expect(succeededAttempt.batches[0].items[0].paymentStatus).toBe('已付款');
     expect(succeededAttempt.batches[1]).toEqual(frozenFailedBatch);
+  });
+
+  it('creates one idempotent reversal batch with zero principal and a negative refund', () => {
+    const input = buildInput();
+    const source = createPaymentBatchRecord({
+      ...input,
+      status: '全部失败',
+      itemStatus: '付款失败',
+      purpose: 'NORMAL',
+    });
+    const failedSource = {
+      ...source,
+      items: source.items.map((item) => ({
+        ...item,
+        paymentStatus: '付款失败' as const,
+        transferFeeAmount: 2.5,
+        transferFeeCurrency: 'USD' as const,
+        actualPaidAmount: 1_252.5,
+        actualPaidCurrency: 'USD' as const,
+        refundAmount: 1_250,
+        refundCurrency: 'USD' as const,
+        refundedAt: '2026-08-11T10:36:00.000Z',
+      })),
+    };
+    const once = upsertPaymentReversalBatch({
+      batches: [failedSource],
+      sourcePaymentBatchId: source.paymentBatchId,
+      paymentBatchId: 'payment_batch_reversal' as PaymentBatchId,
+      paymentBatchCode: 'BAT-REVERSAL',
+      refundedAt: '2026-08-11T10:36:00.000Z',
+    });
+    const twice = upsertPaymentReversalBatch({
+      batches: once,
+      sourcePaymentBatchId: source.paymentBatchId,
+      paymentBatchId: 'payment_batch_reversal_duplicate' as PaymentBatchId,
+      paymentBatchCode: 'BAT-REVERSAL-DUPLICATE',
+      refundedAt: '2026-08-11T10:36:00.000Z',
+    });
+    const reversal = twice.find((batch) => batch.purpose === 'REVERSAL');
+
+    expect(twice).toHaveLength(2);
+    expect(reversal).toMatchObject({
+      paymentBatchCode: 'BAT-REVERSAL',
+      sourcePaymentBatchId: source.paymentBatchId,
+      paymentOrderCode: source.paymentOrderCode,
+      status: '已冲退',
+    });
+    expect(reversal?.items[0]).toMatchObject({
+      paymentCode: source.items[0].paymentCode,
+      amount: 0,
+      transferFeeAmount: 0,
+      actualPaidAmount: -1_250,
+      paymentStatus: '已冲退',
+    });
+  });
+
+  it('keeps a reversal pending until the channel confirms its refund amount', () => {
+    const input = buildInput();
+    const source = createPaymentBatchRecord({
+      ...input,
+      status: '全部失败',
+      itemStatus: '付款失败',
+      purpose: 'NORMAL',
+    });
+    const [reversal] = upsertPaymentReversalBatch({
+      batches: [source],
+      sourcePaymentBatchId: source.paymentBatchId,
+      paymentBatchId: 'payment_batch_reversal_pending' as PaymentBatchId,
+      paymentBatchCode: 'BAT-REVERSAL-PENDING',
+      refundedAt: '2026-08-11T10:36:00.000Z',
+    });
+
+    expect(reversal).toMatchObject({
+      purpose: 'REVERSAL',
+      status: '冲退处理中',
+      paymentOrderCode: source.paymentOrderCode,
+      paymentAttemptNumber: source.paymentAttemptNumber,
+    });
+    expect(reversal.items[0]).toMatchObject({
+      paymentCode: source.items[0].paymentCode,
+      amount: 0,
+      transferFeeAmount: 0,
+      paymentStatus: '冲退处理中',
+    });
+    expect(reversal.items[0].actualPaidAmount).toBeUndefined();
   });
 
   it('builds one linked request snapshot with contract, Invoice and payment-list data', () => {
@@ -751,15 +855,13 @@ describe('payment batch snapshots', () => {
     const historicalRecords = records.filter((record) => String(record.paymentBatchId).startsWith('payment_batch_legacy_'));
     const actualPayoutIds = scenarioRecords.flatMap((record) => record.items.map((item) => item.payoutId));
 
-    expect(records).toHaveLength(20);
+    expect(records).toHaveLength(22);
     expect(new Set(records.map((record) => record.paymentBatchId)).size).toBe(records.length);
     expect(new Set(records.map((record) => record.paymentBatchCode)).size).toBe(records.length);
-    expect(scenarioRecords).toHaveLength(10);
+    expect(scenarioRecords).toHaveLength(12);
     expect(historicalRecords).toHaveLength(Object.keys(HISTORICAL_PAYMENT_BATCH_SEEDS).length);
-    expect(scenarioRecords.map((record) => record.paymentBatchCode)).toEqual([
-      PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
-      ...Array.from({ length: 9 }, (_, index) => `BAT-20260805-${String(9 - index).padStart(3, '0')}`),
-    ]);
+    expect(scenarioRecords.filter((record) => record.purpose === 'REVERSAL')).toHaveLength(2);
+    expect(scenarioRecords[0].paymentBatchCode).toBe(PAYMENT_BATCH_RETRY_DEMO.retryBatchCode);
     expect(scenarioRecords[0].items[0]).toMatchObject({
       paymentOrderCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentOrderCode,
       paymentAttemptNumber: 2,
@@ -768,29 +870,18 @@ describe('payment batch snapshots', () => {
       paymentOrderCode: PAYMENT_BATCH_RETRY_DEMO.retryPaymentOrderCode,
       paymentAttemptNumber: 2,
     });
-    expect(scenarioRecords[0].items[0].sourcePaymentOrderCode).not.toBe(scenarioRecords[0].items[0].paymentOrderCode);
-    expect(scenarioRecords[0].sourcePaymentOrderCode).toBe(scenarioRecords[0].items[0].sourcePaymentOrderCode);
-    expect(scenarioRecords.map((record) => record.items.length)).toEqual([1, 3, 5, 5, 5, 5, 5, 1, 5, 4]);
-    expect(scenarioRecords.map((record) => record.request.requestCode)).toEqual([
-      'REQ-202607-000011',
-      PAYMENT_BATCH_PARTIAL_FAILURE_DEMO.requestCode,
-      'REQ-202607-000011',
-      'REQ-202607-000012',
-      'REQ-202607-000012',
-      'REQ-202607-000013',
-      'REQ-202607-000013',
-      'REQ-202607-000013',
-      'REQ-202607-000014',
-      'REQ-202607-000014',
-    ]);
-    expect(actualPayoutIds).toHaveLength(39);
+    expect(scenarioRecords[0].items[0].sourcePaymentOrderCode).toBe(scenarioRecords[0].items[0].paymentOrderCode);
+    expect(scenarioRecords[0].sourcePaymentOrderCode).toBeUndefined();
+    expect(actualPayoutIds).toHaveLength(41);
     expect(new Set(actualPayoutIds).size).toBe(38);
     expect(expectedPayoutIds.every((payoutId) => actualPayoutIds.includes(payoutId))).toBe(true);
-    expect(actualPayoutIds.filter((payoutId) => payoutId === scenarioRecords[0].items[0].payoutId)).toHaveLength(2);
+    expect(actualPayoutIds.filter((payoutId) => payoutId === scenarioRecords[0].items[0].payoutId)).toHaveLength(3);
     expect(new Set(scenarioRecords.map((record) => record.provider))).toEqual(new Set(['Airwallex']));
     expect(new Set(scenarioRecords.map((record) => record.payer))).toEqual(new Set(['奚文慧', '李梦', '吴雪霓']));
     expect(scenarioRecords.map((record) => record.status)).toEqual([
       '已付款',
+      '已冲退',
+      '已冲退',
       '部分失败',
       '部分失败',
       '付款处理中', '付款处理中',
@@ -815,7 +906,15 @@ describe('payment batch snapshots', () => {
       );
 
       const counts = paymentBatchStatusCounts(record);
-      if (record.status === '已付款') {
+      if (record.purpose === 'REVERSAL') {
+        expect(record.sourcePaymentBatchId).toBeDefined();
+        expect(record.sourcePaymentBatchCode).toBeDefined();
+        expect(record.items.every((item) => item.amount === 0)).toBe(true);
+        expect(record.items.every((item) => item.transferFeeAmount === 0)).toBe(true);
+        expect(record.items.every((item) => (item.actualPaidAmount ?? 0) < 0)).toBe(true);
+        expect(record.items.every((item) => item.paymentStatus === '已冲退')).toBe(true);
+        expect(counts).toEqual({ succeeded: record.items.length, failed: 0, processing: 0 });
+      } else if (record.status === '已付款') {
         expect(record.items.every((item) => item.paymentStatus === '已付款')).toBe(true);
         expect(counts).toEqual({ succeeded: record.items.length, failed: 0, processing: 0 });
       } else if (record.status === '付款处理中') {
@@ -828,7 +927,8 @@ describe('payment batch snapshots', () => {
           .toBe('BENEFICIARY_UNAVAILABLE');
         const failedItem = record.items.find((item) => item.paymentStatus === '付款失败');
         expect(failedItem?.transferFeeAmount).toBeGreaterThan(0);
-        expect(failedItem?.actualPaidAmount).toBe(failedItem?.transferFeeAmount);
+        expect(failedItem?.actualPaidAmount).toBeGreaterThanOrEqual(failedItem?.transferFeeAmount ?? 0);
+        expect(failedItem?.actualPaidCurrency).toBe(failedItem?.currency);
         expect(failedItem?.recipientReceivedAmount).toBe(0);
         expect(counts).toEqual({ succeeded: record.items.length - 1, failed: 1, processing: 0 });
       }
@@ -854,7 +954,8 @@ describe('payment batch snapshots', () => {
     expect(originalFailedItem).toMatchObject({
       amount: 15_288,
       transferFeeAmount: 30.58,
-      actualPaidAmount: 30.58,
+      actualPaidAmount: 15_318.58,
+      refundAmount: 15_288,
     });
     expect(records[0].items[0]).toMatchObject({
       payoutId: originalFailedItem.payoutId,
@@ -865,7 +966,8 @@ describe('payment batch snapshots', () => {
     });
 
     const partialFailureBatch = records.find((record) => (
-      record.request.requestCode === PAYMENT_BATCH_PARTIAL_FAILURE_DEMO.requestCode
+      record.purpose === 'NORMAL'
+      && record.request.requestCode === PAYMENT_BATCH_PARTIAL_FAILURE_DEMO.requestCode
     ))!;
     expect(partialFailureBatch).toMatchObject({
       paymentBatchCode: 'BAT-20260805-009',

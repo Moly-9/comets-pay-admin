@@ -1,18 +1,20 @@
 import {
   ArrowUpRight,
   CircleDollarSign,
+  CircleX,
   ClipboardCheck,
   Clock3,
   FileSignature,
   FolderKanban,
+  LoaderCircle,
   ReceiptText,
   UsersRound,
   type LucideIcon,
 } from 'lucide-react';
 import { useMemo } from 'react';
 import { PageHeading } from '../components/Common';
-import { getContractManagementBucket, type ContractRecord } from '../contracts';
-import { MY_PROJECT_APPROVAL_STATUSES, myProjectStatusFor } from '../paymentRequestProjects';
+import { getContractManagementBucket, isIncludedInContractTotal, type ContractRecord } from '../contracts';
+import { requestProjectStatusFor } from '../paymentRequestProjects';
 import type { RequestProjectSummary } from './RequestProjectDetailPage';
 import type {
   CreatorProfile,
@@ -23,7 +25,7 @@ import type {
   RequestProjectStatusFilter,
 } from '../types';
 
-type DashboardStageTone = 'peach' | 'amber' | 'lilac' | 'blue' | 'mint';
+type DashboardStageTone = 'peach' | 'amber' | 'lilac' | 'blue' | 'mint' | 'rose';
 
 type DashboardStage = {
   id: string;
@@ -36,6 +38,101 @@ type DashboardRequestMetric = DashboardStage & {
   meta: string;
   icon: LucideIcon;
   statusFilter: RequestProjectStatusFilter;
+};
+
+export type DashboardRequestMetrics = {
+  total: number;
+  approving: number;
+  awaitingPayment: number;
+  paid: number;
+  processing: number;
+  failed: number;
+};
+
+export const dashboardRequestMetricsFor = (
+  requests: readonly RequestProjectSummary[],
+  payouts: readonly Pick<Payout, 'paymentRequestProjectId' | 'status'>[],
+): DashboardRequestMetrics => {
+  const statuses = requests.map((request) => requestProjectStatusFor(request, payouts));
+  const approving = statuses.filter((status) => (
+    status === 'PM审批中'
+    || status === '媒介负责人审批中'
+    || status === '老板审批中'
+    || status === '财务审批中'
+  )).length;
+  const awaitingPayment = statuses.filter((status) => status === '正在付款').length;
+  const paid = statuses.filter((status) => status === '已付款').length;
+  const processing = statuses.filter((status) => status === '付款处理中').length;
+  const failed = statuses.filter((status) => status === '部分失败' || status === '全部失败').length;
+
+  return {
+    total: approving + awaitingPayment + paid + processing + failed,
+    approving,
+    awaitingPayment,
+    paid,
+    processing,
+    failed,
+  };
+};
+
+export type DashboardDocumentMetrics = {
+  contracts: {
+    total: number;
+    processing: number;
+    ready: number;
+    expired: number;
+  };
+  invoices: {
+    total: number;
+    inProgress: number;
+    paid: number;
+  };
+};
+
+export const dashboardDocumentMetricsFor = (
+  contracts: readonly ContractRecord[],
+  payouts: readonly Pick<Payout, 'id' | 'invoice' | 'status'>[],
+  generatedInvoices: readonly Pick<GeneratedInvoiceRecord, 'id' | 'invoiceId' | 'sourcePayoutId'>[],
+): DashboardDocumentMetrics => {
+  const countedContracts = contracts.filter(isIncludedInContractTotal);
+  const contractBuckets = countedContracts.map((contract) => getContractManagementBucket(contract));
+
+  const invoiceKeyBySourcePayoutId = new Map(
+    generatedInvoices.map((invoice) => [invoice.sourcePayoutId, String(invoice.invoiceId)]),
+  );
+  const invoiceKeyByNumber = new Map(
+    generatedInvoices.map((invoice) => [invoice.id, String(invoice.invoiceId)]),
+  );
+  const invoiceKeyForPayout = (payout: Pick<Payout, 'id' | 'invoice'>) => (
+    invoiceKeyBySourcePayoutId.get(payout.id)
+    ?? invoiceKeyByNumber.get(payout.invoice)
+    ?? `legacy:${payout.invoice}`
+  );
+  const invoiceIds = new Set(generatedInvoices.map((invoice) => String(invoice.invoiceId)));
+  payouts.forEach((payout) => invoiceIds.add(invoiceKeyForPayout(payout)));
+  const paidInvoiceIds = new Set(
+    payouts
+      .filter((payout) => payout.status === '已付款')
+      .map((payout) => invoiceKeyForPayout(payout)),
+  );
+
+  return {
+    contracts: {
+      total: countedContracts.length,
+      processing: contractBuckets.filter((bucket) => (
+        bucket === 'upload'
+        || bucket === 'signature'
+        || bucket === 'attention'
+      )).length,
+      ready: contractBuckets.filter((bucket) => bucket === 'ready').length,
+      expired: contractBuckets.filter((bucket) => bucket === 'expired').length,
+    },
+    invoices: {
+      total: invoiceIds.size,
+      inProgress: invoiceIds.size - paidInvoiceIds.size,
+      paid: paidInvoiceIds.size,
+    },
+  };
 };
 
 function DashboardRequestCard({
@@ -51,6 +148,7 @@ function DashboardRequestCard({
     <button
       className={`dashboard-request-card dashboard-request-card-${metric.tone}`}
       data-testid={`dashboard-request-card-${metric.id}`}
+      data-status-filter={metric.statusFilter}
       type="button"
       onClick={onOpen}
       aria-label={`查看${metric.label}`}
@@ -154,14 +252,8 @@ export function DashboardPage({
   onNavigate: (page: NavPage, options?: NavOptions) => void;
 }) {
   const metrics = useMemo(() => {
-    const requestStatuses = requests.map(myProjectStatusFor);
-    const approvingRequests = requestStatuses.filter((status) => (
-      MY_PROJECT_APPROVAL_STATUSES.has(status)
-    )).length;
-    const approvedRequests = requestStatuses.filter((status) => (
-      status === '待打款' || status === '已付款'
-    )).length;
-    const paidRequests = requestStatuses.filter((status) => status === '已付款').length;
+    const requestMetrics = dashboardRequestMetricsFor(requests, payouts);
+    const documentMetrics = dashboardDocumentMetricsFor(contracts, payouts, generatedInvoices);
 
     const activeCreatorHandles = new Set(
       payouts
@@ -172,44 +264,16 @@ export function DashboardPage({
       activeCreatorHandles.has(creator.handle.toLowerCase())
     )).length;
 
-    const uploadedContracts = contracts.filter((contract) => !contract.isTemplate);
-    const ongoingContracts = uploadedContracts.filter((contract) => (
-      !['draft', 'expired'].includes(getContractManagementBucket(contract))
-    )).length;
-    const paidProjects = new Set(
-      payouts.filter((payout) => payout.status === '已付款').map((payout) => payout.project),
-    );
-    const paidContracts = uploadedContracts.filter((contract) => paidProjects.has(contract.project)).length;
-
-    const invoiceStatusById = new Map<string, string>();
-    payouts.forEach((payout) => invoiceStatusById.set(payout.invoice, payout.invoiceReviewStatus));
-    generatedInvoices.forEach((record) => {
-      if (!invoiceStatusById.has(record.id)) invoiceStatusById.set(record.id, record.status);
-    });
-    const ongoingInvoices = Array.from(invoiceStatusById.values()).filter((status) => status !== '已通过').length;
-    const paidInvoices = payouts.filter((payout) => payout.status === '已付款').length;
-
     return {
       requests: {
-        total: requests.length,
-        approving: approvingRequests,
-        approved: approvedRequests,
-        paid: paidRequests,
+        ...requestMetrics,
       },
       creators: {
         total: creators.length,
         active: activeCreators,
       },
-      contracts: {
-        total: uploadedContracts.length,
-        ongoing: ongoingContracts,
-        paid: paidContracts,
-      },
-      invoices: {
-        total: invoiceStatusById.size,
-        ongoing: ongoingInvoices,
-        paid: paidInvoices,
-      },
+      contracts: documentMetrics.contracts,
+      invoices: documentMetrics.invoices,
     };
   }, [contracts, creators, generatedInvoices, payouts, requests]);
 
@@ -218,7 +282,7 @@ export function DashboardPage({
       id: 'total',
       label: '请款项目总数',
       value: metrics.requests.total,
-      meta: '当前系统全部请款项目',
+      meta: '当前审批及付款流程中的项目',
       tone: 'peach',
       icon: FolderKanban,
       statusFilter: 'all',
@@ -233,22 +297,40 @@ export function DashboardPage({
       statusFilter: 'approving',
     },
     {
-      id: 'approved',
-      label: '完成审批的项目',
-      value: metrics.requests.approved,
-      meta: '已完成审批节点',
+      id: 'awaiting-payment',
+      label: '待打款项目',
+      value: metrics.requests.awaitingPayment,
+      meta: '已完成审批，还未执行打款',
       tone: 'lilac',
       icon: ClipboardCheck,
-      statusFilter: 'approved',
+      statusFilter: 'awaiting-payment',
     },
     {
       id: 'paid',
-      label: '已打款的项目',
+      label: '付款成功项目',
       value: metrics.requests.paid,
-      meta: '款项已完成支付',
+      meta: '全部付款明细已成功',
       tone: 'mint',
       icon: CircleDollarSign,
       statusFilter: 'paid',
+    },
+    {
+      id: 'processing',
+      label: '渠道处理中的项目',
+      value: metrics.requests.processing,
+      meta: '付款已发起，等待渠道结果',
+      tone: 'blue',
+      icon: LoaderCircle,
+      statusFilter: 'processing',
+    },
+    {
+      id: 'failed',
+      label: '付款失败的项目',
+      value: metrics.requests.failed,
+      meta: '包含部分付款失败、全部付款失败',
+      tone: 'rose',
+      icon: CircleX,
+      statusFilter: 'failed',
     },
   ];
 
@@ -316,22 +398,28 @@ export function DashboardPage({
             <DashboardOverviewRow
               id="contracts"
               title="合同"
-              description="手动上传合同的推进与付款状态"
+              description="待上传、待签署合同与付款可用状态"
               icon={FileSignature}
               total={metrics.contracts.total}
               totalLabel="合同总数"
               stages={[
                 {
-                  id: 'ongoing',
-                  label: '正在推进',
-                  value: metrics.contracts.ongoing,
+                  id: 'processing',
+                  label: '处理中',
+                  value: metrics.contracts.processing,
                   tone: 'lilac',
                 },
                 {
-                  id: 'paid',
-                  label: '已打款',
-                  value: metrics.contracts.paid,
+                  id: 'ready',
+                  label: '可用于付款',
+                  value: metrics.contracts.ready,
                   tone: 'mint',
+                },
+                {
+                  id: 'expired',
+                  label: '已失效',
+                  value: metrics.contracts.expired,
+                  tone: 'rose',
                 },
               ]}
               onOpen={() => onNavigate('contracts')}
@@ -339,7 +427,7 @@ export function DashboardPage({
             <DashboardOverviewRow
               id="invoice"
               title="Invoice"
-              description="Invoice 生成、推进与付款结果"
+              description="除已打款外的 Invoice 均计入正在推进"
               icon={ReceiptText}
               total={metrics.invoices.total}
               totalLabel="Invoice 总数"
@@ -347,7 +435,7 @@ export function DashboardPage({
                 {
                   id: 'ongoing',
                   label: '正在推进',
-                  value: metrics.invoices.ongoing,
+                  value: metrics.invoices.inProgress,
                   tone: 'peach',
                 },
                 {

@@ -73,6 +73,7 @@ const batch = (overrides: Partial<PaymentBatchRecord> = {}): PaymentBatchRecord 
   lifecycle: ['CREATED', 'SUBMITTED', 'COMPLETED'],
   items: [item()],
   ...overrides,
+  purpose: overrides.purpose ?? 'NORMAL',
 });
 
 describe('payment batch workbook', () => {
@@ -97,6 +98,7 @@ describe('payment batch workbook', () => {
     expect(buildPaymentBatchWorkbookRows([{ batch: source, currentRequestStatus: '已付款' }]))
       .toEqual([{
         paymentBatchCode: 'BAT-20260819-001',
+        purpose: '正常付款',
         requestCode: 'REQ-202608-000019',
         provider: 'Airwallex',
         paymentEntity: 'Muse Commerce Limited',
@@ -130,6 +132,7 @@ describe('payment batch workbook', () => {
     });
     const retryBatch = batch({
       paymentBatchCode: 'BAT-20260806-001',
+      purpose: 'RETRY',
       paymentAttemptNumber: 2,
       items: [item({
         paymentStatus: '已付款',
@@ -184,7 +187,7 @@ describe('payment batch workbook', () => {
     expect(row.requestStatus).toBe('待同步');
   });
 
-  it('writes the exact fifteen-column worksheet with a frozen filtered header', async () => {
+  it('writes the exact sixteen-column worksheet with purpose and a frozen filtered header', async () => {
     const workbookBlob = await createPaymentBatchWorkbook([{
       batch: batch(),
       currentRequestStatus: '已付款',
@@ -194,12 +197,13 @@ describe('payment batch workbook', () => {
     await workbook.xlsx.load(await workbookBlob.arrayBuffer());
     const sheet = workbook.getWorksheet('付款明细');
 
-    expect(sheet?.columnCount).toBe(15);
+    expect(sheet?.columnCount).toBe(16);
     expect(sheet?.rowCount).toBe(2);
     expect(sheet?.getRow(1).values).toEqual([undefined, ...PAYMENT_BATCH_WORKBOOK_HEADERS]);
     expect(sheet?.getRow(2).values).toEqual([
       undefined,
       'BAT-20260819-001',
+      '正常付款',
       'REQ-202608-000019',
       'Airwallex',
       'Muse Commerce Limited',
@@ -216,7 +220,30 @@ describe('payment batch workbook', () => {
       '陈晨',
     ]);
     expect(sheet?.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
-    expect(sheet?.autoFilter).toBe('A1:O1');
+    expect(sheet?.autoFilter).toBe('A1:P1');
+  });
+
+  it('exports reversal batches as zero principal, zero fee and a negative refund', () => {
+    const reversal = batch({
+      purpose: 'REVERSAL',
+      status: '已冲退',
+      sourcePaymentBatchId: 'payment_batch_source' as PaymentBatchRecord['paymentBatchId'],
+      sourcePaymentBatchCode: 'BAT-20260819-001',
+      items: [item({
+        amount: 0,
+        paymentStatus: '已冲退',
+        transferFeeAmount: 0,
+        transferFeeCurrency: 'USD',
+        actualPaidAmount: -1_000,
+        actualPaidCurrency: 'USD',
+      })],
+    });
+    expect(buildPaymentBatchWorkbookRows([{ batch: reversal }])[0]).toMatchObject({
+      purpose: '冲退付款',
+      paymentAmount: 'USD 0',
+      transferFeeAmount: 'USD 0',
+      actualPaidAmount: 'USD -1,000',
+    });
   });
 
   it('uses Shanghai dates in list filenames and the batch code in detail filenames', () => {

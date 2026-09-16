@@ -8,6 +8,7 @@ import {
   COMPLETE_REQUEST_FINANCE_PROJECT_CODES,
   INITIAL_COMPLETE_REQUEST_RESOURCES,
   RETURNED_PAYMENT_REQUEST_DEMO,
+  RETURNED_PAYMENT_REQUEST_DEMOS,
 } from './requestProjectPrototypeResources';
 
 const {
@@ -95,8 +96,12 @@ describe('complete request project prototype resources', () => {
           payoutAccountVersion: invoice?.snapshot.payoutAccountVersion,
           payoutAccountFingerprint: invoice?.snapshot.payoutAccountFingerprint,
         });
-        expect(item.requiresRevalidation).toBe(false);
-        expect(item.validationIssues).toEqual([]);
+        const isReturnedPaymentItem = request.approval?.returnItems?.some((returnItem) => (
+          returnItem.issueType === 'PAYMENT_LIST'
+          && returnItem.paymentItems.some((paymentItem) => paymentItem.itemId === item.id)
+        ));
+        expect(item.requiresRevalidation).toBe(Boolean(isReturnedPaymentItem));
+        expect(item.validationIssues).toHaveLength(isReturnedPaymentItem ? 1 : 0);
         expect(Number(paymentListItemValue(item, 'amount'))).toBe(invoiceAmount);
         expect(String(paymentListItemValue(item, 'currency'))).toBe(invoice?.snapshot.currency);
         expect(account).toMatchObject({
@@ -191,7 +196,7 @@ describe('complete request project prototype resources', () => {
     });
   });
 
-  it('provides the expected visible project mix including one returned demo', () => {
+  it('provides the expected visible project mix including four returned demos', () => {
     const visibleRequests = requests.filter((request) => request.lifecycle !== 'DRAFT');
     const counts = visibleRequests.reduce<Record<string, number>>((result, request) => {
       const status = requestProjectStatusFor(request, payouts);
@@ -207,28 +212,19 @@ describe('complete request project prototype resources', () => {
       正在付款: 2,
       付款处理中: 2,
       已付款: 2,
-      已退回: 1,
+      已退回: 4,
     });
-    expect(requests.filter((request) => request.lifecycle === 'DRAFT')).toHaveLength(4);
+    expect(requests.filter((request) => request.lifecycle === 'DRAFT')).toHaveLength(1);
     expect(requests.filter((request) => request.lifecycle === 'CANCELLED')).toHaveLength(1);
   });
 
-  it('scopes the partial-failure and returned demos to stable three-item and two-item resource chains', () => {
+  it('scopes the partial-failure demo to a stable three-item resource chain', () => {
     const partialRequest = requests.find((request) => request.requestCode === 'REQ-202607-000015')!;
-    const returnedRequest = requests.find((request) => (
-      request.requestCode === RETURNED_PAYMENT_REQUEST_DEMO.requestCode
-    ))!;
     const partialPayouts = payouts.filter((payout) => (
       payout.paymentRequestProjectId === partialRequest.paymentRequestProjectId
     ));
-    const returnedPayouts = payouts.filter((payout) => (
-      payout.paymentRequestProjectId === returnedRequest.paymentRequestProjectId
-    ));
     const partialList = paymentLists.find((list) => (
       list.paymentRequestProjectId === partialRequest.paymentRequestProjectId
-    ));
-    const returnedList = paymentLists.find((list) => (
-      list.paymentRequestProjectId === returnedRequest.paymentRequestProjectId
     ));
 
     expect(partialRequest).toMatchObject({ contracts: 3, invoices: 3 });
@@ -239,31 +235,77 @@ describe('complete request project prototype resources', () => {
       'payout_fixture_15_03',
     ]);
     expect(partialList?.items).toHaveLength(3);
+  });
 
-    expect(returnedRequest).toMatchObject({
-      lifecycle: 'RETURNED',
-      status: '已退回',
-      contracts: 2,
-      invoices: 2,
-      approval: {
-        status: 'RETURNED_TO_MEDIA_REVIEW',
-        returnedFromStage: 'FINANCE',
-        resumeStatus: 'PENDING_FINANCE',
-        returnReason: RETURNED_PAYMENT_REQUEST_DEMO.reason,
-      },
+  it('provides three finance returns with one exact issue and one PM return without resource issues', () => {
+    expect(RETURNED_PAYMENT_REQUEST_DEMO).toBe(RETURNED_PAYMENT_REQUEST_DEMOS[0]);
+    const returnedRequests = RETURNED_PAYMENT_REQUEST_DEMOS.map((demo) => (
+      requests.find((request) => request.requestCode === demo.requestCode)!
+    ));
+    expect(returnedRequests).toHaveLength(4);
+
+    returnedRequests.forEach((request, index) => {
+      const demo = RETURNED_PAYMENT_REQUEST_DEMOS[index];
+      const requestPayouts = payouts.filter((payout) => (
+        payout.paymentRequestProjectId === request.paymentRequestProjectId
+      ));
+      const requestList = paymentLists.find((list) => (
+        list.paymentRequestProjectId === request.paymentRequestProjectId
+      ));
+      expect(request).toMatchObject({
+        lifecycle: 'RETURNED',
+        status: '已退回',
+        contracts: 2,
+        invoices: 2,
+        approval: {
+          status: 'RETURNED_TO_MEDIA_REVIEW',
+          returnedFromStage: demo.stage,
+          resumeStatus: demo.resumeStatus,
+        },
+      });
+      expect(request.creatorLinks).toHaveLength(2);
+      expect(requestList?.items).toHaveLength(2);
+      expect(requestPayouts).toHaveLength(2);
+      expect(requestPayouts.every((payout) => payout.status === '未进入付款')).toBe(true);
+      const lastHistoryEvent = request.approval?.history[request.approval.history.length - 1];
+      expect(lastHistoryEvent).toMatchObject({
+        action: 'RETURN',
+        stage: demo.stage,
+        occurredAt: demo.occurredAt,
+      });
+
+      if (!demo.issueType) {
+        expect(request.approval?.returnItems).toBeUndefined();
+        expect(request.approval?.returnReason).toBe(demo.reason);
+        expect(requestPayouts.every((payout) => payout.invoiceReviewStatus === '已通过')).toBe(true);
+        return;
+      }
+
+      expect(request.approval?.returnItems).toHaveLength(1);
+      const returnItem = request.approval?.returnItems?.[0];
+      expect(returnItem).toMatchObject({ issueType: demo.issueType, reason: demo.reason });
+      expect(lastHistoryEvent?.returnItems).toEqual(request.approval?.returnItems);
+      expect(invoices.some((invoice) => invoice.invoiceId === returnItem?.invoiceId)).toBe(true);
+      expect(returnItem?.paymentItems).toHaveLength(1);
+      expect(requestList?.items.some((item) => item.id === returnItem?.paymentItems[0]?.itemId)).toBe(true);
+      if (demo.issueType === 'CONTRACT_CONTENT') {
+        expect(returnItem?.contractIds).toHaveLength(1);
+        expect(contracts.some((contract) => contract.contractId === returnItem?.contractIds?.[0])).toBe(true);
+      }
+      const targetPayout = requestPayouts.find((payout) => payout.invoice === returnItem?.invoiceNumber);
+      const otherPayouts = requestPayouts.filter((payout) => payout !== targetPayout);
+      expect(targetPayout).toBeTruthy();
+      expect(otherPayouts.every((payout) => payout.invoiceReviewStatus === '已通过')).toBe(true);
+      expect(targetPayout?.invoiceReviewStatus).toBe(
+        demo.issueType === 'INVOICE_CONTENT' ? '已退回' : '已通过',
+      );
+      const targetPaymentItem = requestList?.items.find((item) => (
+        item.id === returnItem?.paymentItems[0]?.itemId
+      ));
+      expect(targetPaymentItem?.requiresRevalidation).toBe(demo.issueType === 'PAYMENT_LIST');
+      expect(requestList?.items.filter((item) => item !== targetPaymentItem)
+        .every((item) => !item.requiresRevalidation)).toBe(true);
     });
-    expect(returnedRequest.creatorLinks).toHaveLength(2);
-    expect(returnedRequest.approval?.history).toContainEqual(expect.objectContaining({
-      action: 'RETURN',
-      stage: 'FINANCE',
-      reason: RETURNED_PAYMENT_REQUEST_DEMO.reason,
-      occurredAt: RETURNED_PAYMENT_REQUEST_DEMO.occurredAt,
-    }));
-    expect(returnedPayouts.map((payout) => ({ id: payout.id, status: payout.status }))).toEqual([
-      { id: 'payout_fixture_16_01', status: '已退回' },
-      { id: 'payout_fixture_16_02', status: '已退回' },
-    ]);
-    expect(returnedList?.items).toHaveLength(2);
   });
 
   it('keeps the standalone available Invoice outside every existing request', async () => {

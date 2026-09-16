@@ -27,6 +27,7 @@ import {
   paymentListItemValue,
 } from './businessWorkflow';
 import { eligibleInvoicePayoutAccounts, getPayoutAccountId } from './payoutAccounts';
+import { resolveGeneratedInvoiceContractMatch } from './invoice/invoiceContractMatching';
 import { INITIAL_CREATORS, INITIAL_PROJECTS } from './pages/OperationalPages';
 
 describe('project prototype fixtures', () => {
@@ -97,6 +98,19 @@ describe('project prototype fixtures', () => {
       expect(resolution.status).toBe('READY');
       expect(resolution.availableInvoices.map((candidate) => candidate.invoiceId)).toContain(invoice.invoiceId);
       expect(payoutByInvoiceNumber.get(invoice.id)?.payoutAccountId).toBe(invoice.snapshot.payoutAccountId);
+    });
+  });
+
+  it('keeps every request-ready linked Invoice contract-valid with an auditable reason', () => {
+    const contracts = [...PROJECT_DEMO_CONTRACTS, ...REQUEST_CONTRACT_ASSOCIATION_FIXTURES];
+    REQUEST_INVOICE_ASSOCIATION_FIXTURES.forEach((invoice) => {
+      const readiness = resolveGeneratedInvoiceContractMatch(invoice, contracts);
+      expect(readiness.canProceed).toBe(true);
+      expect(readiness.reviewMatches).toBe(true);
+      if (readiness.match.reasonRequiredIssues.length) {
+        expect(readiness.effectiveReason.length).toBeGreaterThan(0);
+        expect(readiness.match.result).toBe('APPROVED_WITH_REASON');
+      }
     });
   });
 

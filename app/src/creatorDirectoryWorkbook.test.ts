@@ -7,6 +7,7 @@ import {
 import type { CreatorProfile } from './types';
 import {
   createCreatorDirectoryWorkbook,
+  creatorDirectoryLegalEntityName,
   creatorDirectoryWorkbookFilename,
   creatorPayoutAccountVersionResult,
   distinctCreatorSocialPlatformCount,
@@ -111,6 +112,29 @@ describe('creator directory helpers', () => {
     expect(formatCreatorPayoutAccountUpdatedAt('')).toBe('未记录');
   });
 
+  it('按默认账户主体类型展示 Real Name 或 Company Name', () => {
+    const personal = creator('creator-personal');
+    const companyBase = creator('creator-company');
+    const company = {
+      ...companyBase,
+      payoutAccounts: companyBase.payoutAccounts.map((account) => account.provider === 'Airwallex'
+        ? { ...account, entityType: 'COMPANY' as const, companyName: 'Creator Company LLC' }
+        : account),
+    };
+    const companyMissingName = {
+      ...company,
+      payoutAccounts: company.payoutAccounts.map((account) => account.provider === 'Airwallex'
+        ? { ...account, companyName: '' }
+        : account),
+    };
+    const paypal = creator('creator-paypal', 'PayPal');
+
+    expect(creatorDirectoryLegalEntityName(personal)).toBe('Real creator-personal');
+    expect(creatorDirectoryLegalEntityName(company)).toBe('Creator Company LLC');
+    expect(creatorDirectoryLegalEntityName(companyMissingName)).toBe('待补充');
+    expect(creatorDirectoryLegalEntityName(paypal)).toBe('Real creator-paypal');
+  });
+
   it('全选覆盖当前筛选结果，保留其他筛选中的已选达人', () => {
     const selected = new Set(['creator-outside']);
     const next = toggleCreatorDirectorySelection(selected, ['creator-alpha', 'creator-beta'], true);
@@ -133,6 +157,7 @@ describe('createCreatorDirectoryWorkbook', () => {
       '全部社媒账号',
       '收款账户摘要',
     ]);
+    expect(workbook.worksheets[0].getRow(1).getCell(2).text).toBe('真实姓名 / 公司名称');
     expect(workbook.worksheets[0].getRow(2).getCell(1).text).toBe(beta.name);
     expect(workbook.worksheets[0].getRow(3).getCell(1).text).toBe(alpha.name);
     expect(workbook.worksheets[1].rowCount).toBe(7);

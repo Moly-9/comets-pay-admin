@@ -57,6 +57,7 @@ import {
 import {
   REQUEST_APPROVAL_STATUS_LABEL,
   requestApprovalStage,
+  requestApprovalStagesFor,
 } from '../requestApprovalWorkflow';
 import type { SystemUser } from '../data';
 import { formatContractMoney, getContractReadiness, type ContractRecord } from '../contracts';
@@ -98,16 +99,16 @@ const REVIEW_PANE_OPTIONS: Array<{
 ];
 
 export const FINANCE_RETURN_ISSUE_OPTIONS: readonly SelectOption<RequestApprovalReturnIssueType>[] = [
-  { value: 'INVOICE_CONTENT', label: 'Invoice 原因', description: '仅开放该份 Invoice 修改权限' },
-  { value: 'PAYMENT_LIST', label: '付款清单原因', description: '仅开放对应付款明细修改权限' },
-  { value: 'CONTRACT_CONTENT', label: '合同原因', description: '仅开放指定的一份合同修改权限' },
-  { value: 'FULL_ITEM', label: '整笔退回', description: '开放该达人本笔请款的合同、Invoice 和付款明细' },
+  { value: 'INVOICE_CONTENT', label: 'Invoice 原因', description: '记录需要修改的 Invoice' },
+  { value: 'PAYMENT_LIST', label: '付款清单原因', description: '记录需要修改的付款明细' },
+  { value: 'CONTRACT_CONTENT', label: '合同问题', description: '记录需要修改的指定合同' },
+  { value: 'FULL_ITEM', label: '整笔退回', description: '记录该达人本笔请款的整体问题' },
 ];
 
 const FINANCE_RETURN_ISSUE_LABEL: Record<RequestApprovalReturnIssueType, string> = {
   INVOICE_CONTENT: 'Invoice 原因',
   PAYMENT_LIST: '付款清单原因',
-  CONTRACT_CONTENT: '合同原因',
+  CONTRACT_CONTENT: '合同问题',
   FULL_ITEM: '整笔退回',
 };
 
@@ -237,7 +238,7 @@ export function ApprovalTimeline({
     );
   }
   const currentStage = requestApprovalStage(approval.status);
-  const stageOrder: RequestApprovalStage[] = ['PM', 'PROJECT_OWNER', 'OWNER', 'FINANCE'];
+  const stageOrder: RequestApprovalStage[] = requestApprovalStagesFor(request.pm, approval);
   const resumedStage = approval.status === 'RETURNED_TO_MEDIA_REVIEW' && approval.resumeStatus
     ? requestApprovalStage(approval.resumeStatus)
     : null;
@@ -541,7 +542,7 @@ function FinanceReviewProjectOverview({
           <div><dt>项目编号</dt><dd>{request.requestCode ?? request.id}</dd></div>
           <div><dt>关联项目</dt><dd>{request.cooperationProjectName ?? request.project}<small>{request.cooperationProjectCode ?? request.projectId ?? '待同步'}</small></dd></div>
           <div><dt>品牌</dt><dd>{projectBrand}</dd></div>
-          <div><dt>负责 PM</dt><dd>{request.pm}</dd></div>
+          <div><dt>负责 PM</dt><dd>{request.pm || '未指定'}</dd></div>
           <div><dt>付款渠道</dt><dd>{paymentProviderDisplayName(paymentChannel)}</dd></div>
           <div><dt>付款主体</dt><dd>{request.paymentEntity || '待补充'}</dd></div>
           <div><dt>项目费用归属</dt><dd>{request.projectCostAttribution || '待补充'}</dd></div>
@@ -1860,7 +1861,7 @@ export function FinanceReviewWorkspace({
                 disabled={!contractOptions.length}
                 onChange={setIssueContractId}
               />
-              <small>只会开放选中合同，其他关联资料继续锁定。</small>
+              <small>选中合同将记入退回明细，便于媒介定位问题。</small>
             </label>
           ) : null}
           <label className="finance-review-reason-field">

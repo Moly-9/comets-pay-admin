@@ -22,6 +22,16 @@ export const explicitDefaultPayoutAccount = (
   creator: Pick<CreatorProfile, 'payoutAccounts'>,
 ) => creator.payoutAccounts.find((account) => account.isDefault && account.status !== 'DISABLED') ?? null;
 
+export const creatorDirectoryLegalEntityName = (
+  creator: Pick<CreatorProfile, 'contact' | 'payoutAccounts'>,
+) => {
+  const defaultAccount = explicitDefaultPayoutAccount(creator);
+  if (defaultAccount?.provider === 'Airwallex' && defaultAccount.entityType === 'COMPANY') {
+    return defaultAccount.companyName.trim() || '待补充';
+  }
+  return creator.contact.legalName.trim() || '待补充';
+};
+
 const normalizePlatform = (platform: string) => {
   const normalized = platform.trim().toLowerCase().replace(/[\s_-]+/g, '');
   return normalized === 'twitter' ? 'x' : normalized;
@@ -174,7 +184,7 @@ export const createCreatorDirectoryWorkbook = async (
     views: [{ state: 'frozen', ySplit: 1 }],
   });
   profileSheet.addRow([
-    '达人名称', '真实姓名', '地区', 'Invoice 联系地址', 'Invoice 联系电话', 'Invoice 联系邮箱', '社媒账号数', '社媒平台数',
+    '达人名称', '真实姓名 / 公司名称', '地区', 'Invoice 联系地址', 'Invoice 联系电话', 'Invoice 联系邮箱', '社媒账号数', '社媒平台数',
   ]);
   creators.forEach((creator) => profileSheet.addRow([
     creator.name,
