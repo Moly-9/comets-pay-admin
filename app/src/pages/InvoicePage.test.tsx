@@ -112,6 +112,7 @@ const renderInvoicePage = (
     creationDrafts?: InvoiceCreationDraft[];
     focusedInvoiceId?: string | null;
     canEditProjectResourceInvoice?: boolean;
+    canExecutePayout?: boolean;
   } = {},
 ) => renderToStaticMarkup(
   <InvoicePage
@@ -140,7 +141,7 @@ const renderInvoicePage = (
     onOpenProject={vi.fn()}
     onOpenRequest={vi.fn()}
     onOpenPayment={vi.fn()}
-    canExecutePayout={false}
+    canExecutePayout={options.canExecutePayout ?? false}
     notify={vi.fn()}
   />,
 );
@@ -186,6 +187,37 @@ describe('InvoicePage waiting-signature actions', () => {
     });
 
     expect(html).toContain('<b>Date:</b> 14 Aug 2026');
+  });
+});
+
+describe('InvoicePage payment detail actions', () => {
+  const approvedPayout = (status: Payout['status']): Payout => ({
+    ...payout,
+    status,
+    invoiceReviewStatus: '已通过',
+  });
+  const approvedRecord: GeneratedInvoiceRecord = {
+    ...record,
+    status: '已通过',
+  };
+  const detailOptions = (status: Payout['status'], canExecutePayout: boolean) => ({
+    payouts: [approvedPayout(status)],
+    generatedInvoices: [approvedRecord],
+    tab: 'approved' as const,
+    focusedInvoiceId: payout.id,
+    canExecutePayout,
+  });
+
+  it('removes only the executable pending-payment action from Invoice detail', () => {
+    expect(renderInvoicePage(true, detailOptions('等待付款', true))).not.toContain('处理付款');
+    expect(renderInvoicePage(true, detailOptions('等待付款', false))).toContain('查看付款详情');
+  });
+
+  it('keeps payment progress, paid-record, and failure actions', () => {
+    expect(renderInvoicePage(true, detailOptions('付款处理中', true))).toContain('查看付款进度');
+    expect(renderInvoicePage(true, detailOptions('已付款', true))).toContain('查看付款记录');
+    expect(renderInvoicePage(true, detailOptions('付款失败', true))).toContain('处理付款失败');
+    expect(renderInvoicePage(true, detailOptions('付款失败', false))).toContain('查看失败信息');
   });
 });
 

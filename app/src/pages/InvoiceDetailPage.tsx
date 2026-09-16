@@ -591,6 +591,12 @@ export function InvoiceDetailPage({
               ? '查看付款进度'
               : canExecutePayout ? '处理付款' : '查看付款详情'
         : '';
+  const showNavigationAction = Boolean(navigationTarget && payout)
+    && !(
+      navigationTarget === 'PAYMENT'
+      && payout?.status === '等待付款'
+      && canExecutePayout
+    );
 
   const statusHint = invoiceReviewStatus === '草稿'
     ? 'Invoice 尚未发布，可继续编辑或撤销；发布后将通知达人签署'
@@ -943,7 +949,7 @@ export function InvoiceDetailPage({
             {managementReturnContext && canManageInvoice && payout && editContext ? (
               <Button onClick={() => onEditInvoice?.(payout, editContext)}>修改并重新发起</Button>
             ) : null}
-            {navigationTarget && payout ? <Button onClick={runNavigationAction}>{navigationActionLabel}</Button> : null}
+            {showNavigationAction ? <Button onClick={runNavigationAction}>{navigationActionLabel}</Button> : null}
           </>
         )}
       />
