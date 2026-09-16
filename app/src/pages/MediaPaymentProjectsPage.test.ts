@@ -11,6 +11,31 @@ import {
 } from './MediaPaymentProjectsPage';
 
 describe('new payment request resource picker', () => {
+  it('guards dirty new-request exits and restores account-scoped local drafts', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+    const closeGuardSource = source.slice(
+      source.indexOf('const createDraftStorageKey'),
+      source.indexOf('const openRequestDetail'),
+    );
+
+    expect(source).toContain("import { DraftExitDialog } from '../components/DraftExitDialog'");
+    expect(source).toContain('comets-pay.payment-request-draft.v${PAYMENT_REQUEST_CREATE_DRAFT_VERSION}:${account}');
+    expect(closeGuardSource).toContain('const hasCreateDraftContent = Boolean(');
+    expect(closeGuardSource).not.toContain('creatorSearch.trim()');
+    expect(closeGuardSource).toContain('if (editingRequest)');
+    expect(closeGuardSource).toContain('setCreateExitDialogOpen(true)');
+    expect(closeGuardSource).toContain('localStorage.setItem(createDraftStorageKey');
+    expect(closeGuardSource).toContain('localStorage.getItem(createDraftStorageKey)');
+    expect(closeGuardSource).toContain('请款草稿已恢复');
+    expect(source).toContain('onClose={requestCloseForm}');
+    expect(source).toContain('<Button variant="ghost" onClick={requestCloseForm}>取消</Button>');
+    expect(source).toContain('title="退出新建请款？"');
+    expect(source).toContain('discardLabel="放弃并退出"');
+    expect(source).toContain('onDiscard={discardCreateDraftAndExit}');
+    expect(source).toContain('onSave={saveCreateDraftAndExit}');
+    expect(source).toContain('onContinue={() => setCreateExitDialogOpen(false)}');
+  });
+
   it('uses the concise my-request page title', () => {
     const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
     expect(source).toContain('title="我的请款"');

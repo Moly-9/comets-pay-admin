@@ -22,6 +22,7 @@ import { createPortal } from 'react-dom';
 import './MediaPaymentProjectsPage.css';
 import { Avatar, Button, ListActionButton, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { ContractDocumentView } from '../components/ContractDocumentView';
+import { DraftExitDialog } from '../components/DraftExitDialog';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import { Pagination, usePagination } from '../components/Pagination';
 import { PaymentRequestCostCascader } from '../components/PaymentRequestCostCascader';
@@ -97,6 +98,7 @@ import { paymentPayoutExpenditureTotals } from '../paymentAttempts';
 import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
 import { CreatorIdentity } from '../components/CreatorIdentity';
 import {
+  creatorSocialAccounts,
   creatorSearchTerms,
   resolveCreatorSocialAccount,
 } from '../creatorSearchOptions';
@@ -162,6 +164,82 @@ export const paymentRequestBrandOptionsFor = (brand: string) => {
 };
 
 const REMARK_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const PAYMENT_REQUEST_CREATE_DRAFT_VERSION = 1;
+
+type PaymentRequestCreateDraft = {
+  version: typeof PAYMENT_REQUEST_CREATE_DRAFT_VERSION;
+  cooperationProjectId: string;
+  brand: string;
+  pm: string;
+  paymentChannel: PaymentRequestPaymentChannel | '';
+  paymentEntity: PaymentRequestPaymentEntity | '';
+  projectCostAttribution: PaymentRequestCostAttribution | '';
+  expectedPaymentDate: string;
+  costType: PaymentRequestCostType;
+  costTypeDetail: PaymentRequestProcurementCostDetail | '';
+  reason: string;
+  remark: string;
+  remarkAttachments: PaymentRequestRemarkAttachment[];
+  selectedCreatorIds: CreatorId[];
+  socialAccountIdsByCreator: Record<string, string>;
+  contractIdsByCreator: Record<string, ContractId[]>;
+  invoiceIdsByCreator: Record<string, InvoiceId[]>;
+  autoLinkedContractIdsByCreator: Record<string, ContractId[]>;
+  savedAt: string;
+};
+
+const paymentRequestCreateDraftStorageKey = (account: string) => (
+  `comets-pay.payment-request-draft.v${PAYMENT_REQUEST_CREATE_DRAFT_VERSION}:${account}`
+);
+
+const isStringRecord = (value: unknown): value is Record<string, string> => (
+  value !== null
+  && typeof value === 'object'
+  && !Array.isArray(value)
+  && Object.values(value).every((item) => typeof item === 'string')
+);
+
+const isStringArrayRecord = (value: unknown): value is Record<string, string[]> => (
+  value !== null
+  && typeof value === 'object'
+  && !Array.isArray(value)
+  && Object.values(value).every((item) => Array.isArray(item) && item.every((entry) => typeof entry === 'string'))
+);
+
+const parsePaymentRequestCreateDraft = (value: string): PaymentRequestCreateDraft | null => {
+  const parsed = JSON.parse(value) as Partial<PaymentRequestCreateDraft>;
+  if (
+    parsed.version !== PAYMENT_REQUEST_CREATE_DRAFT_VERSION
+    || typeof parsed.cooperationProjectId !== 'string'
+    || typeof parsed.brand !== 'string'
+    || typeof parsed.pm !== 'string'
+    || typeof parsed.paymentChannel !== 'string'
+    || typeof parsed.paymentEntity !== 'string'
+    || typeof parsed.projectCostAttribution !== 'string'
+    || typeof parsed.expectedPaymentDate !== 'string'
+    || typeof parsed.costType !== 'string'
+    || typeof parsed.costTypeDetail !== 'string'
+    || typeof parsed.reason !== 'string'
+    || typeof parsed.remark !== 'string'
+    || !Array.isArray(parsed.remarkAttachments)
+    || !parsed.remarkAttachments.every((attachment) => (
+      Boolean(attachment)
+      && typeof attachment.name === 'string'
+      && typeof attachment.size === 'number'
+      && typeof attachment.type === 'string'
+      && typeof attachment.lastModified === 'number'
+      && (attachment.dataUrl === undefined || typeof attachment.dataUrl === 'string')
+    ))
+    || !Array.isArray(parsed.selectedCreatorIds)
+    || !parsed.selectedCreatorIds.every((creatorId) => typeof creatorId === 'string')
+    || !isStringRecord(parsed.socialAccountIdsByCreator)
+    || !isStringArrayRecord(parsed.contractIdsByCreator)
+    || !isStringArrayRecord(parsed.invoiceIdsByCreator)
+    || !isStringArrayRecord(parsed.autoLinkedContractIdsByCreator)
+    || typeof parsed.savedAt !== 'string'
+  ) return null;
+  return parsed as PaymentRequestCreateDraft;
+};
 
 const actualPayoutAmountLabel = (payout?: Payout) => {
   if (!payout) return '—';
@@ -872,6 +950,7 @@ export function MediaPaymentProjectsPage({
 }) {
   const [creating, setCreating] = useState(false);
   const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
+  const [createExitDialogOpen, setCreateExitDialogOpen] = useState(false);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(focusedProjectId);
   const [cooperationProjectId, setCooperationProjectId] = useState('');
   const [brand, setBrand] = useState('');
@@ -1089,6 +1168,27 @@ export function MediaPaymentProjectsPage({
     }
   };
 
+  const createDraftStorageKey = paymentRequestCreateDraftStorageKey(currentUser.account);
+  const hasCreateDraftContent = Boolean(
+    cooperationProjectId
+    || brand.trim()
+    || pm
+    || paymentChannel
+    || paymentEntity
+    || projectCostAttribution
+    || expectedPaymentDate
+    || costType !== DEFAULT_PAYMENT_REQUEST_COST_TYPE
+    || costTypeDetail
+    || reason.trim()
+    || remark.trim()
+    || remarkAttachments.length
+    || selectedCreatorIds.length
+    || Object.keys(socialAccountIdsByCreator).length
+    || Object.keys(contractIdsByCreator).length
+    || Object.keys(invoiceIdsByCreator).length
+    || Object.keys(autoLinkedContractIdsByCreator).length
+  );
+
   const resetForm = () => {
     setCooperationProjectId('');
     setBrand('');
@@ -1115,17 +1215,148 @@ export function MediaPaymentProjectsPage({
     setFormSubmitAttempted(false);
     setFocusCreatorDocuments(false);
     setEditingRequestId(null);
+    setCreateExitDialogOpen(false);
   };
 
-  const closeForm = () => {
+  const finishCloseForm = () => {
     const returnRequestId = editingRequest?.id ?? null;
     resetForm();
     setCreating(false);
     if (returnRequestId) setSelectedRequestId(returnRequestId);
   };
 
+  const discardCreateDraftAndExit = () => {
+    try {
+      localStorage.removeItem(createDraftStorageKey);
+    } catch {
+      // Closing must remain available when browser storage is unavailable.
+    }
+    finishCloseForm();
+  };
+
+  const createDraftSnapshot = (): PaymentRequestCreateDraft => ({
+    version: PAYMENT_REQUEST_CREATE_DRAFT_VERSION,
+    cooperationProjectId,
+    brand,
+    pm,
+    paymentChannel,
+    paymentEntity,
+    projectCostAttribution,
+    expectedPaymentDate,
+    costType,
+    costTypeDetail,
+    reason,
+    remark,
+    remarkAttachments,
+    selectedCreatorIds,
+    socialAccountIdsByCreator,
+    contractIdsByCreator,
+    invoiceIdsByCreator,
+    autoLinkedContractIdsByCreator,
+    savedAt: new Date().toISOString(),
+  });
+
+  const saveCreateDraftAndExit = () => {
+    try {
+      localStorage.setItem(createDraftStorageKey, JSON.stringify(createDraftSnapshot()));
+    } catch {
+      notify('请款草稿保存失败', '浏览器存储空间不足或不可用，请移除较大的备注截图后重试。');
+      return;
+    }
+    finishCloseForm();
+    notify('请款草稿已保存', '下次打开“新建请款审批”时会自动恢复。');
+  };
+
+  const requestCloseForm = () => {
+    if (editingRequest) {
+      finishCloseForm();
+      return;
+    }
+    if (hasCreateDraftContent) {
+      setCreateExitDialogOpen(true);
+      return;
+    }
+    discardCreateDraftAndExit();
+  };
+
   const openCreateForm = () => {
     resetForm();
+    try {
+      const storedDraft = localStorage.getItem(createDraftStorageKey);
+      const draft = storedDraft ? parsePaymentRequestCreateDraft(storedDraft) : null;
+      if (storedDraft && !draft) localStorage.removeItem(createDraftStorageKey);
+      if (draft) {
+        const activeProject = selectableCooperationProjects.find((project) => (
+          cooperationProjectIdFor(project) === draft.cooperationProjectId
+        ));
+        const restoredProjectId = activeProject ? draft.cooperationProjectId : '';
+        const validCreators = restoredProjectId
+          ? creators.filter((creator) => draft.selectedCreatorIds.includes(creator.id as CreatorId))
+          : [];
+        const validCreatorIds = new Set(validCreators.map((creator) => creator.id));
+        const validContractIds = new Set(contracts.flatMap((contract) => (
+          contract.contractId ? [contract.contractId] : []
+        )));
+        const validInvoiceIds = new Set(invoices.map((invoice) => invoice.invoiceId));
+        const filterRelationRecord = <T extends string>(
+          record: Record<string, string[]>,
+          validIds: Set<string>,
+        ): Record<string, T[]> => Object.fromEntries(
+          Object.entries(record).flatMap(([creatorId, ids]) => (
+            validCreatorIds.has(creatorId)
+              ? [[creatorId, ids.filter((id) => validIds.has(id)) as T[]]]
+              : []
+          )),
+        );
+        const restoredSocialAccounts = Object.fromEntries(validCreators.flatMap((creator) => {
+          const socialAccountId = draft.socialAccountIdsByCreator[creator.id];
+          return socialAccountId && creatorSocialAccounts(creator).some((account) => account.id === socialAccountId)
+            ? [[creator.id, socialAccountId]]
+            : [];
+        }));
+        const restoredContractIds = filterRelationRecord<ContractId>(draft.contractIdsByCreator, validContractIds);
+        const restoredInvoiceIds = filterRelationRecord<InvoiceId>(draft.invoiceIdsByCreator, validInvoiceIds);
+        const restoredAutoLinkedIds = filterRelationRecord<ContractId>(draft.autoLinkedContractIdsByCreator, validContractIds);
+        const corrected = Boolean(draft.cooperationProjectId && !activeProject)
+          || validCreators.length !== draft.selectedCreatorIds.length
+          || Boolean(draft.pm && !PM_USERS.some((user) => user.name === draft.pm))
+          || Boolean(draft.paymentChannel && !PAYMENT_CHANNEL_OPTIONS.some((option) => option.value === draft.paymentChannel))
+          || Boolean(draft.paymentEntity && !PAYMENT_REQUEST_PAYMENT_ENTITIES.includes(draft.paymentEntity as PaymentRequestPaymentEntity))
+          || Boolean(draft.projectCostAttribution && !PAYMENT_REQUEST_COST_ATTRIBUTIONS.includes(draft.projectCostAttribution as PaymentRequestCostAttribution))
+          || Object.keys(restoredSocialAccounts).length !== Object.keys(draft.socialAccountIdsByCreator).length
+          || Object.values(restoredContractIds).flat().length !== Object.values(draft.contractIdsByCreator).flat().length
+          || Object.values(restoredInvoiceIds).flat().length !== Object.values(draft.invoiceIdsByCreator).flat().length
+          || Object.values(restoredAutoLinkedIds).flat().length !== Object.values(draft.autoLinkedContractIdsByCreator).flat().length;
+
+        setCooperationProjectId(restoredProjectId);
+        setBrand(draft.brand);
+        setPm(PM_USERS.some((user) => user.name === draft.pm) ? draft.pm : '');
+        setPaymentChannel(PAYMENT_CHANNEL_OPTIONS.some((option) => option.value === draft.paymentChannel) ? draft.paymentChannel : '');
+        setPaymentEntity(PAYMENT_REQUEST_PAYMENT_ENTITIES.includes(draft.paymentEntity as PaymentRequestPaymentEntity) ? draft.paymentEntity : '');
+        setProjectCostAttribution(PAYMENT_REQUEST_COST_ATTRIBUTIONS.includes(draft.projectCostAttribution as PaymentRequestCostAttribution) ? draft.projectCostAttribution : '');
+        setExpectedPaymentDate(draft.expectedPaymentDate);
+        setCostType(normalizePaymentRequestCostType(draft.costType));
+        setCostTypeDetail(normalizePaymentRequestProcurementCostDetail(draft.costTypeDetail));
+        setReason(draft.reason);
+        setRemark(draft.remark);
+        setRemarkAttachments(draft.remarkAttachments);
+        setSelectedCreatorIds(validCreators.map((creator) => creator.id as CreatorId));
+        setSocialAccountIdsByCreator(restoredSocialAccounts);
+        setContractIdsByCreator(restoredContractIds);
+        setInvoiceIdsByCreator(restoredInvoiceIds);
+        setAutoLinkedContractIdsByCreator(restoredAutoLinkedIds);
+        notify(
+          corrected ? '请款草稿已恢复并校正' : '请款草稿已恢复',
+          corrected ? '已移除当前系统中不可用的项目、达人或单据关联。' : '已恢复上次未完成的请款内容。',
+        );
+      }
+    } catch {
+      try {
+        localStorage.removeItem(createDraftStorageKey);
+      } catch {
+        // Ignore unavailable browser storage and keep the blank form usable.
+      }
+    }
     setCreating(true);
   };
 
@@ -1202,6 +1433,7 @@ export function MediaPaymentProjectsPage({
     setFormSubmitAttempted(false);
     setFocusCreatorDocuments(newCreators.length > 0);
     setCreatorAddRequestId(null);
+    setCreateExitDialogOpen(false);
     setEditingRequestId(request.id);
     setSelectedRequestId(null);
     setCreating(true);
@@ -1503,7 +1735,14 @@ export function MediaPaymentProjectsPage({
       },
     };
     if (editingRequest) onUpdated(request);
-    else onCreated(request);
+    else {
+      onCreated(request);
+      try {
+        localStorage.removeItem(createDraftStorageKey);
+      } catch {
+        // The request is already created; unavailable storage must not block completion.
+      }
+    }
     resetForm();
     setCreating(false);
     setSelectedRequestId(request.id);
@@ -2092,9 +2331,9 @@ export function MediaPaymentProjectsPage({
       {creating ? (
         <Modal
           title={editingRequest ? `编辑请款 · ${requestCodeFor(editingRequest)}` : '新建请款'}
-          onClose={closeForm}
+          onClose={requestCloseForm}
           width="820px"
-          footer={<><Button variant="ghost" onClick={closeForm}>取消</Button><Button onClick={saveRequest}>{editingRequest ? '保存修改' : '创建请款'}</Button></>}
+          footer={<><Button variant="ghost" onClick={requestCloseForm}>取消</Button><Button onClick={saveRequest}>{editingRequest ? '保存修改' : '创建请款'}</Button></>}
         >
           <div className="form-grid single-column project-create-form media-request-create-form">
             <div className="form-field">
@@ -2416,6 +2655,15 @@ export function MediaPaymentProjectsPage({
           </div>
         </Modal>
       ) : null}
+      <DraftExitDialog
+        open={createExitDialogOpen}
+        title="退出新建请款？"
+        description="当前请款内容尚未保存，你可以保存为草稿后退出。"
+        discardLabel="放弃并退出"
+        onDiscard={discardCreateDraftAndExit}
+        onSave={saveCreateDraftAndExit}
+        onContinue={() => setCreateExitDialogOpen(false)}
+      />
       {cancelRequestModal}
     </div>
   );
