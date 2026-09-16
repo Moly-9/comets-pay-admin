@@ -267,6 +267,9 @@ export const invoiceAssociationUnavailableReason = (
   if (!invoice.snapshot.creatorId) return 'Invoice 缺少达人稳定 ID';
   if (!creatorFor(invoice.snapshot.creatorId, creators)) return 'Invoice 关联的达人档案不存在';
   if (!invoice.snapshot.engagementId) return 'Invoice 缺少合作关系 ID';
+  if (invoice.status === '达人反馈') return 'Invoice 正在处理达人反馈，完成审核后才能关联请款';
+  if (invoice.status === '已退回') return 'Invoice 已退回，修正并重新审核通过后才能关联请款';
+  if (invoice.status !== '已通过') return 'Invoice 尚未审核通过，不能关联请款';
   const existingLink = links.find((link) => link.creatorId === invoice.snapshot.creatorId);
   if (existingLink && existingLink.engagementId !== invoice.snapshot.engagementId) {
     return '达人已通过其他合作关系加入当前请款';
@@ -276,6 +279,8 @@ export const invoiceAssociationUnavailableReason = (
     && invoice.snapshot.creatorSocialAccountId
     && existingLink.socialAccountId !== invoice.snapshot.creatorSocialAccountId
   ) return 'Invoice 社媒账号与当前请款达人账号不一致';
+  if (existingLink?.invoiceIds.includes(invoice.invoiceId)) return 'Invoice 已关联当前请款';
+  if (existingLink?.invoiceIds.length) return '该达人已关联其他 Invoice，请先解除后再选择';
   const owner = requestOwningInvoice(requests, invoice.invoiceId, excludeRequestId);
   return owner ? `已关联 ${owner.requestCode ?? owner.id}` : '';
 };
@@ -298,7 +303,8 @@ export const mergeInvoiceCandidateLinks = (
     if (existingIndex !== undefined) {
       const existing = next[existingIndex];
       if (!existing || existing.engagementId !== engagementId) return;
-      existing.invoiceIds = [...new Set([...existing.invoiceIds, invoice.invoiceId])];
+      if (existing.invoiceIds.length) return;
+      existing.invoiceIds = [invoice.invoiceId];
       return;
     }
     next.push({
@@ -772,7 +778,6 @@ export function RequestProjectResourceManager({
   };
 
   const linkedContractIds = new Set(linkedContracts.map(contractStableId));
-  const linkedInvoiceIds = new Set(linkedInvoices.map((invoice) => invoice.invoiceId));
   const availableContractCandidates = contractCandidates.filter((contract) => !linkedContractIds.has(contractStableId(contract)));
   const contractCreatorOptions: SearchableOption[] = [
     {
@@ -805,7 +810,7 @@ export function RequestProjectResourceManager({
   const filteredContractCandidates = availableContractCandidates.filter((contract) => (
     contractCreatorFilter === 'ALL' || contract.creatorId === contractCreatorFilter
   ));
-  const availableInvoiceCandidates = invoiceCandidates.filter((invoice) => !linkedInvoiceIds.has(invoice.invoiceId));
+  const availableInvoiceCandidates = invoiceCandidates;
   const invoiceCreatorOptions: SearchableOption[] = [
     {
       value: 'ALL',
@@ -836,6 +841,13 @@ export function RequestProjectResourceManager({
   const filteredInvoiceCandidates = availableInvoiceCandidates.filter((invoice) => (
     invoiceCreatorFilter === 'ALL' || invoice.snapshot.creatorId === invoiceCreatorFilter
   ));
+  const selectedInvoiceIdByCreator = new Map<string, InvoiceId>();
+  selectedCandidateIds.forEach((candidateId) => {
+    const selectedInvoice = invoiceCandidates.find((invoice) => invoice.invoiceId === candidateId);
+    if (selectedInvoice?.snapshot.creatorId && !selectedInvoiceIdByCreator.has(selectedInvoice.snapshot.creatorId)) {
+      selectedInvoiceIdByCreator.set(selectedInvoice.snapshot.creatorId, selectedInvoice.invoiceId);
+    }
+  });
 
   return (
     <>
@@ -848,7 +860,7 @@ export function RequestProjectResourceManager({
         </article>
         <article className="project-resource-row project-resource-row-invoice">
           <span className="project-resource-icon"><ReceiptText size={19} /></span>
-          <div className="project-resource-copy"><div className="project-resource-heading"><h3 className="project-resource-label">Invoice</h3><span className="project-resource-count">{linkedInvoices.length} 条可查看</span></div><strong>{linkedInvoices.length} 份 Invoice</strong><small>同一达人可关联多份 Invoice</small></div>
+          <div className="project-resource-copy"><div className="project-resource-heading"><h3 className="project-resource-label">Invoice</h3><span className="project-resource-count">{linkedInvoices.length} 条可查看</span></div><strong>{linkedInvoices.length} 份 Invoice</strong><small>每位达人仅可关联一份 Invoice</small></div>
           <span className="project-resource-status"><i />{linkedInvoices.length ? '已关联' : '待补资料'}</span>
           <ListActionButton className="project-resource-summary-open" kind="view" onClick={() => setResourceDialog('invoice')}>查看 Invoice</ListActionButton>
         </article>
@@ -888,7 +900,7 @@ export function RequestProjectResourceManager({
       {resourceDialog === 'invoice' ? (
         <Modal title={`${request.requestCode ?? request.id} · Invoice`} width="920px" className="project-resource-modal request-resource-modal request-document-list-modal" onClose={() => setResourceDialog(null)} footer={<Button variant="secondary" onClick={() => setResourceDialog(null)}>关闭</Button>}>
           <div className="project-resource-browser">
-            <div className="project-resource-browser-heading"><div><strong>全部 Invoice</strong><p>平铺展示 {linkedInvoices.length} 份 Invoice，同一达人可关联多份。</p></div><span>{linkedInvoices.length} 份</span></div>
+            <div className="project-resource-browser-heading"><div><strong>全部 Invoice</strong><p>平铺展示 {linkedInvoices.length} 份 Invoice，每位达人仅可关联一份。</p></div><span>{linkedInvoices.length} 份</span></div>
             {canEditLinkedResources ? <div className="project-resource-browser-toolbar"><Button variant="secondary" icon={<Link2 size={15} />} onClick={() => openLinkDialog('invoice')}>关联已有 Invoice</Button></div> : null}
             <div className="request-resource-flat-list request-resource-invoice-card-list">
               {linkedInvoices.map((invoice) => {
@@ -896,7 +908,7 @@ export function RequestProjectResourceManager({
                 const invoiceReturn = requestApprovalReturnItemForInvoiceEdit(request.approval, invoice.invoiceId);
                 return <article className="request-resource-flat-row request-resource-invoice-row" key={invoice.invoiceId}><span className="project-contract-record-icon request-invoice-record-icon" aria-hidden="true"><ReceiptText size={19} strokeWidth={2} /></span><div><strong>{invoice.id}</strong><small>{invoice.status}</small></div><div><span>达人</span><CreatorIdentity creator={creator} displayName={invoice.snapshot.creatorName} fallbackHandle={invoice.snapshot.creatorHandle} fallbackPlatform={invoice.snapshot.creatorPlatform} showAvatar={false} socialAccountsMaxVisible={1} /></div><div><span>Invoice 金额</span><strong>{formatInvoiceMoney(invoice.snapshot.currency, invoiceTotal(invoice.snapshot))}</strong><small>{invoice.snapshot.contractIds?.length ?? 0} 份覆盖合同</small></div><span className={`project-record-status${invoiceReturn ? ' is-warning' : ''}`}><i />{invoiceReturn ? '需修改 Invoice' : invoice.validationStatus === 'valid' ? '已通过' : '需重新校验'}</span><div className="project-contract-record-actions"><ListActionButton kind={invoiceReturn ? 'edit' : 'view'} onClick={() => onOpenInvoice(invoice.invoiceId)}>{invoiceReturn ? '打开修改' : '查看'}</ListActionButton>{canEditLinkedResources ? <ListActionButton kind="edit" onClick={() => setConfirmAction({ title: '解除 Invoice 关联', description: `${invoice.id} 源记录会保留，对应付款行将移除。`, confirmLabel: '确认解除', run: () => unlinkInvoices([invoice.invoiceId]) })}>解除</ListActionButton> : null}</div></article>;
               })}
-              {!linkedInvoices.length ? <div className="project-resource-browser-empty"><ReceiptText size={23} /><strong>当前请款未关联 Invoice</strong><p>每位达人提交审批前至少需要一份 Invoice。</p></div> : null}
+              {!linkedInvoices.length ? <div className="project-resource-browser-empty"><ReceiptText size={23} /><strong>当前请款未关联 Invoice</strong><p>每位达人提交审批前需要关联一份 Invoice。</p></div> : null}
             </div>
           </div>
         </Modal>
@@ -1244,7 +1256,14 @@ export function RequestProjectResourceManager({
             }) : filteredInvoiceCandidates.map((invoice) => {
               const creator = invoice.snapshot.creatorId ? creatorFor(invoice.snapshot.creatorId, creators) : undefined;
               const currentLink = invoice.snapshot.creatorId ? linkByCreator.get(invoice.snapshot.creatorId) : undefined;
-              const unavailableReason = invoiceUnavailableReason(invoice);
+              const selectedInvoiceId = invoice.snapshot.creatorId
+                ? selectedInvoiceIdByCreator.get(invoice.snapshot.creatorId)
+                : undefined;
+              const unavailableReason = invoiceUnavailableReason(invoice) || (
+                selectedInvoiceId && selectedInvoiceId !== invoice.invoiceId
+                  ? '本次已为该达人选择一份 Invoice，请先取消后再选择'
+                  : ''
+              );
               const enabled = !unavailableReason;
               const selected = selectedCandidateIds.includes(invoice.invoiceId);
               return <article className={`request-resource-candidate${enabled ? '' : ' is-disabled'}`} key={invoice.invoiceId}><label><input type="checkbox" aria-label={`选择 Invoice ${invoice.id}`} disabled={!enabled} checked={selected} onChange={() => toggleCandidate(invoice.invoiceId)} /><span><strong>{invoice.id}</strong><small>{invoice.status}</small></span></label><div className="request-resource-candidate-creator"><CreatorIdentity creator={creator} displayName={invoice.snapshot.creatorName} fallbackHandle={invoice.snapshot.creatorHandle} fallbackPlatform={invoice.snapshot.creatorPlatform} />{enabled ? currentLink ? <span className="is-existing">已在请款</span> : <span>关联后新增达人</span> : null}</div><div><strong>{enabled ? formatInvoiceMoney(invoice.snapshot.currency, invoiceTotal(invoice.snapshot)) : '不可关联'}</strong><small>{enabled ? `${invoice.snapshot.contractIds?.length ?? 0} 份覆盖合同` : unavailableReason}</small></div><ListActionButton kind="view" onClick={() => onOpenInvoice(invoice.invoiceId)}>查看 Invoice</ListActionButton></article>;

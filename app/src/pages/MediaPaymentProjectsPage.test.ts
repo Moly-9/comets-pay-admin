@@ -231,6 +231,18 @@ describe('new payment request resource picker', () => {
     expect(pickerSource).not.toContain('disabled={option.disabled && !option.selected}');
   });
 
+  it('requires exactly one Invoice per creator and keeps replacement explicit', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+
+    expect(source).toContain('每位达人必须且仅能关联一份 Invoice');
+    expect(source).toContain('<span>Invoice <em>必填，单选</em></span>');
+    expect(source).toContain('关联已录入系统的 Invoice，仅可单选');
+    expect(source).toContain("notify('Invoice 只能单选'");
+    expect(source).toContain("singleInvoiceLimit ? '请先取消当前 Invoice'");
+    expect(source).toContain('selected ? false : Boolean(singleInvoiceLimit || owner || invoiceNotApproved || channelMismatch)');
+    expect(source).toContain('selectedInvoiceIds.length > 1');
+  });
+
   it('keeps resource titles and status lines on one line without exposing contract type', () => {
     const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
     const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');

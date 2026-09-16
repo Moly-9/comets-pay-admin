@@ -289,6 +289,24 @@ describe('media payment request document resolution', () => {
     ]);
   });
 
+  it('keeps the existing Invoice until it is removed before another one is selected', () => {
+    const firstInvoice = invoice();
+    const secondInvoice = invoice({
+      id: 'INV-SECOND',
+      invoiceId: 'invoice_002' as InvoiceId,
+    });
+    const result = addInvoiceToPaymentRequestSelection({
+      invoice: secondInvoice,
+      invoices: [firstInvoice, secondInvoice],
+      contracts: [],
+      selectedInvoiceIds: [firstInvoice.invoiceId],
+      selectedContractIds: [],
+    });
+
+    expect(result.invoiceIds).toEqual([firstInvoice.invoiceId]);
+    expect(result.autoLinkedContractIds).toEqual([]);
+  });
+
   it('normalizes legacy single-invoice links and de-duplicates invoice ids', () => {
     const legacy = normalizePaymentRequestCreatorLink({
       creatorId,
@@ -541,7 +559,7 @@ describe('media payment request submission validation', () => {
     expect(item.validationIssues).toContain('手续费承担方未确认');
   });
 
-  it('sums multiple invoices for one creator and rejects duplicate or extra payment rows', () => {
+  it('preserves historical multi-Invoice totals but rejects them on resubmission', () => {
     const second = invoice({
       id: 'INV-20260807-000002',
       invoiceId: 'invoice_002' as InvoiceId,
@@ -553,6 +571,12 @@ describe('media payment request submission validation', () => {
     });
     const multiLink = { ...link, invoiceIds: [link.invoiceIds[0], second.invoiceId] };
     expect(paymentRequestAmountLabel([multiLink], [invoice(), second])).toBe('USD 150');
+    expect(paymentRequestSubmissionIssues({
+      creatorLinks: [multiLink],
+      invoices: [invoice(), second],
+      paymentLists: [paymentList()],
+      paymentRequestProjectId,
+    })).toContain(`达人 ${creatorId} 在一次请款中只能关联一份 Invoice`);
 
     const duplicateList = paymentList();
     duplicateList.items = [duplicateList.items[0], { ...duplicateList.items[0], id: 'item-duplicate' }];

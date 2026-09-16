@@ -872,6 +872,17 @@ export const addInvoiceToPaymentRequestSelection = ({
   selectedInvoiceIds: InvoiceId[];
   selectedContractIds: ContractId[];
 }) => {
+  const normalizedSelectedInvoiceIds = [...new Set(selectedInvoiceIds)];
+  if (
+    normalizedSelectedInvoiceIds.length
+    && !normalizedSelectedInvoiceIds.includes(invoice.invoiceId)
+  ) {
+    return {
+      invoiceIds: normalizedSelectedInvoiceIds,
+      contractIds: [...new Set(selectedContractIds)],
+      autoLinkedContractIds: [] as ContractId[],
+    };
+  }
   const selectableIds = new Set(selectableContractIds(contracts));
   const coveredContractIds = (invoice.snapshot.contractIds ?? []).filter((contractId) => {
     if (!selectableIds.has(contractId)) return false;
@@ -882,7 +893,9 @@ export const addInvoiceToPaymentRequestSelection = ({
       && contractLinkedToProject(contract, invoiceCooperationProjectId(invoice)),
     );
   });
-  const selectedInvoices = [...new Set([...selectedInvoiceIds, invoice.invoiceId])];
+  const selectedInvoices = normalizedSelectedInvoiceIds.length
+    ? normalizedSelectedInvoiceIds
+    : [invoice.invoiceId];
   const selectedContracts = [...new Set([...selectedContractIds, ...coveredContractIds])];
   const remainingCoveredIds = new Set(selectedInvoices.flatMap((invoiceId) => (
     invoices.find((candidate) => candidate.invoiceId === invoiceId)?.snapshot.contractIds ?? []
@@ -1000,6 +1013,9 @@ export const paymentRequestSubmissionIssues = ({
     if (!link.invoiceIds.length) {
       issues.push(`达人 ${link.creatorId} 缺少关联 Invoice`);
       return;
+    }
+    if (link.invoiceIds.length > 1) {
+      issues.push(`达人 ${link.creatorId} 在一次请款中只能关联一份 Invoice`);
     }
     link.invoiceIds.forEach((invoiceId) => {
       const invoice = invoices.find((candidate) => candidate.invoiceId === invoiceId);

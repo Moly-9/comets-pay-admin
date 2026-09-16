@@ -120,7 +120,7 @@ import { downloadBlob } from '../invoice/invoiceUtils';
 type Notify = (title: string, message: string) => void;
 
 const STATUS_COPY = {
-  READY: '可选择多份 Invoice',
+  READY: '可选择 1 份 Invoice',
   MISSING_INVOICE: '该合作项目下暂无此达人 Invoice',
   INVOICE_NOT_APPROVED: '该合作项目下的 Invoice 尚未完成签署和审核',
   INVOICE_IN_USE: '可用 Invoice 均已关联其他请款',
@@ -353,7 +353,7 @@ function RequestResourcePicker({
   const label = isInvoice ? 'Invoice' : '合同';
   const ResourceIcon = isInvoice ? ReceiptText : FileText;
   const helper = isInvoice
-    ? '关联已录入系统的 Invoice，可多选'
+    ? '关联已录入系统的 Invoice，仅可单选'
     : '仅已确认合同可关联，可多选';
   const selectedCopy = selectedCount
     ? `已选择 ${selectedCount} 份${isInvoice ? ' Invoice' : '合同'}`
@@ -1529,6 +1529,11 @@ export function MediaPaymentProjectsPage({
     const resolution = resolutions.get(creatorId);
     const invoice = resolution?.availableInvoices.find((candidate) => candidate.invoiceId === invoiceId);
     if (!invoice || !resolution) return;
+    const selectedInvoiceIds = invoiceIdsByCreator[creatorId] ?? [];
+    if (selectedInvoiceIds.length && !selectedInvoiceIds.includes(invoiceId)) {
+      notify('Invoice 只能单选', '该达人已关联一份 Invoice，请先取消当前 Invoice 后再选择。');
+      return;
+    }
     const expectedProvider = paymentRequestProviderForChannel(paymentChannel || undefined);
     const invoiceProvider = invoicePaymentListProvider(invoice);
     if (expectedProvider && invoiceProvider !== expectedProvider) {
@@ -1542,7 +1547,7 @@ export function MediaPaymentProjectsPage({
       invoice,
       invoices: resolution.invoices,
       contracts: resolution.contracts,
-      selectedInvoiceIds: invoiceIdsByCreator[creatorId] ?? [],
+      selectedInvoiceIds,
       selectedContractIds: contractIdsByCreator[creatorId] ?? [],
     });
     setInvoiceIdsByCreator((current) => ({ ...current, [creatorId]: result.invoiceIds }));
@@ -1638,7 +1643,8 @@ export function MediaPaymentProjectsPage({
     !reason.trim() ? '请填写请款事由' : '',
     ...selectedCreators.flatMap((creator) => {
       const selectedInvoiceIds = invoiceIdsByCreator[creator.id] ?? [];
-      if (!selectedInvoiceIds.length) return [`请为 ${creator.name} 至少选择一份 Invoice`];
+      if (!selectedInvoiceIds.length) return [`请为 ${creator.name} 选择一份 Invoice`];
+      if (selectedInvoiceIds.length > 1) return [`${creator.name} 在一次请款中只能关联一份 Invoice`];
       const resolution = resolutions.get(creator.id);
       const selectedInvoices = resolution?.invoices.filter((invoice) => selectedInvoiceIds.includes(invoice.invoiceId)) ?? [];
       if (selectedInvoices.length !== selectedInvoiceIds.length) return [`${creator.name} 的 Invoice 关联已失效，请重新选择`];
@@ -2499,7 +2505,7 @@ export function MediaPaymentProjectsPage({
             </div>
             {selectedCreators.length ? (
               <section id="media-request-document-section" className="media-request-document-section">
-                <header><div><h3>达人单据关联</h3><p>使用下拉框选择单据。Invoice 必填且可多选，选择后自动带入其覆盖的已确认合同。</p></div><span>{selectedCreators.length} 位达人</span></header>
+                <header><div><h3>达人单据关联</h3><p>使用下拉框选择单据。每位达人必须且仅能关联一份 Invoice，选择后自动带入其覆盖的已确认合同。</p></div><span>{selectedCreators.length} 位达人</span></header>
                 {selectedCreators.map((creator) => {
                   const resolution = resolutions.get(creator.id);
                   const selectedContractIds = contractIdsByCreator[creator.id] ?? [];
@@ -2516,12 +2522,13 @@ export function MediaPaymentProjectsPage({
                     const invoiceProvider = invoicePaymentListProvider(invoice);
                     const channelMismatch = Boolean(expectedProvider && invoiceProvider !== expectedProvider);
                     const invoiceNotApproved = invoice.status !== '已通过';
+                    const singleInvoiceLimit = selectedInvoiceIds.length > 0 && !selected;
                     return {
                       value: invoice.invoiceId,
                       label: invoiceRequestResourceTitle(invoice, selectedProject?.name),
-                      description: `${invoiceAmountLabel(invoice)} · ${owner ? `已关联 ${owner.requestCode ?? owner.id}` : invoiceNotApproved ? '尚未完成签署和审核' : channelMismatch ? `${invoiceProvider} 与所选付款渠道不一致` : selected ? '已选择' : invoice.status}`,
+                      description: `${invoiceAmountLabel(invoice)} · ${selected ? '已选择' : singleInvoiceLimit ? '请先取消当前 Invoice' : owner ? `已关联 ${owner.requestCode ?? owner.id}` : invoiceNotApproved ? '尚未完成签署和审核' : channelMismatch ? `${invoiceProvider} 与所选付款渠道不一致` : invoice.status}`,
                       selected,
-                      disabled: Boolean(owner || invoiceNotApproved || channelMismatch),
+                      disabled: selected ? false : Boolean(singleInvoiceLimit || owner || invoiceNotApproved || channelMismatch),
                       resource: { kind: 'invoice', invoice },
                     };
                   });
@@ -2547,7 +2554,7 @@ export function MediaPaymentProjectsPage({
                       <div className="media-request-document-creator"><CreatorIdentity creator={creator} /></div>
                       <div className="media-request-document-fields">
                         <div className={`media-request-document-field media-request-invoice-state is-${resolution?.status.toLowerCase() ?? 'missing'}`}>
-                          <span>Invoice <em>必填，可多选</em></span>
+                          <span>Invoice <em>必填，单选</em></span>
                           <RequestResourcePicker
                             id={invoicePickerId}
                             kind="invoice"

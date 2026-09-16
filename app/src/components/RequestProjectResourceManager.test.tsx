@@ -85,16 +85,18 @@ const associationInvoice = ({
   creatorId: ownerCreatorId,
   engagementId: ownerEngagementId,
   projectId = 'cooperation-project-one',
+  status = '已通过',
 }: {
   invoiceId: InvoiceId;
   creatorId: CreatorId;
   engagementId: EngagementId;
   projectId?: string;
+  status?: GeneratedInvoiceRecord['status'];
 }): GeneratedInvoiceRecord => ({
   invoiceId,
   id: `INV-${invoiceId}`,
   sourcePayoutId: `payout-${invoiceId}`,
-  status: '已通过',
+  status,
   generatedAt: '2026-08-06T09:00:00.000Z',
   validationStatus: 'valid',
   snapshot: {
@@ -411,7 +413,7 @@ describe('Invoice association workflow', () => {
     )).toBe('合同不属于当前合作项目');
   });
 
-  it('adds a new Invoice owner with no contracts and keeps multiple Invoices for an existing creator', () => {
+  it('adds one Invoice for a new creator and refuses a second Invoice for an existing creator', () => {
     const existingCreatorInvoice = associationInvoice({
       invoiceId: 'invoice-request-three' as InvoiceId,
       creatorId,
@@ -427,17 +429,30 @@ describe('Invoice association workflow', () => {
       [existingCreatorInvoice, newCreatorInvoice],
     );
 
-    expect(next[0]?.invoiceIds).toEqual([
-      invoiceOneId,
-      invoiceTwoId,
-      'invoice-request-three',
-    ]);
+    expect(next[0]?.invoiceIds).toEqual([invoiceOneId, invoiceTwoId]);
     expect(next[1]).toEqual({
       creatorId: secondCreatorId,
       engagementId: secondEngagementId,
       contractIds: [],
       invoiceIds: ['invoice-request-four'],
     });
+  });
+
+  it('keeps only the first candidate when a batch contains two Invoices for one creator', () => {
+    const first = associationInvoice({
+      invoiceId: 'invoice-request-batch-first' as InvoiceId,
+      creatorId: secondCreatorId,
+      engagementId: secondEngagementId,
+    });
+    const second = associationInvoice({
+      invoiceId: 'invoice-request-batch-second' as InvoiceId,
+      creatorId: secondCreatorId,
+      engagementId: secondEngagementId,
+    });
+    const next = mergeInvoiceCandidateLinks([], [first, second]);
+
+    expect(next).toHaveLength(1);
+    expect(next[0]?.invoiceIds).toEqual([first.invoiceId]);
   });
 
   it('disables occupied Invoices and mismatched creator relationships', () => {
@@ -466,6 +481,63 @@ describe('Invoice association workflow', () => {
       creators,
       [],
     )).toBe('达人已通过其他合作关系加入当前请款');
+  });
+
+  it('allows only approved Invoices to be associated with a payment request', () => {
+    const approved = associationInvoice({ invoiceId: invoiceOneId, creatorId, engagementId });
+    const feedback = associationInvoice({
+      invoiceId: invoiceTwoId,
+      creatorId,
+      engagementId,
+      status: '达人反馈',
+    });
+    const returned = associationInvoice({
+      invoiceId: 'invoice-request-returned' as InvoiceId,
+      creatorId,
+      engagementId,
+      status: '已退回',
+    });
+    const pending = associationInvoice({
+      invoiceId: 'invoice-request-pending' as InvoiceId,
+      creatorId,
+      engagementId,
+      status: '待媒介审核',
+    });
+
+    expect(invoiceAssociationUnavailableReason(approved, [], creators, [])).toBe('');
+    expect(invoiceAssociationUnavailableReason(feedback, [], creators, []))
+      .toBe('Invoice 正在处理达人反馈，完成审核后才能关联请款');
+    expect(invoiceAssociationUnavailableReason(returned, [], creators, []))
+      .toBe('Invoice 已退回，修正并重新审核通过后才能关联请款');
+    expect(invoiceAssociationUnavailableReason(pending, [], creators, []))
+      .toBe('Invoice 尚未审核通过，不能关联请款');
+    (['草稿', '待签署', '待媒介复核'] as const).forEach((status, index) => {
+      const invoice = associationInvoice({
+        invoiceId: `invoice-request-unapproved-${index}` as InvoiceId,
+        creatorId,
+        engagementId,
+        status,
+      });
+      expect(invoiceAssociationUnavailableReason(invoice, [], creators, []))
+        .toBe('Invoice 尚未审核通过，不能关联请款');
+    });
+  });
+
+  it('blocks another Invoice when the creator already has one in the current request', () => {
+    const candidate = associationInvoice({
+      invoiceId: 'invoice-request-replacement' as InvoiceId,
+      creatorId,
+      engagementId,
+    });
+    const existingLinks = [{
+      creatorId,
+      engagementId,
+      contractIds: [],
+      invoiceIds: [invoiceOneId],
+    }];
+
+    expect(invoiceAssociationUnavailableReason(candidate, existingLinks, creators, []))
+      .toBe('该达人已关联其他 Invoice，请先解除后再选择');
   });
 });
 
