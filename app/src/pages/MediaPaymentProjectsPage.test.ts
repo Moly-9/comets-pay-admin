@@ -4,6 +4,8 @@ import {
   contractRequestResourceTitle,
   formatPaymentRequestSubmittedAt,
   invoiceRequestResourceTitle,
+  PAYMENT_REQUEST_BRAND_OPTIONS,
+  paymentRequestBrandOptionsFor,
   positionRequestResourcePreview,
   sortRequestResourcePickerOptions,
 } from './MediaPaymentProjectsPage';
@@ -98,6 +100,26 @@ describe('new payment request resource picker', () => {
     expect(source).toContain("setPm('')");
     expect(source).not.toContain("!pm ? '请选择项目 PM' : ''");
     expect(source).not.toMatch(/selectedProject\s*&&\s*pm\s*&&\s*paymentChannel/);
+  });
+
+  it('uses the standard optional brand picker and preserves historical brands while editing', () => {
+    const source = readFileSync(new URL('./MediaPaymentProjectsPage.tsx', import.meta.url), 'utf8');
+
+    expect(PAYMENT_REQUEST_BRAND_OPTIONS).toEqual([
+      '网易', '腾讯', '叠纸', '米哈游', '莉莉丝', '字节跳动', '库洛',
+      '雷霆游戏', '祖龙游戏', '西山居', '英雄互娱', '深蓝互动', '双尾',
+    ]);
+    expect(source).toContain('ariaLabel="选择品牌"');
+    expect(source).toContain('placeholder="请选择品牌"');
+    expect(source).toContain("onClear={() => setBrand('')}");
+    expect(source).not.toContain('placeholder="输入品牌或客户名称"');
+    expect(paymentRequestBrandOptionsFor('网易')).toHaveLength(13);
+    const historicalBrandOptions = paymentRequestBrandOptionsFor('NetEase Games');
+    expect(historicalBrandOptions[historicalBrandOptions.length - 1]).toEqual({
+      value: 'NetEase Games',
+      label: 'NetEase Games',
+      description: '历史品牌',
+    });
   });
 
   it('shows selectable and selected resources before disabled resources', () => {

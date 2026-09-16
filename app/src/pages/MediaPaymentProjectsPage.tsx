@@ -130,6 +130,37 @@ const PAYMENT_CHANNEL_OPTIONS = [
   { value: 'Payermax', label: 'Payer Max', description: '本地支付网络' },
 ] as const;
 
+export const PAYMENT_REQUEST_BRAND_OPTIONS = [
+  '网易',
+  '腾讯',
+  '叠纸',
+  '米哈游',
+  '莉莉丝',
+  '字节跳动',
+  '库洛',
+  '雷霆游戏',
+  '祖龙游戏',
+  '西山居',
+  '英雄互娱',
+  '深蓝互动',
+  '双尾',
+] as const;
+
+export const paymentRequestBrandOptionsFor = (brand: string) => {
+  const standardOptions = PAYMENT_REQUEST_BRAND_OPTIONS.map((option) => ({
+    value: option,
+    label: option,
+  }));
+  const currentBrand = brand.trim();
+  if (!currentBrand || PAYMENT_REQUEST_BRAND_OPTIONS.some((option) => option === currentBrand)) {
+    return standardOptions;
+  }
+  return [
+    ...standardOptions,
+    { value: currentBrand, label: currentBrand, description: '历史品牌' },
+  ];
+};
+
 const REMARK_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 
 const actualPayoutAmountLabel = (payout?: Payout) => {
@@ -873,6 +904,7 @@ export function MediaPaymentProjectsPage({
   const [cancelReason, setCancelReason] = useState('');
   const [creatorAddRequestId, setCreatorAddRequestId] = useState<string | null>(null);
   const [focusCreatorDocuments, setFocusCreatorDocuments] = useState(false);
+  const brandOptions = useMemo(() => paymentRequestBrandOptionsFor(brand), [brand]);
 
   useEffect(() => {
     if (initialFocusedFailurePayoutId) setFocusedFailurePayoutId(initialFocusedFailurePayoutId);
@@ -2085,7 +2117,19 @@ export function MediaPaymentProjectsPage({
                 placeholder="请选择飞书合作项目"
               />
             </div>
-            <label><span>品牌 <small className="request-optional-label">选填</small></span><input placeholder="输入品牌或客户名称" value={brand} onChange={(event) => setBrand(event.target.value)} /></label>
+            <div className="form-field">
+              <span className="form-field-label">品牌 <small className="request-optional-label">选填</small></span>
+              <SelectField
+                ariaLabel="选择品牌"
+                variant="form"
+                value={brand}
+                options={brandOptions}
+                onChange={setBrand}
+                onClear={() => setBrand('')}
+                clearLabel="清除品牌"
+                placeholder="请选择品牌"
+              />
+            </div>
             <div className="form-field"><span className="form-field-label">项目 PM <small className="request-optional-label">选填</small></span><SelectField ariaLabel="选择项目 PM" variant="form" value={pm} options={[{ value: '', label: '不指定 PM', description: '将从媒介负责人审批开始' }, ...PM_USERS.map((user) => ({ value: user.name, label: user.name, description: user.email }))]} onChange={setPm} placeholder="不指定 PM" /></div>
             <div className="media-request-payment-plan">
               <div className="form-field">
