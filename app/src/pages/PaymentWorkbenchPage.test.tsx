@@ -102,6 +102,28 @@ describe('PaymentWorkbenchPage currency overview', () => {
     expect(html.includes('aria-label="查看本月已付款币种详情"')).toBe(paidOverview.length > 4);
   });
 
+  it('uses attempt debits minus confirmed refunds for total expenditure', () => {
+    const scenario = applyPaymentBatchPrototypeScenario({
+      payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
+      requests: INITIAL_COMPLETE_REQUEST_RESOURCES.requests,
+      generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+      paymentLists: INITIAL_COMPLETE_REQUEST_RESOURCES.paymentLists,
+    });
+    const paidRows = buildPaymentProjectRows({
+      tab: 'paid',
+      payouts: scenario.payouts,
+      requests: scenario.requests,
+      generatedInvoices: INITIAL_COMPLETE_REQUEST_RESOURCES.invoices,
+    });
+    const retryRow = paidRows.find((row) => row.requestCode === 'REQ-202607-000011');
+
+    expect(retryRow?.actualPaidTotals).toContainEqual({
+      currency: 'HKD',
+      amount: 76_623.48,
+      count: 5,
+    });
+  });
+
   it('maps every supported currency to a flag asset for the detail list', () => {
     expect(CURRENCY_FLAG_PATHS).toEqual({
       USD: '/currency-flags/us.svg',

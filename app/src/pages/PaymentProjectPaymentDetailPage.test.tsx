@@ -113,6 +113,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
       '请款金额',
       '支出金额',
       '手续费',
+      '退款金额',
       '付款状态',
     ];
     headings.forEach((heading) => expect(html).toContain(`>${heading}</th>`));
@@ -136,6 +137,12 @@ describe('PaymentProjectPaymentDetailPage', () => {
     expect(html).toContain('class="avatar avatar-sm"');
     expect(html).toContain('查看详情');
     expect(html).toContain('HKD 15,288');
+    expect(html).toContain('>退款金额</th>');
+    const returnBadgeIndex = html.indexOf('付款退回');
+    const returnRowStart = html.lastIndexOf('<tr', returnBadgeIndex);
+    const returnRow = html.slice(returnRowStart, html.indexOf('</tr>', returnBadgeIndex));
+    expect(returnRow).toContain('<td class="payment-project-detail-money-cell">HKD -15,288</td>');
+    expect(returnRow).toContain('<td class="payment-project-detail-money-cell">HKD 15,288</td>');
     const retriedPayout = resources.payouts.find((payout) => (
       payout.currentPaymentAttempt?.paymentBatchCode === PAYMENT_BATCH_RETRY_DEMO.retryBatchCode
     ));
@@ -499,7 +506,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
     const source = readFileSync(new URL('./PaymentProjectPaymentDetailPage.tsx', import.meta.url), 'utf8');
 
     expect(css).toContain('.payment-project-detail-table');
-    expect(css).toContain('min-width: max(100%, 1696px)');
+    expect(css).toContain('min-width: max(100%, 1848px)');
     expect(css).toContain('.payment-project-detail-code-heading');
     expect(css).toContain('.payment-project-detail-type-heading');
     expect(css).toContain('.payment-project-attempt-badge');

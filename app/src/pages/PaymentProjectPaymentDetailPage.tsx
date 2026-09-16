@@ -1103,6 +1103,7 @@ export function PaymentProjectPaymentDetailPage({
                   <th className="payment-project-detail-money-heading">请款金额</th>
                   <th className="payment-project-detail-money-heading">支出金额</th>
                   <th className="payment-project-detail-money-heading">手续费</th>
+                  <th className="payment-project-detail-money-heading">退款金额</th>
                   <th className="payment-project-detail-status-cell">付款状态</th>
                   <th className="action-cell payment-project-detail-action-cell">操作</th>
                 </tr>
@@ -1164,6 +1165,9 @@ export function PaymentProjectPaymentDetailPage({
                         ? returnConfirmed ? money(row.refundCurrency!, -Math.abs(row.refundAmount!)) : '待渠道回写'
                         : paymentAttemptExpenditureLabel(item)}</td>
                       <td className="payment-project-detail-money-cell">{isReturn ? '—' : paymentAttemptResultMoney(currentStatus, item.transferFeeAmount, item.transferFeeCurrency)}</td>
+                      <td className="payment-project-detail-money-cell">{isReturn
+                        ? returnConfirmed ? money(row.refundCurrency!, Math.abs(row.refundAmount!)) : '待渠道回写'
+                        : '—'}</td>
                       <td className="payment-project-detail-status-cell">
                         <span className={`simple-status ${paymentStatusTone(rowStatus)}`}><i />{rowStatus}</span>
                       </td>
@@ -1179,7 +1183,7 @@ export function PaymentProjectPaymentDetailPage({
                   );
                 }) : (
                   <tr>
-                    <td className="request-project-empty" colSpan={12}>该项目暂无付款记录</td>
+                    <td className="request-project-empty" colSpan={13}>该项目暂无付款记录</td>
                   </tr>
                 )}
               </tbody>

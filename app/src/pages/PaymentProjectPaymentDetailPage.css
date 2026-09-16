@@ -323,7 +323,7 @@
 
 .payment-project-detail-table {
   width: max-content;
-  min-width: max(100%, 1696px);
+  min-width: max(100%, 1848px);
   table-layout: fixed;
   white-space: nowrap;
 }

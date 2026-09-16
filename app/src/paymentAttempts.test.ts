@@ -72,6 +72,43 @@ describe('payment attempt snapshots', () => {
     ]);
   });
 
+  it('calculates net expenditure as all attempt debits minus confirmed refunds', () => {
+    const source = {
+      ...payout(),
+      amount: 15_288,
+      currency: 'HKD' as const,
+      feeBearer: 'ADVERTISER' as const,
+      paymentAttempts: [{
+        paymentBatchId: 'payment-batch-first' as NonNullable<Payout['currentPaymentAttempt']>['paymentBatchId'],
+        attemptNumber: 1,
+        status: '付款失败' as const,
+        principalAmount: 15_288,
+        principalCurrency: 'HKD' as const,
+        actualPaidAmount: 15_318.58,
+        actualPaidCurrency: 'HKD' as const,
+        transferFeeAmount: 30.58,
+        transferFeeCurrency: 'HKD' as const,
+        refundAmount: 15_288,
+        refundCurrency: 'HKD' as const,
+        refundedAt: '2026-08-05T16:06:00.000Z',
+      }, {
+        paymentBatchId: 'payment-batch-retry' as NonNullable<Payout['currentPaymentAttempt']>['paymentBatchId'],
+        attemptNumber: 2,
+        status: '已付款' as const,
+        principalAmount: 15_288,
+        principalCurrency: 'HKD' as const,
+        actualPaidAmount: 15_318.58,
+        actualPaidCurrency: 'HKD' as const,
+        transferFeeAmount: 30.58,
+        transferFeeCurrency: 'HKD' as const,
+      }],
+    } satisfies Payout;
+
+    expect(paymentPayoutExpenditureTotals(source)).toEqual([
+      { currency: 'HKD', amount: 15_349.16 },
+    ]);
+  });
+
   it('freezes a failed attempt debit and its confirmed refund', () => {
     const source = payout();
     const snapshot = paymentAttemptSnapshotFor({
