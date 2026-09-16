@@ -42,6 +42,7 @@ import type { RequestProjectSummary } from '../pages/RequestProjectDetailPage';
 import type { ProjectSummary } from '../pages/ProjectDetailPage';
 import { paymentFailureRecoveryLabel } from '../paymentFailureRecovery';
 import { PAYMENT_CURRENCY_OPTIONS } from '../paymentCurrencies';
+import { creatorSearchTerms } from '../creatorSearchOptions';
 import { validatePaymentListAccountViaApi } from '../requestPaymentAccountValidation';
 import {
   requestApprovalHasScopedReturnItems,
@@ -52,10 +53,11 @@ import {
   requestApprovalReturnItemForPaymentListEdit,
 } from '../requestApprovalWorkflow';
 import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
-import { Avatar, Button, ListActionButton, Modal, NoticeBanner, SelectField } from './Common';
+import { Avatar, Button, ListActionButton, Modal, NoticeBanner } from './Common';
 import { PaymentListEditor } from './PaymentListEditor';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
 import { CreatorIdentity } from './CreatorIdentity';
+import { SearchableComboBox, type SearchableOption } from './SearchableComboBox';
 
 type ResourceKind = 'contract' | 'invoice' | 'payment';
 type ExpandedPaymentRow = { invoiceId: InvoiceId; mode: 'view' | 'edit' } | null;
@@ -162,6 +164,13 @@ const contractStableId = (contract: ContractRecord) => contract.contractId ?? co
 const creatorFor = (creatorId: string, creators: CreatorProfile[]) => (
   creators.find((creator) => creator.id === creatorId)
 );
+
+export const requestResourceCreatorSearchText = (
+  creator: CreatorProfile | undefined,
+  fallbackValues: Array<string | undefined>,
+) => [creator ? creatorSearchTerms(creator) : '', ...fallbackValues]
+  .filter(Boolean)
+  .join(' ');
 
 const paymentListStatusLabel = (status: PaymentListRecord['status']) => {
   if (status === 'paid') return '已付款';
@@ -765,7 +774,7 @@ export function RequestProjectResourceManager({
   const linkedContractIds = new Set(linkedContracts.map(contractStableId));
   const linkedInvoiceIds = new Set(linkedInvoices.map((invoice) => invoice.invoiceId));
   const availableContractCandidates = contractCandidates.filter((contract) => !linkedContractIds.has(contractStableId(contract)));
-  const contractCreatorOptions = [
+  const contractCreatorOptions: SearchableOption[] = [
     {
       value: 'ALL',
       label: '全部达人',
@@ -777,10 +786,19 @@ export function RequestProjectResourceManager({
       const creator = creatorFor(creatorId, creators);
       const sample = availableContractCandidates.find((contract) => contract.creatorId === creatorId);
       const count = availableContractCandidates.filter((contract) => contract.creatorId === creatorId).length;
+      const fallbackName = sample?.generationSnapshot?.creatorName ?? creatorId;
       return {
         value: creatorId,
-        label: creator?.name ?? creatorId,
+        label: creator?.name ?? fallbackName,
+        selectedLabel: creator?.name ?? fallbackName,
         description: `${count} 份合同`,
+        searchText: requestResourceCreatorSearchText(creator, [
+          fallbackName,
+          sample?.creatorHandle,
+          sample?.creatorPlatform ?? sample?.platform,
+          sample?.channelLink,
+          sample?.generationSnapshot?.channelUrl,
+        ]),
       };
     }),
   ];
@@ -788,7 +806,7 @@ export function RequestProjectResourceManager({
     contractCreatorFilter === 'ALL' || contract.creatorId === contractCreatorFilter
   ));
   const availableInvoiceCandidates = invoiceCandidates.filter((invoice) => !linkedInvoiceIds.has(invoice.invoiceId));
-  const invoiceCreatorOptions = [
+  const invoiceCreatorOptions: SearchableOption[] = [
     {
       value: 'ALL',
       label: '全部达人',
@@ -804,8 +822,14 @@ export function RequestProjectResourceManager({
       )).length;
       return {
         value: creatorId,
-        label: creator?.name ?? creatorId,
+        label: creator?.name ?? sample?.snapshot.creatorName ?? creatorId,
+        selectedLabel: creator?.name ?? sample?.snapshot.creatorName ?? creatorId,
         description: `${count} 份 Invoice`,
+        searchText: requestResourceCreatorSearchText(creator, [
+          sample?.snapshot.creatorName,
+          sample?.snapshot.creatorHandle,
+          sample?.snapshot.creatorPlatform,
+        ]),
       };
     }),
   ];
@@ -1188,7 +1212,27 @@ export function RequestProjectResourceManager({
 
       {linkDialog ? (
         <Modal title={linkDialog === 'contract' ? '关联已有合同' : '关联已有 Invoice'} width="920px" className="project-resource-modal request-resource-link-modal" onClose={() => { setLinkDialog(null); setResourceDialog(linkDialog); }} footer={<><Button variant="secondary" onClick={() => { setLinkDialog(null); setResourceDialog(linkDialog); }}>取消</Button><Button disabled={!selectedCandidateIds.length} disabledReason={`请先选择要关联的${linkDialog === 'contract' ? '合同' : ' Invoice'}。`} onClick={commitCandidates}>关联已选（{selectedCandidateIds.length}）</Button></>}>
-          <div className="project-resource-browser"><div className="project-resource-browser-heading"><div><strong>{linkDialog === 'contract' ? '合同候选' : 'Invoice 候选'}</strong><p>{linkDialog === 'contract' ? '展示当前合作项目下、属于本次请款达人的合同，可一次关联多份。' : '展示当前合作项目下全部达人的 Invoice；关联项目外达人时，会同步加入请款。'}</p></div><span>{linkDialog === 'contract' ? filteredContractCandidates.length : filteredInvoiceCandidates.length} 条</span></div><div className="request-resource-candidate-filter"><div><strong>按达人筛选</strong><small>{linkDialog === 'contract' ? '同一合作项目可以关联同一达人的多份合同' : 'Invoice 候选范围不会受当前请款达人名单限制'}</small></div>{linkDialog === 'contract' ? <SelectField ariaLabel="合同候选达人筛选" variant="form" value={contractCreatorFilter} options={contractCreatorOptions} onChange={setContractCreatorFilter} /> : <SelectField ariaLabel="Invoice 候选达人筛选" variant="form" value={invoiceCreatorFilter} options={invoiceCreatorOptions} onChange={setInvoiceCreatorFilter} />}</div><div className="request-resource-candidate-list">
+          <div className="project-resource-browser"><div className="project-resource-browser-heading"><div><strong>{linkDialog === 'contract' ? '合同候选' : 'Invoice 候选'}</strong><p>{linkDialog === 'contract' ? '展示当前合作项目下、属于本次请款达人的合同，可一次关联多份。' : '展示当前合作项目下全部达人的 Invoice；关联项目外达人时，会同步加入请款。'}</p></div><span>{linkDialog === 'contract' ? filteredContractCandidates.length : filteredInvoiceCandidates.length} 条</span></div><div className="request-resource-candidate-filter"><div><strong>按达人筛选</strong><small>{linkDialog === 'contract' ? '同一合作项目可以关联同一达人的多份合同' : 'Invoice 候选范围不会受当前请款达人名单限制'}</small></div><SearchableComboBox
+            ariaLabel={linkDialog === 'contract' ? '合同候选达人筛选' : 'Invoice 候选达人筛选'}
+            className="creator-search-combobox request-resource-creator-search"
+            value={linkDialog === 'contract' ? contractCreatorFilter : invoiceCreatorFilter}
+            options={linkDialog === 'contract' ? contractCreatorOptions : invoiceCreatorOptions}
+            placeholder="搜索达人名称、频道 ID、频道链接…"
+            resultUnit="位达人"
+            onChange={linkDialog === 'contract' ? setContractCreatorFilter : setInvoiceCreatorFilter}
+            onClear={() => (linkDialog === 'contract' ? setContractCreatorFilter('ALL') : setInvoiceCreatorFilter('ALL'))}
+            renderOption={(option) => {
+              if (option.value === 'ALL') return <span><strong>{option.label}</strong><small>{option.description}</small></span>;
+              const creator = creatorFor(option.value, creators);
+              const contract = linkDialog === 'contract'
+                ? availableContractCandidates.find((candidate) => candidate.creatorId === option.value)
+                : undefined;
+              const invoice = linkDialog === 'invoice'
+                ? availableInvoiceCandidates.find((candidate) => candidate.snapshot.creatorId === option.value)
+                : undefined;
+              return <span className="request-resource-creator-search-option"><CreatorIdentity creator={creator} displayName={option.label} fallbackHandle={contract?.creatorHandle ?? invoice?.snapshot.creatorHandle} fallbackPlatform={contract?.creatorPlatform ?? contract?.platform ?? invoice?.snapshot.creatorPlatform} socialAccountsMode="expanded" /><small>{option.description}</small></span>;
+            }}
+          /></div><div className="request-resource-candidate-list">
             {linkDialog === 'contract' ? filteredContractCandidates.map((contract) => {
               const id = contractStableId(contract);
               const creator = contract.creatorId ? creatorFor(contract.creatorId, creators) : undefined;

@@ -185,7 +185,7 @@ describe('media returned payment request handling', () => {
     const html = renderPage(null);
 
     expect(html).toContain('1 个请款待处理');
-    expect(html).toContain('其中 1 个付款信息有误，0 个打款失败');
+    expect(html).toContain('其中 1 个付款材料有误，0 个打款失败');
     expect(html).toContain('“处理退回”或“处理失败请款”');
     expect(html).toContain('付款工作台 · 收款账户名与 Invoice 不一致');
     expect(html).toContain('处理退回');
@@ -250,7 +250,7 @@ describe('media returned payment request handling', () => {
 
     expect(listHtml).toContain('处理失败请款');
     expect(listHtml).toContain('部分打款失败');
-    expect(listHtml).toContain('其中 0 个付款信息有误，1 个打款失败');
+    expect(listHtml).toContain('其中 0 个付款材料有误，1 个打款失败');
     expect(listHtml).toContain('1 笔失败款待恢复');
     expect(detailHtml.match(/部分打款失败/g)).toHaveLength(2);
     expect(detailHtml).not.toContain('已进入审批流');
@@ -301,7 +301,7 @@ describe('media returned payment request handling', () => {
     const html = renderPage(null, [failedPayout], [returnedRequest, failedRequest]);
 
     expect(html).toContain('2 个请款待处理');
-    expect(html).toContain('其中 1 个付款信息有误，1 个打款失败');
+    expect(html).toContain('其中 1 个付款材料有误，1 个打款失败');
     expect(html).toContain('处理退回');
     expect(html).toContain('处理失败请款');
   });

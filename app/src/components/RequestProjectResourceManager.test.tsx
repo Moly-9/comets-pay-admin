@@ -15,6 +15,7 @@ import {
   mergeInvoiceCandidateLinks,
   requestLinkedContracts,
   requestLinkedInvoices,
+  requestResourceCreatorSearchText,
 } from './RequestProjectResourceManager';
 
 const creatorId = 'creator-request-resource' as CreatorId;
@@ -161,9 +162,18 @@ describe('request project resource aggregation', () => {
     expect(source).toContain('全部合同');
     expect(source).toContain('全部 Invoice');
     expect(source).toContain('一张付款单包含全部 Invoice');
-    expect(source).toContain('ariaLabel="合同候选达人筛选"');
-    expect(source).toContain('ariaLabel="Invoice 候选达人筛选"');
+    expect(source).toContain("'合同候选达人筛选'");
+    expect(source).toContain("'Invoice 候选达人筛选'");
+    expect(source).toContain('className="creator-search-combobox request-resource-creator-search"');
+    expect(source).toContain('placeholder="搜索达人名称、频道 ID、频道链接…"');
+    expect(source).toContain('socialAccountsMode="expanded"');
     expect(source).toContain('Invoice 候选范围不会受当前请款达人名单限制');
+    expect(styles).toMatch(/\.request-resource-creator-search \.contract-search-input-wrap,[\s\S]*?border:\s*0;[\s\S]*?box-shadow:\s*none;/);
+    expect(requestResourceCreatorSearchText(undefined, [
+      'Mina Kato',
+      '@MinaKato',
+      'https://youtube.com/@MinaKato',
+    ])).toContain('https://youtube.com/@MinaKato');
     expect(source).toContain('正式合同已生成，尚未上传待签署文件');
     expect(source).toContain('已上传，待人工确认');
     expect(source).toContain('合同尚未完成签署');

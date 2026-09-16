@@ -4227,9 +4227,30 @@ tr.is-expanded .payment-batch-table-detail-trigger > svg {
   line-height: 1.45;
 }
 
-.request-resource-candidate-filter > .custom-select {
+.request-resource-candidate-filter > .custom-select,
+.request-resource-candidate-filter > .request-resource-creator-search {
   width: min(310px, 42%);
   flex: 0 0 auto;
+}
+
+.request-resource-creator-search .contract-search-input-wrap,
+.request-resource-creator-search .contract-search-input-wrap:focus-within {
+  min-height: 40px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.request-resource-creator-search-option {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 5px;
+}
+
+.request-resource-creator-search-option > small {
+  color: #7b8493;
+  font-size: 11.5px;
 }
 
 .request-resource-flat-list,
@@ -5242,7 +5263,8 @@ tr.is-expanded .payment-batch-table-detail-trigger > svg {
     gap: 9px;
   }
 
-  .request-resource-candidate-filter > .custom-select { width: 100%; }
+  .request-resource-candidate-filter > .custom-select,
+  .request-resource-candidate-filter > .request-resource-creator-search { width: 100%; }
 
   .request-resource-flat-row,
   .request-resource-candidate { grid-template-columns: 30px minmax(0, 1fr); gap: 10px; padding: 13px; }

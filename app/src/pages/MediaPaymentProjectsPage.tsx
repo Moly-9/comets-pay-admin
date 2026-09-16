@@ -1961,7 +1961,7 @@ export function MediaPaymentProjectsPage({
           <AlertTriangle size={18} aria-hidden="true" />
           <div>
             <strong>{pendingRequestCount} 个请款待处理</strong>
-            <p>其中 {returnedRequests.length} 个付款信息有误，{paymentFailureRequests.length} 个打款失败。请在下方列表中点击“处理退回”或“处理失败请款”，查看原因并处理。</p>
+            <p>其中 {returnedRequests.length} 个付款材料有误，{paymentFailureRequests.length} 个打款失败。请在下方列表中点击“处理退回”或“处理失败请款”，查看原因并处理。</p>
           </div>
         </div>
       ) : null}
