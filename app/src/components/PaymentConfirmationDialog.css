@@ -13,9 +13,10 @@
 }
 
 .payment-confirmation-dialog .modal-footer {
-  display: block;
+  display: flex;
   min-height: 76px;
   background: #fff;
+  padding-block: 16px;
 }
 
 .payment-confirmation-intro {

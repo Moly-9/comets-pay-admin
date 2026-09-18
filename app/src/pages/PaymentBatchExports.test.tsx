@@ -167,6 +167,8 @@ describe('payment batch filters and selection', () => {
     expect(html).toContain('aria-label="付款状态筛选"');
     expect(html).toContain('>全部付款状态</span>');
     expect(html).toContain('付款人 / 时间');
+    expect(html).toContain('发起重新付款');
+    expect(html).toContain('<th>批次总支出金额及币种</th>');
     expect(html).not.toContain('创建人 / 时间');
     expect(html).toContain('<th>批次号</th><th>批次用途</th><th>请款项目编号</th><th>付款渠道</th><th>付款主体</th><th>项目名称</th><th>请款金额及币种</th>');
     expect(html).toContain('<td class="payment-batch-project-cell" title="测试项目"><strong>测试项目</strong></td>');

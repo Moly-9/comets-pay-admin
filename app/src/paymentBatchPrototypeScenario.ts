@@ -154,6 +154,9 @@ export const applyPaymentBatchPrototypeScenario = ({
       const isRetrySuccess = perspective === 'project-current'
         && scenario.requestCode === PAYMENT_BATCH_RETRY_DEMO.requestCode
         && scenario.providerItemIndex === 0;
+      const isReadyForRetryDemo = perspective === 'project-current'
+        && scenario.requestCode === PAYMENT_BATCH_PARTIAL_FAILURE_DEMO.requestCode
+        && payout.id === PAYMENT_BATCH_PARTIAL_FAILURE_DEMO.failedPayoutId;
       const linkedInvoice = generatedInvoices.find((invoice) => invoice.sourcePayoutId === payout.id);
       const sourcePaymentOrderCode = paymentLists.find((list) => (
         linkedInvoice && list.items.some((item) => item.invoiceId === linkedInvoice.invoiceId)
@@ -241,9 +244,22 @@ export const applyPaymentBatchPrototypeScenario = ({
           postTransactionBalance: undefined,
           postTransactionBalanceCurrency: undefined,
         }),
-        issue: failed ? '渠道返回收款账户暂不可用，等待财务处理' : undefined,
-        returnReason: isRetrySuccess ? undefined : payout.returnReason,
-        paymentFailureReturn: isRetrySuccess ? undefined : payout.paymentFailureReturn,
+        issue: isReadyForRetryDemo
+          ? '付款失败已退回：已确认沿用原收款账户，可重新付款'
+          : failed ? '渠道返回收款账户暂不可用，等待财务处理' : undefined,
+        returnReason: isRetrySuccess
+          ? undefined
+          : isReadyForRetryDemo ? '已确认沿用原收款账户，可重新付款。' : payout.returnReason,
+        paymentFailureReturn: isRetrySuccess
+          ? undefined
+          : isReadyForRetryDemo ? {
+              issueType: 'PAYMENT_LIST',
+              reason: '请确认原收款账户后重新付款。',
+              actorAccount: 'finance.prototype',
+              actorName: '原型财务',
+              occurredAt: '2026-08-06T09:00:00.000Z',
+              restartStage: 'PAYMENT_LIST_RESUBMISSION',
+            } : payout.paymentFailureReturn,
         currentPaymentAttempt: isRetrySuccess ? {
           paymentBatchId: PAYMENT_BATCH_RETRY_DEMO.retryBatchId as PaymentBatchId,
           paymentBatchCode: PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
@@ -254,21 +270,42 @@ export const applyPaymentBatchPrototypeScenario = ({
           attemptNumber: 2,
         } : payout.currentPaymentAttempt,
         paymentAttempts: retryPaymentAttempts,
-        paymentFailureRecovery: isRetrySuccess ? {
-          status: 'RETRY_SUCCEEDED',
-          notifications: [],
-          previousFailure: {
-            provider: payout.provider,
-            errorCode: 'BENEFICIARY_UNAVAILABLE',
-            providerResponse: 'The beneficiary is temporarily unavailable.',
-            occurredAt: PAYMENT_BATCH_RETRY_DEMO.originalFailedAt,
-          },
-          failureCode: 'BENEFICIARY_UNAVAILABLE',
-          returnReason: '收款账户暂不可用，已完成资料修复和重新付款。',
-          retryBatchId: PAYMENT_BATCH_RETRY_DEMO.retryBatchId,
-          retryBatchCode: PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
-          retrySucceededAt: PAYMENT_BATCH_RETRY_DEMO.succeededAt,
-        } : payout.paymentFailureRecovery,
+        paymentFailureRecovery: isRetrySuccess
+          ? {
+              status: 'RETRY_SUCCEEDED',
+              notifications: [],
+              previousFailure: {
+                provider: payout.provider,
+                errorCode: 'BENEFICIARY_UNAVAILABLE',
+                providerResponse: 'The beneficiary is temporarily unavailable.',
+                occurredAt: PAYMENT_BATCH_RETRY_DEMO.originalFailedAt,
+              },
+              failureCode: 'BENEFICIARY_UNAVAILABLE',
+              returnReason: '收款账户暂不可用，已完成资料修复和重新付款。',
+              retryBatchId: PAYMENT_BATCH_RETRY_DEMO.retryBatchId,
+              retryBatchCode: PAYMENT_BATCH_RETRY_DEMO.retryBatchCode,
+              retrySucceededAt: PAYMENT_BATCH_RETRY_DEMO.succeededAt,
+            }
+          : isReadyForRetryDemo ? {
+              status: 'READY_FOR_RETRY',
+              notifications: [{
+                message: '已确认沿用原收款账户。',
+                actorAccount: 'media.prototype',
+                actorName: '原型媒介',
+                occurredAt: '2026-08-06T09:30:00.000Z',
+                deliveries: [],
+              }],
+              readyReason: 'ACCOUNT_UNCHANGED',
+              previousFailure: {
+                provider: payout.provider,
+                errorCode: 'BENEFICIARY_UNAVAILABLE',
+                providerResponse: 'The beneficiary is temporarily unavailable.',
+                occurredAt: '2026-08-05T16:05',
+              },
+              failureCode: 'BENEFICIARY_UNAVAILABLE',
+              returnReason: '已确认沿用原收款账户，可重新付款。',
+            }
+          : payout.paymentFailureRecovery,
         paymentFailure: failed ? {
           provider: payout.provider,
           errorCode: 'BENEFICIARY_UNAVAILABLE',

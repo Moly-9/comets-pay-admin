@@ -200,6 +200,7 @@ describe('payment batch workbook', () => {
     expect(sheet?.columnCount).toBe(16);
     expect(sheet?.rowCount).toBe(2);
     expect(sheet?.getRow(1).values).toEqual([undefined, ...PAYMENT_BATCH_WORKBOOK_HEADERS]);
+    expect(sheet?.getRow(1).getCell(12).value).toBe('批次总支出金额及币种');
     expect(sheet?.getRow(2).values).toEqual([
       undefined,
       'BAT-20260819-001',

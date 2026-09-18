@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
@@ -46,5 +47,8 @@ describe('PaymentConfirmationDialog', () => {
     expect(html).toContain('USD 1,002.00');
     expect(html).toContain('>确认打款</span>');
     expect(html).not.toContain('<table');
+
+    const css = readFileSync(new URL('./PaymentConfirmationDialog.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/\.payment-confirmation-dialog \.modal-footer \{[\s\S]*?display: flex;[\s\S]*?padding-block: 16px;/);
   });
 });

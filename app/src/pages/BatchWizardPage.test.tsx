@@ -5,6 +5,8 @@ import {
   recordPaymentFailureNotification,
   simulateCreatorAccountUpdated,
 } from '../paymentFailureRecovery';
+import type { PaymentBatchId } from '../businessWorkflow';
+import type { PaymentBatchRecord } from '../paymentBatches';
 import type { Payout } from '../types';
 import {
   BatchWizardPage,
@@ -67,11 +69,29 @@ const requestProject = (overrides: Partial<BatchWizardRequestProject> = {}): Bat
   ...overrides,
 });
 
+const sourceBatchFor = (
+  payoutIds: string[] = ['retry-payout'],
+  overrides: Partial<PaymentBatchRecord> = {},
+): PaymentBatchRecord => ({
+  paymentBatchId: 'payment-batch-source' as PaymentBatchId,
+  paymentBatchCode: 'BAT-20260918-001',
+  purpose: 'NORMAL',
+  paymentOrderCode: 'PAY-2609180001',
+  paymentAttemptNumber: 1,
+  provider: 'Airwallex',
+  sourceCurrency: 'USD',
+  items: payoutIds.map((payoutId) => ({
+    payoutId,
+    paymentStatus: '付款失败',
+  })) as unknown as PaymentBatchRecord['items'],
+  ...overrides,
+} as PaymentBatchRecord);
+
 describe('BatchWizardPage payment failure retries', () => {
   it('shows an awaiting retry immediately, unchecked and disabled', () => {
     const payout = beginPaymentFailureAccountRecovery(retryPayout());
     const html = renderToStaticMarkup(
-      <BatchWizardPage payouts={[payout]} onCancel={vi.fn()} onSubmit={vi.fn(() => true)} onDraft={vi.fn()} />,
+      <BatchWizardPage payouts={[payout]} paymentBatches={[sourceBatchFor()]} onCancel={vi.fn()} onSubmit={vi.fn(() => true)} onDraft={vi.fn()} />,
     );
 
     expect(html).toContain('Retry Creator');
@@ -91,7 +111,7 @@ describe('BatchWizardPage payment failure retries', () => {
     );
     const ready = simulateCreatorAccountUpdated(notified);
     const html = renderToStaticMarkup(
-      <BatchWizardPage payouts={[ready]} onCancel={vi.fn()} onSubmit={vi.fn(() => true)} onDraft={vi.fn()} />,
+      <BatchWizardPage payouts={[ready]} paymentBatches={[sourceBatchFor()]} onCancel={vi.fn()} onSubmit={vi.fn(() => true)} onDraft={vi.fn()} />,
     );
 
     expect(html).toContain('达人已更新 · 可重试');
@@ -118,7 +138,7 @@ describe('BatchWizardPage payment failure retries', () => {
       } : undefined,
     };
     const html = renderToStaticMarkup(
-      <BatchWizardPage payouts={[ready]} onCancel={vi.fn()} onSubmit={vi.fn(() => true)} onDraft={vi.fn()} />,
+      <BatchWizardPage payouts={[ready]} paymentBatches={[sourceBatchFor()]} onCancel={vi.fn()} onSubmit={vi.fn(() => true)} onDraft={vi.fn()} />,
     );
 
     expect(html).toContain('达人已更新 · 可重试');
@@ -136,7 +156,7 @@ describe('BatchWizardPage payment failure retries', () => {
     );
     const updated = simulateCreatorAccountUpdated(notified);
     const html = renderToStaticMarkup(
-      <BatchWizardPage payouts={[updated]} onCancel={vi.fn()} onSubmit={vi.fn(() => true)} onDraft={vi.fn()} />,
+      <BatchWizardPage payouts={[updated]} paymentBatches={[sourceBatchFor()]} onCancel={vi.fn()} onSubmit={vi.fn(() => true)} onDraft={vi.fn()} />,
     );
 
     expect(html).toContain('达人已更新 · 可重试');
@@ -151,7 +171,7 @@ describe('BatchWizardPage payment failure retries', () => {
       'creator@example.com',
     );
     const html = renderToStaticMarkup(
-      <BatchWizardPage payouts={[ready]} onCancel={vi.fn()} onSubmit={vi.fn(() => true)} onDraft={vi.fn()} />,
+      <BatchWizardPage payouts={[ready]} paymentBatches={[sourceBatchFor()]} onCancel={vi.fn()} onSubmit={vi.fn(() => true)} onDraft={vi.fn()} />,
     );
 
     expect(html).toContain('原账户未变 · 可重试');
@@ -164,6 +184,7 @@ describe('BatchWizardPage payment failure retries', () => {
       <BatchWizardPage
         payouts={[retryPayout()]}
         requests={[requestProject()]}
+        paymentBatches={[sourceBatchFor()]}
         onCancel={vi.fn()}
         onSubmit={vi.fn(() => true)}
         onDraft={vi.fn()}
@@ -180,11 +201,17 @@ describe('BatchWizardPage payment failure retries', () => {
     expect(html).toContain('<th class="batch-wizard-col-validation">账户校验</th>');
     expect(html).toContain('<th class="batch-wizard-col-fee-bearer">手续费承担方</th>');
     expect(html.indexOf('batch-wizard-col-request')).toBeLessThan(html.indexOf('batch-wizard-col-amount'));
-    expect(html.indexOf('batch-wizard-col-amount')).toBeLessThan(html.indexOf('batch-wizard-col-project'));
+    expect(html.indexOf('batch-wizard-col-amount')).toBeLessThan(html.indexOf('batch-wizard-col-fee-bearer'));
+    expect(html.indexOf('batch-wizard-col-fee-bearer')).toBeLessThan(html.indexOf('batch-wizard-col-project'));
     expect(html).toContain('aria-label="Retry Creator 手续费承担方"');
     expect(html).toContain('>对方承担</span>');
     expect(html).toContain('REQ-202609-000001');
     expect(html).toContain('合作项目一');
+    expect(html).toContain('新建重新付款批次');
+    expect(html).toContain('原付款批次');
+    expect(html).toContain('付款单号');
+    expect(html).toContain('支付币种');
+    expect(html).not.toContain('source_currency');
     expect(html).not.toContain('INV-RETRY-1');
   });
 
@@ -224,7 +251,7 @@ describe('BatchWizardPage payment failure retries', () => {
     expect(filterBatchWizardRows(rows, 'INV-ONLY-SEARCH', 'all')).toEqual([]);
   });
 
-  it('locks batch selection to one request, provider, payment type, and original order', () => {
+  it('locks batch selection to one stable original payment batch', () => {
     const readyRetry = recordPaymentFailureNotification(
       beginPaymentFailureAccountRecovery(retryPayout()),
       { account: 'media', name: '项目媒介' },
@@ -237,28 +264,16 @@ describe('BatchWizardPage payment failure retries', () => {
       generatedInvoices: [],
       paymentLists: [],
       creators: [],
+      paymentBatches: [sourceBatchFor(['retry-payout', 'other'])],
     });
-    const selectedRow = { ...baseRows[0], sourcePaymentOrderKey: 'PAY-2609010001' };
+    const selectedRow = baseRows[0];
 
     expect(batchWizardSelectionScopeIssue({
       ...baseRows[1],
-      requestKey: 'request-2',
-    }, selectedRow)).toBe('一个付款批次只能关联一个请款项目');
-    expect(batchWizardSelectionScopeIssue({
-      ...baseRows[1],
-      payout: { ...baseRows[1].payout, provider: 'PayPal' },
-    }, selectedRow)).toBe('一个付款批次只能使用同一付款渠道');
-    expect(batchWizardSelectionScopeIssue({
-      ...baseRows[1],
-      payout: { ...baseRows[1].payout, paymentFailureRecovery: undefined },
-    }, selectedRow)).toBe('首次付款和重新付款需要分别创建付款批次');
-    expect(batchWizardSelectionScopeIssue({
-      ...baseRows[1],
-      sourcePaymentOrderKey: 'PAY-2609010002',
-    }, selectedRow)).toBe('重新付款只能选择同一张原付款单的失败明细');
-    expect(batchWizardSelectionScopeIssue({
-      ...baseRows[1],
-      sourcePaymentOrderKey: selectedRow.sourcePaymentOrderKey,
-    }, selectedRow)).toBe('');
+      sourcePaymentBatchId: 'payment-batch-other' as PaymentBatchId,
+    }, selectedRow)).toBe('重新付款只能选择同一原付款批次的失败明细');
+    expect(batchWizardSelectionScopeIssue({ ...baseRows[1], sourcePaymentBatchId: undefined }, selectedRow))
+      .toBe('原付款批次无法唯一确认');
+    expect(batchWizardSelectionScopeIssue(baseRows[1], selectedRow)).toBe('');
   });
 });

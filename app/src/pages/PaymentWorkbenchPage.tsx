@@ -882,7 +882,7 @@ export function PaymentWorkbenchPage({
       <PageHeading
         title="付款工作台"
         subtitle="审核请款、组织付款批次，并追踪渠道回写状态。"
-        actions={canCreateBatch ? <Button icon={<Plus size={17} />} onClick={onNewBatch}>新建付款批次</Button> : undefined}
+        actions={canCreateBatch ? <Button icon={<Plus size={17} />} onClick={onNewBatch}>发起重新付款</Button> : undefined}
       />
 
       {showNotice ? (

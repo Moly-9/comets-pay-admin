@@ -50,6 +50,7 @@ import {
 } from './permissions';
 import {
   executeMockBatchSubmission,
+  resolvePaymentFailureSourceBatch,
   selectBatchWizardPayouts,
   type MockBatchSubmission,
 } from './batchTransfers';
@@ -85,7 +86,6 @@ import {
   getInvoicePageTab,
   isInvoiceApprovedForPayment,
   isPayoutPaymentInformationValidated,
-  isPayoutEligibleForBatch,
   markGeneratedInvoiceSigned,
   paymentFailureRestartStage,
   publishGeneratedInvoiceDraft,
@@ -287,7 +287,6 @@ import { nextPaymentBusinessCode } from './paymentNumbering';
 import {
   beginPaymentFailureAccountRecovery,
   completePaymentFailureRevalidation,
-  isPaymentFailureRetryCandidate,
   isPaymentFailureRetryReady,
   markPaymentFailureAccountChanged,
   markPaymentFailureRetrySubmitted,
@@ -4907,23 +4906,42 @@ export default function App() {
     const selected = batchReadyPayouts.filter((payout) => (
       submission.items.some((item) => item.payoutId === payout.id)
     ));
-    const ineligible = selected.filter((payout) => (
-      !isPayoutEligibleForBatch(payout) && !isPaymentFailureRetryReady(payout)
+    if (!selected.length || selected.length !== submission.items.length) {
+      notify('无法创建付款批次', '所选失败明细已变化，请重新选择。');
+      return false;
+    }
+    if (selected.some((payout) => !isPaymentFailureRetryReady(payout))) {
+      notify('无法创建付款批次', '仅已完成账户修复或确认的失败明细可以重新付款。');
+      return false;
+    }
+    const retrySourceBatch = paymentBatches.find((batch) => (
+      batch.purpose !== 'REVERSAL'
+      && batch.paymentBatchId === submission.sourcePaymentBatchId
+      && batch.paymentBatchCode === submission.sourcePaymentBatchCode
     ));
-    if (ineligible.length > 0) {
-      notify('无法创建付款批次', '仅 Invoice 审核已通过且处于等待付款的记录可以进入付款批次。');
+    if (!retrySourceBatch) {
+      notify('无法创建付款批次', '原付款批次不存在或已变化，请重新选择。');
       return false;
     }
-    const retryItems = selected.filter(isPaymentFailureRetryReady);
-    if (retryItems.length > 0 && retryItems.length !== selected.length) {
-      notify('无法创建付款批次', '正常付款和重新付款需要分别创建付款批次。');
+    const failedPayoutIds = new Set(retrySourceBatch.items
+      .filter((item) => item.paymentStatus === '付款失败')
+      .map((item) => item.payoutId));
+    const invalidSource = selected.some((payout) => (
+      !failedPayoutIds.has(payout.id)
+      || resolvePaymentFailureSourceBatch(payout, paymentBatches).batch?.paymentBatchId
+        !== retrySourceBatch.paymentBatchId
+    ));
+    if (invalidSource) {
+      notify('无法创建付款批次', '所选明细并非来自同一个原付款失败批次。');
       return false;
     }
-    const retrySourceBatchIds = new Set(retryItems
-      .map((payout) => payout.currentPaymentAttempt?.paymentBatchId)
-      .filter((batchId): batchId is PaymentBatchId => Boolean(batchId)));
-    if (retrySourceBatchIds.size > 1) {
-      notify('无法创建付款批次', '重新付款的明细必须来自同一个失败批次。');
+    if (
+      submission.provider !== retrySourceBatch.provider
+      || submission.sourceCurrency !== retrySourceBatch.sourceCurrency
+      || submission.sourcePaymentOrderCode !== retrySourceBatch.paymentOrderCode
+      || submission.paymentAttemptNumber !== retrySourceBatch.paymentAttemptNumber + 1
+    ) {
+      notify('无法创建付款批次', '重新付款必须沿用原批次渠道、支付币种、付款单号和尝试顺序。');
       return false;
     }
     const execution = executeMockBatchSubmission(submission);
@@ -4931,22 +4949,6 @@ export default function App() {
     const localPaymentTime = new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
       .toISOString()
       .slice(0, 16);
-    const isRetryBatch = retryItems.length > 0;
-    const retrySourceBatchId = retryItems[0]?.currentPaymentAttempt?.paymentBatchId;
-    const retrySourceBatch = isRetryBatch
-      ? paymentBatches.find((batch) => (
-          batch.purpose !== 'REVERSAL'
-          && batch.paymentBatchId === retrySourceBatchId
-        )) ?? paymentBatches.find((batch) => (
-          batch.purpose !== 'REVERSAL'
-          && retryItems.some((payout) => batch.items.some((item) => item.payoutId === payout.id))
-        ))
-      : undefined;
-    const retryPaymentOrderCode = retrySourceBatch?.paymentOrderCode
-      ?? retryItems[0]?.currentPaymentAttempt?.paymentOrderCode;
-    const retryAttemptNumber = isRetryBatch
-      ? Math.max(...retryItems.map((payout) => payout.currentPaymentAttempt?.attemptNumber ?? 1)) + 1
-      : undefined;
     let batchRecord: ReturnType<typeof createPaymentBatchRecord>;
     try {
       batchRecord = createPaymentBatchRecord({
@@ -4962,14 +4964,16 @@ export default function App() {
         sourceCurrency: execution.sourceCurrency,
         payer: currentUser.name,
         paidAt: localPaymentTime,
-        purpose: isRetryBatch ? 'RETRY' : 'NORMAL',
-        sourcePaymentBatchId: retrySourceBatch?.paymentBatchId,
-        sourcePaymentBatchCode: retrySourceBatch?.paymentBatchCode,
+        purpose: 'RETRY',
+        sourcePaymentBatchId: retrySourceBatch.paymentBatchId,
+        sourcePaymentBatchCode: retrySourceBatch.paymentBatchCode,
         status: '付款处理中',
         lifecycle: execution.lifecycle,
         itemStatus: '付款处理中',
-        paymentOrderCode: retryPaymentOrderCode,
-        paymentAttemptNumber: retryAttemptNumber,
+        paymentOrderCode: retrySourceBatch.paymentOrderCode,
+        sourcePaymentOrderCode: retrySourceBatch.sourcePaymentOrderCode
+          ?? retrySourceBatch.paymentOrderCode,
+        paymentAttemptNumber: submission.paymentAttemptNumber,
         feeBearerByPayoutId: Object.fromEntries(
           submission.items.map((item) => [item.payoutId, item.feeBearer]),
         ),
@@ -4985,33 +4989,18 @@ export default function App() {
       const submittedPayout = selected.find((item) => item.id === payout.id);
       if (!submittedPayout) return payout;
       const batchItem = batchRecord.items.find((item) => item.payoutId === payout.id)!;
-      return isPaymentFailureRetryReady(submittedPayout)
-        ? markPaymentFailureRetrySubmitted(
-            submittedPayout,
-            execution.batchId,
-            execution.batchCode,
-            localPaymentTime,
-            {
-              paymentCode: batchItem.paymentCode || submittedPayout.paymentCode || '付款编号待补全',
-              paymentOrderCode: paymentBatchItemOrderCode(batchItem),
-              sourcePaymentOrderCode: paymentBatchItemSourceOrderCode(batchItem),
-              attemptNumber: paymentBatchItemAttemptNumber(batchItem),
-            },
-          )
-        : {
-            ...payout,
-            status: '付款处理中',
-            issue: undefined,
-            currentPaymentAttempt: {
-              paymentBatchId: batchRecord.paymentBatchId,
-              paymentBatchCode: batchRecord.paymentBatchCode,
-              submittedAt: localPaymentTime,
-              paymentCode: batchItem.paymentCode,
-              paymentOrderCode: paymentBatchItemOrderCode(batchItem),
-              sourcePaymentOrderCode: paymentBatchItemSourceOrderCode(batchItem),
-              attemptNumber: paymentBatchItemAttemptNumber(batchItem),
-            },
-          };
+      return markPaymentFailureRetrySubmitted(
+        submittedPayout,
+        execution.batchId,
+        execution.batchCode,
+        localPaymentTime,
+        {
+          paymentCode: batchItem.paymentCode || submittedPayout.paymentCode || '付款编号待补全',
+          paymentOrderCode: paymentBatchItemOrderCode(batchItem),
+          sourcePaymentOrderCode: paymentBatchItemSourceOrderCode(batchItem),
+          attemptNumber: paymentBatchItemAttemptNumber(batchItem),
+        },
+      );
     }));
     setPaymentBatches((current) => [batchRecord, ...current]);
     setActivePage('batches');
@@ -5132,7 +5121,6 @@ export default function App() {
     canManageCooperationProjectFor(currentUser, project)
   ));
   const batchReadyPayouts = selectBatchWizardPayouts(payouts
-    .filter((payout) => isPayoutEligibleForBatch(payout) || isPaymentFailureRetryCandidate(payout))
     .map((payout) => {
       const invoice = generatedInvoices.find((record) => record.sourcePayoutId === payout.id);
       const paymentItem = invoice
@@ -5140,7 +5128,9 @@ export default function App() {
         : undefined;
       return paymentItem ? payoutWithPaymentListSnapshot(payout, paymentItem) : payout;
     })
-    .sort((left, right) => Number(isPaymentFailureRetryCandidate(right)) - Number(isPaymentFailureRetryCandidate(left))));
+    .sort((left, right) => (
+      (right.paymentFailure?.occurredAt ?? '').localeCompare(left.paymentFailure?.occurredAt ?? '')
+    )));
   const paymentDetailRequest = paymentDetailRequestId
     ? requestProjects.find((request) => request.id === paymentDetailRequestId)
     : undefined;
@@ -5666,6 +5656,7 @@ export default function App() {
           generatedInvoices={generatedInvoices}
           paymentLists={paymentLists}
           creators={creators}
+          paymentBatches={paymentBatches}
           onCancel={() => setActivePage('batches')}
           onDraft={() => notify('草稿已保存', '付款选择与渠道配置已保存在当前浏览器。')}
           onSubmit={createBatch}

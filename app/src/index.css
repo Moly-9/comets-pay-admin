@@ -12988,6 +12988,41 @@ button:disabled {
   margin-top: 16px;
 }
 
+.batch-inherited-fields {
+  display: grid;
+  margin: 15px 0 0;
+  gap: 8px;
+}
+
+.batch-inherited-fields > div {
+  display: grid;
+  min-height: 58px;
+  align-content: center;
+  gap: 5px;
+  border: 1px solid #e5e8ed;
+  border-radius: 10px;
+  background: #f7f8fa;
+  padding: 10px 12px;
+}
+
+.batch-inherited-fields dt {
+  color: #7f8692;
+  font-size: 11px;
+}
+
+.batch-inherited-fields dd {
+  min-width: 0;
+  margin: 0;
+  color: #20242c;
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.batch-inherited-fields dd.mono-cell {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
 .validation-summary {
   display: flex;
   align-items: center;
@@ -18500,6 +18535,7 @@ button:disabled {
   }
 
   .channel-panel .panel-title-row,
+  .channel-panel .batch-inherited-fields,
   .channel-panel .batch-funding-controls,
   .channel-panel .validation-summary,
   .channel-panel .inline-alert {
@@ -18678,7 +18714,8 @@ button:disabled {
   }
 
   .channel-panel .segmented-control,
-  .channel-panel .provider-list {
+  .channel-panel .provider-list,
+  .channel-panel .batch-inherited-fields {
     margin-top: 14px;
   }
 

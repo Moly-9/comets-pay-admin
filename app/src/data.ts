@@ -1092,7 +1092,7 @@ export const PAGE_TITLES = {
   'invoice-batch-create': '批量生成 Invoice',
   'invoice-edit': '修改 Invoice',
   batches: '付款批次',
-  'new-batch': '新建付款批次',
+  'new-batch': '新建重新付款批次',
   transactions: '交易记录',
   organization: '组织信息',
   channels: '渠道设置',

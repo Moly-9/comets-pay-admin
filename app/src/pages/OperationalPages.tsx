@@ -4759,7 +4759,7 @@ export function BatchesPage({
       if (batchId) detailTriggerRefs.current.get(batchId)?.focus();
     });
   };
-  const createAction = canCreateBatch ? <Button icon={<Plus size={17} />} onClick={onNewBatch}>新建付款批次</Button> : undefined;
+  const createAction = canCreateBatch ? <Button icon={<Plus size={17} />} onClick={onNewBatch}>发起重新付款</Button> : undefined;
 
   if (selectedBatchId) {
     if (selectedBatch) return (
@@ -4892,7 +4892,7 @@ export function BatchesPage({
                 <th>项目名称</th>
                 <th>请款金额及币种</th>
                 <th>转账手续费及币种</th>
-                <th>总支出金额及币种</th>
+                <th>批次总支出金额及币种</th>
                 <th>发起人</th>
                 <th>付款人 / 时间</th>
                 <th className="payment-batch-status-cell">付款状态</th>
