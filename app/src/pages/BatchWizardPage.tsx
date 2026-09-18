@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { accountDisplayValue } from '../accountPresentation';
 import {
   paymentListEffectiveAccount,
+  paymentListItemValue,
   type PaymentListItem,
   type PaymentListRecord,
 } from '../businessWorkflow';
@@ -13,6 +14,10 @@ import {
   type MockBatchSubmission,
 } from '../batchTransfers';
 import { Button, PageHeading, SelectField, StatusMark, type SelectOption } from '../components/Common';
+import {
+  PaymentConfirmationDialog,
+  type PaymentConfirmationRow,
+} from '../components/PaymentConfirmationDialog';
 import { PaymentCreatorIdentity } from '../components/PaymentCreatorIdentity';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import { formatAmount } from '../data';
@@ -26,6 +31,12 @@ import {
   paymentCreatorIdentityFromPayout,
   type PaymentCreatorIdentityData,
 } from '../paymentCreatorIdentity';
+import type { PaymentFeeBearer } from '../paymentFeeBearerPresentation';
+import {
+  DEFAULT_BATCH_FEE_BEARER,
+  PAYMENT_FEE_BEARER_OPTIONS,
+  paymentPreviewFor,
+} from '../paymentPreview';
 import type { CreatorProfile, GeneratedInvoiceRecord, InvoiceCurrency, Payout } from '../types';
 import type { RequestProjectSummary } from './RequestProjectDetailPage';
 
@@ -229,7 +240,7 @@ export function BatchWizardPage({
   paymentLists?: PaymentListRecord[];
   creators?: CreatorProfile[];
   onCancel: () => void;
-  onSubmit: (submission: MockBatchSubmission) => void;
+  onSubmit: (submission: MockBatchSubmission) => boolean;
   onDraft: () => void;
 }) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -240,6 +251,8 @@ export function BatchWizardPage({
   const [sourceCurrency, setSourceCurrency] = useState<InvoiceCurrency>('USD');
   const [fundingAccountId, setFundingAccountId] = useState(FUNDING_ACCOUNTS.Airwallex[0].value);
   const [submissionError, setSubmissionError] = useState('');
+  const [feeBearerByPayoutId, setFeeBearerByPayoutId] = useState<Record<string, PaymentFeeBearer>>({});
+  const [pendingSubmission, setPendingSubmission] = useState<MockBatchSubmission | null>(null);
 
   const rows = useMemo(() => buildBatchWizardRows({
     payouts,
@@ -272,6 +285,9 @@ export function BatchWizardPage({
   const selectedPayouts = selectedRows.map((row) => row.payout);
   const selectedScopeRow = selectedRows[0];
   const selectedRequestKey = selectedRows[0]?.requestKey ?? '';
+  const feeBearerFor = (payoutId: string) => (
+    feeBearerByPayoutId[payoutId] ?? DEFAULT_BATCH_FEE_BEARER
+  );
 
   const getAccountCheck = (row: BatchWizardRow) => {
     const { payout } = row;
@@ -283,7 +299,7 @@ export function BatchWizardPage({
         issue: retryResultLabel(payout) ?? paymentFailureRecoveryLabel(payout),
       };
     }
-    const issues = validatePayoutForBatch(payout, provider);
+    const issues = validatePayoutForBatch(payout, provider, feeBearerFor(payout.id));
     const retryLabel = retryCandidate ? retryResultLabel(payout) : null;
     return {
       eligible: issues.length === 0,
@@ -301,6 +317,24 @@ export function BatchWizardPage({
     ...result,
     [payout.currency]: (result[payout.currency] ?? 0) + payout.amount,
   }), {}), [selectedPayouts]);
+  const confirmationRows: PaymentConfirmationRow[] = selectedRows.map((row) => {
+    const receiveCurrency = String(
+      row.paymentItem
+        ? paymentListItemValue(row.paymentItem, 'receiveCurrency') || row.payout.currency
+        : row.payout.currency,
+    );
+    return {
+      id: row.payout.id,
+      creatorName: row.payout.creator,
+      invoiceNumber: row.payout.invoice,
+      account: row.accountSummary,
+      preview: paymentPreviewFor({
+        payout: row.payout,
+        receiveCurrency,
+        feeBearer: feeBearerFor(row.payout.id),
+      }),
+    };
+  });
 
   const selectionScopeIssue = (row: BatchWizardRow) => {
     if (mode !== 'batch' || !selectedRequestKey) return '';
@@ -370,15 +404,23 @@ export function BatchWizardPage({
         provider,
         fundingAccountId,
         sourceCurrency,
+        feeBearerByPayoutId: Object.fromEntries(
+          selectedPayouts.map((payout) => [payout.id, feeBearerFor(payout.id)]),
+        ),
       });
       setSubmissionError('');
-      onSubmit(submission);
+      setPendingSubmission(submission);
     } catch (error) {
       setSubmissionError(error instanceof Error ? error.message : '批次校验失败');
     }
   };
 
+  const confirmSubmission = () => {
+    if (pendingSubmission && onSubmit(pendingSubmission)) setPendingSubmission(null);
+  };
+
   return (
+    <>
     <div className="page-stack batch-page">
       <button className="back-link" type="button" onClick={onCancel}><ArrowLeft size={17} />返回付款批次</button>
       <PageHeading title="新建付款批次" subtitle="先校验达人资料，再选择渠道并提交财务执行。" />
@@ -423,10 +465,11 @@ export function BatchWizardPage({
                 /></th>
                 <th className="batch-wizard-col-creator">达人</th>
                 <th className="batch-wizard-col-request">请款编号</th>
+                <th className="batch-wizard-col-amount">请款金额</th>
                 <th className="batch-wizard-col-project">合作项目</th>
                 <th className="batch-wizard-col-account">银行账号</th>
                 <th className="batch-wizard-col-validation">账户校验</th>
-                <th className="batch-wizard-col-amount">金额</th>
+                <th className="batch-wizard-col-fee-bearer">手续费承担方</th>
               </tr></thead>
               <tbody>
                 {visibleRows.map((row) => {
@@ -449,6 +492,7 @@ export function BatchWizardPage({
                         </div>
                       </td>
                       <td className="batch-wizard-col-request"><strong className="batch-wizard-request-code" title={row.requestCode}>{row.requestCode}</strong></td>
+                      <td className="batch-wizard-col-amount amount-cell">{formatAmount(payout)}</td>
                       <td className="batch-wizard-col-project"><span className="batch-wizard-project-cell"><strong title={row.cooperationProjectName}>{row.cooperationProjectName}</strong><small title={row.cooperationProjectCode}>{row.cooperationProjectCode}</small></span></td>
                       <td className="batch-wizard-col-account">
                         <span className="batch-account-cell">
@@ -461,11 +505,23 @@ export function BatchWizardPage({
                           <span className="warning-text" title={accountCheck.label}><AlertTriangle size={15} />{accountCheck.label}</span>
                         ) : <span className="validation-ok" title={accountCheck.label}><CheckCircle2 size={16} />{accountCheck.label}</span>}
                       </td>
-                      <td className="batch-wizard-col-amount amount-cell">{formatAmount(payout)}</td>
+                      <td className="batch-wizard-col-fee-bearer">
+                        <SelectField
+                          ariaLabel={`${payout.creator} 手续费承担方`}
+                          className="batch-fee-bearer-select"
+                          variant="compact"
+                          value={feeBearerFor(payout.id)}
+                          options={PAYMENT_FEE_BEARER_OPTIONS}
+                          onChange={(value) => setFeeBearerByPayoutId((current) => ({
+                            ...current,
+                            [payout.id]: value,
+                          }))}
+                        />
+                      </td>
                     </tr>
                   );
                 })}
-                {!visibleRows.length ? <tr><td className="batch-wizard-empty" colSpan={7}>没有符合当前条件的付款</td></tr> : null}
+                {!visibleRows.length ? <tr><td className="batch-wizard-empty" colSpan={8}>没有符合当前条件的付款</td></tr> : null}
               </tbody>
             </table>
           </div>
@@ -529,5 +585,13 @@ export function BatchWizardPage({
       </footer>
 
     </div>
+    {pendingSubmission ? (
+      <PaymentConfirmationDialog
+        rows={confirmationRows}
+        onClose={() => setPendingSubmission(null)}
+        onConfirm={confirmSubmission}
+      />
+    ) : null}
+    </>
   );
 }

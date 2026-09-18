@@ -1474,7 +1474,7 @@ body:has(.payment-execution-workspace) {
 
 .payment-execution-table {
   width: 100%;
-  min-width: 1360px;
+  min-width: 1660px;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: auto;
@@ -1487,6 +1487,8 @@ body:has(.payment-execution-workspace) {
 .payment-execution-table col.is-receive-currency { width: 120px; }
 .payment-execution-table col.is-amount { width: 145px; }
 .payment-execution-table col.is-fee { width: 140px; }
+.payment-execution-table col.is-channel-fee { width: 145px; }
+.payment-execution-table col.is-payer-fee { width: 155px; }
 .payment-execution-table col.is-reason { width: 145px; }
 .payment-execution-table col.is-reference { width: 190px; }
 .payment-execution-table col.is-validation { width: 110px; }
@@ -1513,6 +1515,10 @@ body:has(.payment-execution-workspace) {
   font-size: 12px;
   line-height: 1.45;
   vertical-align: middle;
+}
+
+.payment-execution-table .payment-execution-amount-cell {
+  white-space: nowrap;
 }
 
 .payment-execution-table tr:hover td {

@@ -302,6 +302,7 @@ type CreatePaymentBatchRecordInput = PaymentBatchSourceData & Readonly<{
   paymentOrderCode?: string;
   sourcePaymentOrderCode?: string;
   paymentAttemptNumber?: number;
+  feeBearerByPayoutId?: Readonly<Record<string, NonNullable<Payout['feeBearer']>>>;
 }>;
 
 type CreatePaymentExecutionBatchRecordInput = PaymentBatchSourceData & Readonly<{
@@ -681,6 +682,7 @@ const snapshotItem = ({
   paymentBatchCode,
   paymentOrderCode,
   paymentAttemptNumber,
+  feeBearerOverride,
 }: {
   payout: Payout;
   request: RequestProjectSummary;
@@ -693,6 +695,7 @@ const snapshotItem = ({
   paymentBatchCode?: string;
   paymentOrderCode?: string;
   paymentAttemptNumber?: number;
+  feeBearerOverride?: NonNullable<Payout['feeBearer']>;
 }): PaymentBatchItemSnapshot => {
   const invoice = generatedInvoices.find((candidate) => candidate.sourcePayoutId === payout.id);
   const invoiceId = invoice?.invoiceId;
@@ -729,9 +732,9 @@ const snapshotItem = ({
     paymentListItem ? paymentListItemValue(paymentListItem, 'receiveCurrency') : documentPayment?.accountCurrency,
     payout.currency,
   );
-  const feeBearer = paymentListItem
+  const feeBearer = feeBearerOverride ?? (paymentListItem
     ? paymentListItemValue(paymentListItem, 'feeBearer')
-    : payout.feeBearer;
+    : payout.feeBearer);
   const feeBearerSnapshot = feeBearerLabel(feeBearer);
   const effectivePaymentDetails = effectiveAccount?.paymentDetails ?? documentPayment;
   const accountRecipient = paymentRecipientSnapshot({
@@ -856,6 +859,7 @@ export const createPaymentBatchRecord = ({
   paymentOrderCode,
   sourcePaymentOrderCode,
   paymentAttemptNumber,
+  feeBearerByPayoutId = {},
   ...batch
 }: CreatePaymentBatchRecordInput): PaymentBatchRecord => {
   if (!payouts.length) throw new Error('付款批次至少需要一笔付款明细');
@@ -886,6 +890,7 @@ export const createPaymentBatchRecord = ({
     paymentBatchCode: batch.paymentBatchCode,
     paymentOrderCode: '',
     paymentAttemptNumber: 1,
+    feeBearerOverride: feeBearerByPayoutId[payout.id],
   }));
   const sourceOrderCodes = new Set(sourceItems.map((item) => item.sourcePaymentOrderCode));
   if (sourceOrderCodes.size !== 1) {
@@ -928,6 +933,7 @@ export const createPaymentBatchRecord = ({
       paymentBatchCode: batch.paymentBatchCode,
       paymentOrderCode: resolvedPaymentOrderCode,
       paymentAttemptNumber: resolvedPaymentAttemptNumber,
+      feeBearerOverride: feeBearerByPayoutId[payout.id],
     })),
   };
 };

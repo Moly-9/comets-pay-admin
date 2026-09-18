@@ -127,6 +127,7 @@ describe('batch transfer contract', () => {
     expect(submission.items[0]).toMatchObject({
       transferAmount: 300,
       transferCurrency: 'USD',
+      feeBearer: 'ADVERTISER',
       feePaidBy: 'PAYER',
       localClearingSystem: 'ACH',
     });
@@ -205,6 +206,23 @@ describe('batch transfer contract', () => {
       fundingAccountId: 'mock-funding',
       sourceCurrency: 'USD',
     })).toThrow('手续费承担方');
+  });
+
+  it('uses a batch-only fee bearer override without mutating the source payout', () => {
+    const source = payout({ feeBearer: '' });
+    const submission = createMockBatchSubmission({
+      payouts: [source],
+      provider: 'Airwallex',
+      fundingAccountId: 'mock-funding',
+      sourceCurrency: 'USD',
+      feeBearerByPayoutId: { [source.id]: 'PUBLISHER' },
+    });
+
+    expect(submission.items[0]).toMatchObject({
+      feeBearer: 'PUBLISHER',
+      feePaidBy: 'PAYER',
+    });
+    expect(source.feeBearer).toBe('');
   });
 
   it('rejects payouts from different request projects before submission', () => {

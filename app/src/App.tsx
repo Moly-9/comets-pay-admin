@@ -276,6 +276,7 @@ import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from './requestProjectPrototypeResources';
 import { applyPaymentBatchPrototypeScenario } from './paymentBatchPrototypeScenario';
 import { prototypePaymentResultFor } from './prototypePaymentResults';
+import { paymentFeeBearerValue } from './paymentFeeBearerPresentation';
 import {
   paymentAttemptSnapshotFor,
   withLatestFailedAttemptReturnReason,
@@ -2843,7 +2844,7 @@ export default function App() {
     setFocusedRequestId(requestId);
   };
 
-  const currentPaymentReceiveCurrency = (payout: Payout) => {
+  const currentPaymentBatchItem = (payout: Payout) => {
     const batchId = payout.currentPaymentAttempt?.paymentBatchId
       ?? payout.paymentFailureRecovery?.retryBatchId;
     return paymentBatches
@@ -2851,9 +2852,18 @@ export default function App() {
         (!batchId || batch.paymentBatchId === batchId)
         && batch.items.some((item) => item.payoutId === payout.id)
       ))
-      ?.items.find((item) => item.payoutId === payout.id)
-      ?.receiveCurrency ?? payout.currency;
+      ?.items.find((item) => item.payoutId === payout.id);
   };
+
+  const currentPaymentReceiveCurrency = (payout: Payout) => (
+    currentPaymentBatchItem(payout)?.receiveCurrency ?? payout.currency
+  );
+
+  const currentPaymentFeeBearer = (payout: Payout) => (
+    paymentFeeBearerValue(currentPaymentBatchItem(payout)?.feeBearer)
+    ?? paymentFeeBearerValue(payout.feeBearer)
+    ?? 'ADVERTISER'
+  );
 
   const advancePayout = (payout: Payout) => {
     if (!isInvoiceApprovedForPayment(payout)) {
@@ -2879,6 +2889,7 @@ export default function App() {
     const paymentResult = nextStatus === '已付款'
       ? prototypePaymentResultFor({
           ...payout,
+          feeBearer: currentPaymentFeeBearer(payout),
           receiveCurrency: currentPaymentReceiveCurrency(payout),
         })
       : undefined;
@@ -3080,6 +3091,7 @@ export default function App() {
     const failureReason = '渠道付款失败：SIMULATED_PROVIDER_DECLINE';
     const failedPaymentResult = prototypePaymentResultFor({
       ...payout,
+      feeBearer: currentPaymentFeeBearer(payout),
       receiveCurrency: currentPaymentReceiveCurrency(payout),
     });
     const baseUpdated: Payout = {
@@ -4900,19 +4912,19 @@ export default function App() {
     ));
     if (ineligible.length > 0) {
       notify('无法创建付款批次', '仅 Invoice 审核已通过且处于等待付款的记录可以进入付款批次。');
-      return;
+      return false;
     }
     const retryItems = selected.filter(isPaymentFailureRetryReady);
     if (retryItems.length > 0 && retryItems.length !== selected.length) {
       notify('无法创建付款批次', '正常付款和重新付款需要分别创建付款批次。');
-      return;
+      return false;
     }
     const retrySourceBatchIds = new Set(retryItems
       .map((payout) => payout.currentPaymentAttempt?.paymentBatchId)
       .filter((batchId): batchId is PaymentBatchId => Boolean(batchId)));
     if (retrySourceBatchIds.size > 1) {
       notify('无法创建付款批次', '重新付款的明细必须来自同一个失败批次。');
-      return;
+      return false;
     }
     const execution = executeMockBatchSubmission(submission);
     const now = new Date();
@@ -4958,13 +4970,16 @@ export default function App() {
         itemStatus: '付款处理中',
         paymentOrderCode: retryPaymentOrderCode,
         paymentAttemptNumber: retryAttemptNumber,
+        feeBearerByPayoutId: Object.fromEntries(
+          submission.items.map((item) => [item.payoutId, item.feeBearer]),
+        ),
       });
     } catch (error) {
       notify(
         '无法创建付款批次',
         error instanceof Error ? error.message : '付款记录无法稳定关联到唯一请款项目。',
       );
-      return;
+      return false;
     }
     setPayouts((current) => current.map((payout) => {
       const submittedPayout = selected.find((item) => item.id === payout.id);
@@ -5004,6 +5019,7 @@ export default function App() {
       '模拟付款批次已提交',
       `${selected.length} 笔 ${paymentProviderDisplayName(execution.provider)} 付款已完成 create → add_items → quote → submit 契约模拟。`,
     );
+    return true;
   };
 
   const authenticate = (account: string, password: string) => {

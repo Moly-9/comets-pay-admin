@@ -12689,7 +12689,7 @@ button:disabled {
 }
 
 .batch-wizard-table {
-  min-width: 1160px;
+  min-width: 1260px;
   table-layout: auto;
 }
 
@@ -12731,6 +12731,20 @@ button:disabled {
 .batch-wizard-table .batch-wizard-col-amount {
   width: 126px;
   min-width: 126px;
+}
+
+.batch-wizard-table .batch-wizard-col-fee-bearer {
+  width: 154px;
+  min-width: 154px;
+}
+
+.batch-fee-bearer-select.custom-select-compact {
+  width: 132px;
+}
+
+.batch-fee-bearer-select.custom-select-compact .custom-select-trigger {
+  min-height: 38px;
+  color: #20242c;
 }
 
 .batch-wizard-request-code {

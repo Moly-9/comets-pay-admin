@@ -43,9 +43,22 @@ import type { PaymentProjectRow } from '../pages/PaymentWorkbenchPage';
 import { requestApprovalReturnDetails, requestApprovalStagesFor } from '../requestApprovalWorkflow';
 import { accountDisplayValue } from '../accountPresentation';
 import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
+import {
+  paymentFeeBearerDisplayName,
+  paymentFeeBearerValue,
+} from '../paymentFeeBearerPresentation';
+import {
+  DEFAULT_BATCH_FEE_BEARER,
+  formatPaymentPreviewMoney,
+  paymentPreviewFor,
+} from '../paymentPreview';
 import { ApprovalTimeline } from './FinanceReviewWorkspace';
 import { requestLinkedContracts, requestLinkedInvoices } from './RequestProjectResourceManager';
 import { Button, Modal } from './Common';
+import {
+  PaymentConfirmationDialog,
+  type PaymentConfirmationRow,
+} from './PaymentConfirmationDialog';
 import { PaymentCreatorIdentity } from './PaymentCreatorIdentity';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
 import {
@@ -79,13 +92,6 @@ const transferMethodLabel = (payout: Payout) => {
   if (payout.transferMethod === 'PAYPAL') return 'PayPal 账户';
   if (payout.localClearingSystem) return `本地转账 · ${payout.localClearingSystem}`;
   return payout.transferMethod ? `银行转账 · ${payout.transferMethod}` : '银行转账';
-};
-
-const feeBearerLabel = (value?: Payout['feeBearer']) => {
-  if (value === 'ADVERTISER') return '付款方承担';
-  if (value === 'PUBLISHER') return '收款方承担';
-  if (value === 'SHARED') return '双方分摊';
-  return '按付款单执行';
 };
 
 const payoutFailureReason = (payout: Payout, requestReason: string) => (
@@ -205,6 +211,7 @@ export function PaymentExecutionWorkspace({
   const [downloadingResource, setDownloadingResource] = useState<ProjectPdfArchiveKind | null>(null);
   const [downloadingResourceRecord, setDownloadingResourceRecord] = useState('');
   const [resourceDownloadError, setResourceDownloadError] = useState('');
+  const [paymentConfirmationOpen, setPaymentConfirmationOpen] = useState(false);
   const overviewFocusRef = useRef<HTMLElement>(null);
   const paymentListFocusRef = useRef<HTMLElement>(null);
   const payablePayouts = project.payouts.filter((payout) => payout.status === '等待付款');
@@ -286,6 +293,39 @@ export function PaymentExecutionWorkspace({
       || item.snapshot.invoiceNumber === payout.invoice
     ));
   };
+  const executionRows = project.payouts.map((payout) => {
+    const creator = creators.find((candidate) => candidate.id === payout.creatorId);
+    const paymentItem = paymentItemForPayout(payout);
+    const creatorIdentity = paymentCreatorIdentityFromPayout({ payout, paymentItem, creator });
+    const receiveCurrency = String(paymentItem
+      ? paymentListItemValue(paymentItem, 'receiveCurrency') || payout.currency
+      : payout.currency);
+    const paymentReason = paymentItem
+      ? String(paymentListItemValue(paymentItem, 'paymentReason') || '影音服务')
+      : '影音服务';
+    const transactionReference = paymentItem
+      ? String(paymentListItemValue(paymentItem, 'transactionReference') || payout.invoice)
+      : payout.invoice;
+    const feeBearer = paymentFeeBearerValue(
+      paymentItem ? paymentListItemValue(paymentItem, 'feeBearer') : payout.feeBearer,
+    ) ?? DEFAULT_BATCH_FEE_BEARER;
+    return {
+      payout,
+      creatorIdentity,
+      receiveCurrency,
+      paymentReason,
+      transactionReference,
+      feeBearer,
+      preview: paymentPreviewFor({ payout, receiveCurrency, feeBearer }),
+    };
+  });
+  const confirmationRows: PaymentConfirmationRow[] = executionRows.map(({ payout, preview }) => ({
+    id: payout.id,
+    creatorName: payout.creator,
+    invoiceNumber: payout.invoice,
+    account: accountDisplayValue(payout.account, '账户待补充'),
+    preview,
+  }));
   const paymentCurrencies = [...new Set(project.payouts.map((payout) => payout.currency))].join(' / ') || '待确认';
   const validationReady = accountValidationIssueCount === 0 && project.payouts.length > 0;
   const showOverview = stage === 'overview';
@@ -299,7 +339,14 @@ export function PaymentExecutionWorkspace({
   };
 
   const executePayment = () => {
-    if (onExecute(project.payouts)) onClose();
+    setPaymentConfirmationOpen(true);
+  };
+
+  const confirmPayment = () => {
+    if (onExecute(project.payouts)) {
+      setPaymentConfirmationOpen(false);
+      onClose();
+    }
   };
 
   const submitReturn = () => {
@@ -629,29 +676,24 @@ export function PaymentExecutionWorkspace({
                     <col className="is-receive-currency" />
                     <col className="is-amount" />
                     <col className="is-fee" />
+                    <col className="is-channel-fee" />
+                    <col className="is-payer-fee" />
                     <col className="is-reason" />
                     <col className="is-reference" />
                     <col className="is-validation" />
                   </colgroup>
-                  <thead><tr><th>达人名称</th><th>收款账户</th><th>支付币种</th><th>收款方币种</th><th>金额</th><th>手续费承担方</th><th>付款原因</th><th>交易附言</th><th>校验状态</th></tr></thead>
+                  <thead><tr><th>达人名称</th><th>收款账户</th><th>支付币种</th><th>收款方币种</th><th>请款金额</th><th>手续费承担方</th><th>渠道手续费</th><th>我方支付手续费</th><th>付款原因</th><th>交易附言</th><th>校验状态</th></tr></thead>
                   <tbody>
-                    {project.payouts.map((payout) => {
-                      const creator = creators.find((candidate) => candidate.id === payout.creatorId);
+                    {executionRows.map(({
+                      payout,
+                      creatorIdentity,
+                      receiveCurrency,
+                      paymentReason,
+                      transactionReference,
+                      feeBearer,
+                      preview,
+                    }) => {
                       const informationValidated = payout.status === '等待付款';
-                      const paymentItem = paymentItemForPayout(payout);
-                      const creatorIdentity = paymentCreatorIdentityFromPayout({ payout, paymentItem, creator });
-                      const receiveCurrency = paymentItem
-                        ? String(paymentListItemValue(paymentItem, 'receiveCurrency') || payout.currency)
-                        : payout.currency;
-                      const paymentReason = paymentItem
-                        ? String(paymentListItemValue(paymentItem, 'paymentReason') || '影音服务')
-                        : '影音服务';
-                      const transactionReference = paymentItem
-                        ? String(paymentListItemValue(paymentItem, 'transactionReference') || payout.invoice)
-                        : payout.invoice;
-                      const feeBearer = paymentItem
-                        ? paymentListItemValue(paymentItem, 'feeBearer')
-                        : payout.feeBearer;
                       return (
                         <tr className={informationValidated ? 'is-valid' : 'is-pending'} key={payout.id}>
                           <td><div className="payment-execution-creator-cell"><PaymentCreatorIdentity {...creatorIdentity} /></div></td>
@@ -659,7 +701,9 @@ export function PaymentExecutionWorkspace({
                           <td><span className="payment-execution-currency">{payout.currency}</span></td>
                           <td><span className="payment-execution-currency">{receiveCurrency}</span></td>
                           <td className="payment-execution-amount-cell">{formatPayoutAmount(payout)}</td>
-                          <td className="payment-execution-compact-cell" title={feeBearerLabel(feeBearer)}>{feeBearerLabel(feeBearer)}</td>
+                          <td className="payment-execution-compact-cell" title={paymentFeeBearerDisplayName(feeBearer)}>{paymentFeeBearerDisplayName(feeBearer)}</td>
+                          <td className="payment-execution-amount-cell">{formatPaymentPreviewMoney(preview.channelFeeCurrency, preview.channelFeeAmount)}</td>
+                          <td className="payment-execution-amount-cell">{formatPaymentPreviewMoney(preview.payerFeeCurrency, preview.payerFeeAmount)}</td>
                           <td className="payment-execution-compact-cell" title={paymentReason}>{paymentReason}</td>
                           <td className="payment-execution-compact-cell" title={transactionReference}>{transactionReference}</td>
                           <td><span className={`payment-execution-table-status is-${informationValidated ? 'valid' : 'pending'}`}>{informationValidated ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}{informationValidated ? '已通过' : '待校验'}</span></td>
@@ -711,7 +755,7 @@ export function PaymentExecutionWorkspace({
                       <div><dt>支付币种</dt><dd>{payout.currency}</dd></div>
                       <div><dt>收款币种</dt><dd>{payout.currency}</dd></div>
                       <div className="is-money"><dt>付款金额</dt><dd>{formatPayoutAmount(payout)}</dd></div>
-                      <div><dt>费用承担</dt><dd>{feeBearerLabel(payout.feeBearer)}</dd></div>
+                      <div><dt>费用承担</dt><dd>{paymentFeeBearerDisplayName(payout.feeBearer)}</dd></div>
                       <div><dt>付款事由</dt><dd>{payout.deliverable || requestReason}</dd></div>
                       <div><dt>交易附言</dt><dd>{project.requestCode}-{String(index + 1).padStart(2, '0')}</dd></div>
                     </dl>
@@ -880,6 +924,14 @@ export function PaymentExecutionWorkspace({
           </aside>
         </div>
       </Modal>
+
+      {!isReturned && paymentConfirmationOpen ? (
+        <PaymentConfirmationDialog
+          rows={confirmationRows}
+          onClose={() => setPaymentConfirmationOpen(false)}
+          onConfirm={confirmPayment}
+        />
+      ) : null}
 
       {resourceDialog === 'contract' ? (
         <Modal

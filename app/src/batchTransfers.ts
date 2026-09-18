@@ -5,6 +5,7 @@ import type {
   Payout,
   PayoutAccountVersion,
 } from './types';
+import type { PaymentFeeBearer } from './paymentFeeBearerPresentation';
 
 export type ExecutableBatchProvider = 'Airwallex' | 'PayPal';
 export type AirwallexFeePaidBy = 'PAYER' | 'BENEFICIARY';
@@ -23,6 +24,7 @@ export type BatchTransferItem = {
   localClearingSystem?: string;
   transferAmount: number;
   transferCurrency: InvoiceCurrency;
+  feeBearer: PaymentFeeBearer;
   feePaidBy?: AirwallexFeePaidBy;
   swiftChargeOption?: AirwallexSwiftChargeOption;
   paypalEmail?: string;
@@ -70,6 +72,7 @@ const payoutSnapshot = (payout: Payout) => payout.invoiceSnapshot?.payment;
 export const validatePayoutForBatch = (
   payout: Payout,
   provider: ExecutableBatchProvider,
+  feeBearer: Payout['feeBearer'] = payout.feeBearer,
 ) => {
   const snapshot = payoutSnapshot(payout);
   const payoutProvider = payout.invoiceSnapshot?.payoutProvider
@@ -103,7 +106,7 @@ export const validatePayoutForBatch = (
       && !(payout.localClearingSystem ?? snapshot?.localClearingSystem)
       ? 'LOCAL 付款缺少本地清算方式'
       : '',
-    !payout.feeBearer ? '关联合同缺少手续费承担方' : '',
+    !feeBearer ? '关联合同缺少手续费承担方' : '',
     provider === 'PayPal' && !snapshot?.paypalEmail ? '缺少 PayPal 收款邮箱快照' : '',
   ].filter(Boolean);
 };
@@ -240,11 +243,13 @@ export const createMockBatchSubmission = ({
   provider,
   fundingAccountId,
   sourceCurrency,
+  feeBearerByPayoutId = {},
 }: {
   payouts: Payout[];
   provider: ExecutableBatchProvider;
   fundingAccountId: string;
   sourceCurrency: InvoiceCurrency;
+  feeBearerByPayoutId?: Readonly<Record<string, PaymentFeeBearer>>;
 }): MockBatchSubmission => {
   if (!payouts.length) throw new Error('至少选择一笔付款');
   if (!fundingAccountId) throw new Error('请选择资金账户');
@@ -256,20 +261,29 @@ export const createMockBatchSubmission = ({
   )));
   if (requestKeys.size !== 1) throw new Error('一个付款批次只能关联一个请款项目');
   const invalid = payouts
-    .map((payout) => ({ payout, issues: validatePayoutForBatch(payout, provider) }))
+    .map((payout) => ({
+      payout,
+      issues: validatePayoutForBatch(
+        payout,
+        provider,
+        feeBearerByPayoutId[payout.id] ?? payout.feeBearer,
+      ),
+    }))
     .find(({ issues }) => issues.length > 0);
   if (invalid) {
     throw new Error(`${invalid.payout.invoice}：${invalid.issues[0]}`);
   }
   const items = payouts.map((payout): BatchTransferItem => {
     const snapshot = payoutSnapshot(payout);
+    const feeBearer = feeBearerByPayoutId[payout.id] ?? payout.feeBearer;
+    if (!feeBearer) throw new Error(`${payout.invoice}：关联合同缺少手续费承担方`);
     const transferMethod = (
       provider === 'PayPal'
         ? 'PAYPAL'
         : payout.transferMethod ?? snapshot?.transferMethod
     ) as BatchTransferItem['transferMethod'];
     const feeOptions = provider === 'Airwallex'
-      ? airwallexFeeOptions(transferMethod as AirwallexTransferMethod, payout.feeBearer)
+      ? airwallexFeeOptions(transferMethod as AirwallexTransferMethod, feeBearer)
       : {};
     return {
       payoutId: payout.id,
@@ -299,6 +313,7 @@ export const createMockBatchSubmission = ({
         : undefined,
       transferAmount: payout.amount,
       transferCurrency: payout.currency,
+      feeBearer,
       paypalEmail: provider === 'PayPal' ? snapshot?.paypalEmail : undefined,
       transferNote: provider === 'PayPal' ? snapshot?.transferRemarks : undefined,
       ...feeOptions,

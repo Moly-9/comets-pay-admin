@@ -9,7 +9,9 @@ describe('paymentFeeBearerDisplayName', () => {
     ['PUBLISHER', '收款人承担', '收款方承担'].forEach((value) => {
       expect(paymentFeeBearerDisplayName(value)).toBe('对方承担');
     });
-    expect(paymentFeeBearerDisplayName('共同承担')).toBe('共同承担');
+    ['SHARED', '共同承担', '双方共同承担', '双方分摊'].forEach((value) => {
+      expect(paymentFeeBearerDisplayName(value)).toBe('共同承担');
+    });
     expect(paymentFeeBearerDisplayName('')).toBe('未记录');
   });
 });

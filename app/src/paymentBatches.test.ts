@@ -604,6 +604,21 @@ describe('payment batch snapshots', () => {
     expect(record.items[0].paidAt).toBeUndefined();
   });
 
+  it('freezes the batch fee-bearer override without rewriting upstream payment data', () => {
+    const input = buildInput();
+    const sourcePayoutFeeBearer = input.payouts[0].feeBearer;
+    const sourcePaymentListFeeBearer = input.paymentLists[0].items[0].snapshot.feeBearer;
+
+    const record = createPaymentBatchRecord({
+      ...input,
+      feeBearerByPayoutId: { [input.payouts[0].id]: 'PUBLISHER' },
+    });
+
+    expect(record.items[0].feeBearer).toBe('收款人承担');
+    expect(input.payouts[0].feeBearer).toBe(sourcePayoutFeeBearer);
+    expect(input.paymentLists[0].items[0].snapshot.feeBearer).toBe(sourcePaymentListFeeBearer);
+  });
+
   it('normalizes successful batch and attempt snapshots into the recipient currency', () => {
     const input = buildInput();
     input.payouts[0].status = '已付款';

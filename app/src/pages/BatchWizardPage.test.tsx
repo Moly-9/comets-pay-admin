@@ -71,7 +71,7 @@ describe('BatchWizardPage payment failure retries', () => {
   it('shows an awaiting retry immediately, unchecked and disabled', () => {
     const payout = beginPaymentFailureAccountRecovery(retryPayout());
     const html = renderToStaticMarkup(
-      <BatchWizardPage payouts={[payout]} onCancel={vi.fn()} onSubmit={vi.fn()} onDraft={vi.fn()} />,
+      <BatchWizardPage payouts={[payout]} onCancel={vi.fn()} onSubmit={vi.fn(() => true)} onDraft={vi.fn()} />,
     );
 
     expect(html).toContain('Retry Creator');
@@ -91,7 +91,7 @@ describe('BatchWizardPage payment failure retries', () => {
     );
     const ready = simulateCreatorAccountUpdated(notified);
     const html = renderToStaticMarkup(
-      <BatchWizardPage payouts={[ready]} onCancel={vi.fn()} onSubmit={vi.fn()} onDraft={vi.fn()} />,
+      <BatchWizardPage payouts={[ready]} onCancel={vi.fn()} onSubmit={vi.fn(() => true)} onDraft={vi.fn()} />,
     );
 
     expect(html).toContain('达人已更新 · 可重试');
@@ -118,7 +118,7 @@ describe('BatchWizardPage payment failure retries', () => {
       } : undefined,
     };
     const html = renderToStaticMarkup(
-      <BatchWizardPage payouts={[ready]} onCancel={vi.fn()} onSubmit={vi.fn()} onDraft={vi.fn()} />,
+      <BatchWizardPage payouts={[ready]} onCancel={vi.fn()} onSubmit={vi.fn(() => true)} onDraft={vi.fn()} />,
     );
 
     expect(html).toContain('达人已更新 · 可重试');
@@ -136,7 +136,7 @@ describe('BatchWizardPage payment failure retries', () => {
     );
     const updated = simulateCreatorAccountUpdated(notified);
     const html = renderToStaticMarkup(
-      <BatchWizardPage payouts={[updated]} onCancel={vi.fn()} onSubmit={vi.fn()} onDraft={vi.fn()} />,
+      <BatchWizardPage payouts={[updated]} onCancel={vi.fn()} onSubmit={vi.fn(() => true)} onDraft={vi.fn()} />,
     );
 
     expect(html).toContain('达人已更新 · 可重试');
@@ -151,7 +151,7 @@ describe('BatchWizardPage payment failure retries', () => {
       'creator@example.com',
     );
     const html = renderToStaticMarkup(
-      <BatchWizardPage payouts={[ready]} onCancel={vi.fn()} onSubmit={vi.fn()} onDraft={vi.fn()} />,
+      <BatchWizardPage payouts={[ready]} onCancel={vi.fn()} onSubmit={vi.fn(() => true)} onDraft={vi.fn()} />,
     );
 
     expect(html).toContain('原账户未变 · 可重试');
@@ -165,7 +165,7 @@ describe('BatchWizardPage payment failure retries', () => {
         payouts={[retryPayout()]}
         requests={[requestProject()]}
         onCancel={vi.fn()}
-        onSubmit={vi.fn()}
+        onSubmit={vi.fn(() => true)}
         onDraft={vi.fn()}
       />,
     );
@@ -174,9 +174,15 @@ describe('BatchWizardPage payment failure retries', () => {
     expect(html.indexOf('aria-label="按合作项目筛选付款"')).toBeLessThan(html.indexOf('已选择的付款'));
     expect(html).toContain('<th class="batch-wizard-col-creator">达人</th>');
     expect(html).toContain('<th class="batch-wizard-col-request">请款编号</th>');
+    expect(html).toContain('<th class="batch-wizard-col-amount">请款金额</th>');
     expect(html).toContain('<th class="batch-wizard-col-project">合作项目</th>');
     expect(html).toContain('<th class="batch-wizard-col-account">银行账号</th>');
     expect(html).toContain('<th class="batch-wizard-col-validation">账户校验</th>');
+    expect(html).toContain('<th class="batch-wizard-col-fee-bearer">手续费承担方</th>');
+    expect(html.indexOf('batch-wizard-col-request')).toBeLessThan(html.indexOf('batch-wizard-col-amount'));
+    expect(html.indexOf('batch-wizard-col-amount')).toBeLessThan(html.indexOf('batch-wizard-col-project'));
+    expect(html).toContain('aria-label="Retry Creator 手续费承担方"');
+    expect(html).toContain('>对方承担</span>');
     expect(html).toContain('REQ-202609-000001');
     expect(html).toContain('合作项目一');
     expect(html).not.toContain('INV-RETRY-1');
