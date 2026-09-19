@@ -2599,8 +2599,20 @@ export function CreatorCollaborationProjectDetails({
             <article className="creator-collaboration-project-card" key={project.projectId}>
               <header>
                 <span className="creator-collaboration-project-code">{project.projectCode}</span>
-                <span className={`creator-collaboration-relation is-${project.relationStatus.toLowerCase()}`}>
-                  {project.relationStatus === 'CURRENT' ? '当前关联' : '历史关联'}
+                <span className="creator-collaboration-project-badges">
+                  <span className={`creator-collaboration-relation is-${project.relationStatus.toLowerCase()}`}>
+                    {project.relationStatus === 'CURRENT' ? '当前关联' : '历史关联'}
+                  </span>
+                  <span className={`creator-collaboration-contract-status is-${project.contractStatus.toLowerCase()}`}>
+                    {{
+                      ACTIVE: '合同有效',
+                      PENDING: '合同待确认',
+                      UNSET: '合同期限待补充',
+                      EXPIRED: '合同已到期',
+                      ENDED: '合同已结束',
+                      NONE: '未关联合同',
+                    }[project.contractStatus]}
+                  </span>
                 </span>
               </header>
               <div className="creator-collaboration-project-title">

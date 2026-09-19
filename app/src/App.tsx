@@ -18,6 +18,7 @@ import {
   createEditingContractDraft,
   createGeneratedContractDraft,
   createUploadedContract,
+  currentContractReferenceDate,
   INITIAL_CONTRACTS,
   isFrameworkContract,
   isIoContract,
@@ -624,6 +625,29 @@ export default function App() {
   );
   const [workflowAuditEvents, setWorkflowAuditEvents] = useState<WorkflowAuditEvent[]>([]);
   const [requestProjects, setRequestProjects] = useState(INITIAL_PAYMENT_BATCH_PROTOTYPE_RESOURCES.requests);
+  const [collaborationBusinessDate, setCollaborationBusinessDate] = useState(currentContractReferenceDate);
+  useEffect(() => {
+    let midnightTimer: number;
+    const refreshAtShanghaiMidnight = () => {
+      const businessDate = currentContractReferenceDate();
+      setCollaborationBusinessDate(businessDate);
+      const [year, month, day] = businessDate.split('-').map(Number);
+      const nextMidnight = Date.UTC(year, month - 1, day + 1) - 8 * 60 * 60 * 1000;
+      midnightTimer = window.setTimeout(refreshAtShanghaiMidnight, Math.max(1_000, nextMidnight - Date.now() + 100));
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') {
+        window.clearTimeout(midnightTimer);
+        refreshAtShanghaiMidnight();
+      }
+    };
+    refreshAtShanghaiMidnight();
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.clearTimeout(midnightTimer);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, []);
   const creatorCollaborationProjects = useMemo(() => buildCreatorCollaborationProjects({
     projects,
     contracts,
@@ -631,7 +655,8 @@ export default function App() {
     externalInvoices,
     requests: requestProjects,
     payouts,
-  }), [contracts, externalInvoices, generatedInvoices, payouts, projects, requestProjects]);
+    referenceDate: collaborationBusinessDate,
+  }), [collaborationBusinessDate, contracts, externalInvoices, generatedInvoices, payouts, projects, requestProjects]);
   const [paymentBatches, setPaymentBatches] = useState(() => createInitialPaymentBatches({
     payouts,
     requests: requestProjects,

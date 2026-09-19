@@ -1,5 +1,10 @@
 import type { ContractRecord } from './contracts';
-import { contractProjectLinksFor } from './contracts';
+import {
+  contractProjectLinksFor,
+  currentContractReferenceDate,
+  getContractValidity,
+  isConfirmedContract,
+} from './contracts';
 import type { ExternalInvoiceCollectionRecord } from './invoice/externalInvoiceCollection';
 import type { ProjectSummary } from './pages/ProjectDetailPage';
 import type { RequestProjectSummary } from './pages/RequestProjectDetailPage';
@@ -7,6 +12,8 @@ import type { CreatorId } from './businessWorkflow';
 import type { GeneratedInvoiceRecord, Payout } from './types';
 
 export type CreatorCollaborationRelationStatus = 'CURRENT' | 'HISTORICAL';
+export type CreatorCollaborationContractStatus =
+  | 'ACTIVE' | 'PENDING' | 'UNSET' | 'EXPIRED' | 'ENDED' | 'NONE';
 
 export type CreatorCollaborationSocialAccount = {
   socialAccountId?: string;
@@ -22,6 +29,7 @@ export type CreatorCollaborationProjectRecord = {
   brand: string;
   projectStatus: string;
   relationStatus: CreatorCollaborationRelationStatus;
+  contractStatus: CreatorCollaborationContractStatus;
   directoryResolved: boolean;
   socialAccounts: CreatorCollaborationSocialAccount[];
   contractCount: number;
@@ -37,16 +45,18 @@ export type CreatorCollaborationProjectSources = {
   externalInvoices: readonly ExternalInvoiceCollectionRecord[];
   requests: readonly RequestProjectSummary[];
   payouts: readonly Payout[];
+  referenceDate?: string;
 };
 
 type MutableCollaborationProjectRecord = Omit<
   CreatorCollaborationProjectRecord,
-  'relationStatus' | 'socialAccounts' | 'contractCount' | 'invoiceCount' | 'requestCount' | 'paymentCount'
+  'relationStatus' | 'contractStatus' | 'socialAccounts' | 'contractCount' | 'invoiceCount' | 'requestCount' | 'paymentCount'
 > & {
   hasCurrentReference: boolean;
+  hasRemovedReference: boolean;
   socialAccounts: Map<string, CreatorCollaborationSocialAccount>;
-  contractIds: Set<string>;
-  invoiceIds: Set<string>;
+  contracts: Map<string, { contract: ContractRecord; ended: boolean }>;
+  invoicePayoutIds: Map<string, string | undefined>;
   requestIds: Set<string>;
   paymentIds: Set<string>;
 };
@@ -63,12 +73,23 @@ const socialAccountKey = (account: CreatorCollaborationSocialAccount) => (
     : `snapshot:${account.handle.trim().toLowerCase()}\u0000${account.platform.trim().toLowerCase()}`
 );
 
-const contractProjectIdsIncludingHistory = (contract: ContractRecord) => {
-  const explicitLinks = contractProjectLinksFor(contract);
-  const ids = explicitLinks.map((link) => String(link.cooperationProjectId));
-  const legacyProjectId = contract.cooperationProjectId ?? contract.projectId;
-  if (legacyProjectId && !ids.includes(String(legacyProjectId))) ids.push(String(legacyProjectId));
-  return [...new Set(ids)];
+const contractStatusFor = (
+  links: readonly { contract: ContractRecord; ended: boolean }[],
+  referenceDate: string,
+): CreatorCollaborationContractStatus => {
+  if (!links.length) return 'NONE';
+  const activeLinks = links.filter(({ ended }) => !ended);
+  if (!activeLinks.length) return 'ENDED';
+  const statuses = activeLinks.map(({ contract }) => ({
+    confirmed: isConfirmedContract(contract),
+    validity: getContractValidity(contract, referenceDate),
+  }));
+  if (statuses.some(({ confirmed, validity }) => confirmed && !validity.expired && validity.status !== 'UNSET')) {
+    return 'ACTIVE';
+  }
+  if (statuses.some(({ validity }) => !validity.expired && validity.status !== 'UNSET')) return 'PENDING';
+  if (statuses.some(({ validity }) => validity.status === 'UNSET')) return 'UNSET';
+  return 'EXPIRED';
 };
 
 export const buildCreatorCollaborationProjects = ({
@@ -78,6 +99,7 @@ export const buildCreatorCollaborationProjects = ({
   externalInvoices,
   requests,
   payouts,
+  referenceDate = currentContractReferenceDate(),
 }: CreatorCollaborationProjectSources): CreatorCollaborationProjectRecord[] => {
   const projectDirectory = new Map(projects.map((project) => [projectIdFor(project), project]));
   const projectOrder = new Map(projects.map((project, index) => [projectIdFor(project), index]));
@@ -117,9 +139,10 @@ export const buildCreatorCollaborationProjects = ({
       projectStatus: project?.status ?? snapshot?.projectStatus ?? '项目资料待同步',
       directoryResolved: Boolean(project),
       hasCurrentReference: false,
+      hasRemovedReference: false,
       socialAccounts: new Map(),
-      contractIds: new Set(),
-      invoiceIds: new Set(),
+      contracts: new Map(),
+      invoicePayoutIds: new Map(),
       requestIds: new Set(),
       paymentIds: new Set(),
     };
@@ -139,7 +162,8 @@ export const buildCreatorCollaborationProjects = ({
     const projectId = projectIdFor(project);
     project.creatorProfiles?.forEach((reference) => {
       const record = ensureRecord(reference.creatorId, projectId);
-      if (reference.status !== 'removed') record.hasCurrentReference = true;
+      if (reference.status === 'removed') record.hasRemovedReference = true;
+      else record.hasCurrentReference = true;
       addSocialAccount(record, {
         socialAccountId: reference.socialAccountId,
         handle: reference.handle,
@@ -151,12 +175,21 @@ export const buildCreatorCollaborationProjects = ({
   contracts.forEach((contract) => {
     if (!contract.creatorId || contract.isTemplate) return;
     const creatorId = contract.creatorId;
-    contractProjectIdsIncludingHistory(contract).map(resolveProjectId).forEach((projectId) => {
+    const links = new Map<string, boolean>();
+    contractProjectLinksFor(contract).forEach((link) => {
+      links.set(resolveProjectId(String(link.cooperationProjectId)), link.status === 'ENDED');
+    });
+    const legacyProjectId = contract.cooperationProjectId ?? contract.projectId;
+    if (legacyProjectId) {
+      const projectId = resolveProjectId(String(legacyProjectId));
+      if (!links.has(projectId)) links.set(projectId, false);
+    }
+    links.forEach((ended, projectId) => {
       const record = ensureRecord(creatorId, projectId, {
         projectName: contract.project,
         brand: contract.brand,
       });
-      record.contractIds.add(String(contract.contractId ?? contract.id));
+      record.contracts.set(String(contract.contractId ?? contract.id), { contract, ended });
       addSocialAccount(record, {
         socialAccountId: contract.creatorSocialAccountId,
         handle: contract.creatorHandle ?? '',
@@ -167,10 +200,10 @@ export const buildCreatorCollaborationProjects = ({
 
   generatedInvoices.forEach((invoice) => {
     const { snapshot } = invoice;
-    if (!snapshot.creatorId) return;
+    if (!snapshot.creatorId || !(snapshot.cooperationProjectId ?? snapshot.projectId)) return;
     const projectId = resolveProjectId(String(snapshot.cooperationProjectId ?? snapshot.projectId));
     const record = ensureRecord(snapshot.creatorId, projectId, { projectName: snapshot.projectName });
-    record.invoiceIds.add(String(invoice.invoiceId));
+    record.invoicePayoutIds.set(String(invoice.invoiceId), invoice.sourcePayoutId);
     addSocialAccount(record, {
       socialAccountId: snapshot.creatorSocialAccountId,
       handle: snapshot.creatorHandle,
@@ -179,9 +212,12 @@ export const buildCreatorCollaborationProjects = ({
   });
 
   externalInvoices.forEach((invoice) => {
+    if (invoice.status === 'CANCELLED' || !invoice.creatorId || !invoice.projectId) return;
     const projectId = resolveProjectId(String(invoice.projectId));
     const record = ensureRecord(invoice.creatorId, projectId, { projectName: invoice.projectName });
-    record.invoiceIds.add(String(invoice.invoiceId));
+    if (!record.invoicePayoutIds.has(String(invoice.invoiceId))) {
+      record.invoicePayoutIds.set(String(invoice.invoiceId), undefined);
+    }
     addSocialAccount(record, {
       socialAccountId: invoice.creatorSocialAccountId,
       handle: invoice.creatorHandle,
@@ -221,22 +257,40 @@ export const buildCreatorCollaborationProjects = ({
     });
   });
 
+  const payoutsById = new Map(payouts.map((payout) => [payout.id, payout]));
+
   return [...records.values()]
-    .map((record): CreatorCollaborationProjectRecord => ({
-      creatorId: record.creatorId,
-      projectId: record.projectId,
-      projectCode: record.projectCode,
-      projectName: record.projectName,
-      brand: record.brand,
-      projectStatus: record.projectStatus,
-      relationStatus: record.hasCurrentReference ? 'CURRENT' : 'HISTORICAL',
-      directoryResolved: record.directoryResolved,
-      socialAccounts: [...record.socialAccounts.values()],
-      contractCount: record.contractIds.size,
-      invoiceCount: record.invoiceIds.size,
-      requestCount: record.requestIds.size,
-      paymentCount: record.paymentIds.size,
-    }))
+    .filter((record) => record.contracts.size > 0 || record.invoicePayoutIds.size > 0)
+    .map((record): CreatorCollaborationProjectRecord => {
+      const contractStatus = contractStatusFor([...record.contracts.values()], referenceDate);
+      const allInvoicesPaid = record.invoicePayoutIds.size > 0
+        && [...record.invoicePayoutIds.values()].every((payoutId) => {
+          const payout = payoutId ? payoutsById.get(payoutId) : undefined;
+          return payout?.status === '已付款'
+            && (!payout.creatorId || payout.creatorId === record.creatorId)
+            && resolveProjectId(payout.projectId) === record.projectId;
+        });
+      const explicitlyRemoved = record.hasRemovedReference && !record.hasCurrentReference;
+      const current = !explicitlyRemoved && (contractStatus === 'NONE'
+        ? !allInvoicesPaid
+        : ['ACTIVE', 'PENDING', 'UNSET'].includes(contractStatus));
+      return {
+        creatorId: record.creatorId,
+        projectId: record.projectId,
+        projectCode: record.projectCode,
+        projectName: record.projectName,
+        brand: record.brand,
+        projectStatus: record.projectStatus,
+        relationStatus: current ? 'CURRENT' : 'HISTORICAL',
+        contractStatus,
+        directoryResolved: record.directoryResolved,
+        socialAccounts: [...record.socialAccounts.values()],
+        contractCount: record.contracts.size,
+        invoiceCount: record.invoicePayoutIds.size,
+        requestCount: record.requestIds.size,
+        paymentCount: record.paymentIds.size,
+      };
+    })
     .sort((left, right) => {
       if (left.relationStatus !== right.relationStatus) return left.relationStatus === 'CURRENT' ? -1 : 1;
       const leftOrder = projectOrder.get(left.projectId) ?? Number.MAX_SAFE_INTEGER;
