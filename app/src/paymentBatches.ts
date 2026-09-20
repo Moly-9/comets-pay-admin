@@ -1195,6 +1195,27 @@ export const paymentBatchMoneyTotalsLabel = (
   ? totals.map(({ currency, amount }) => `${currency} ${amount.toLocaleString('en-US')}`).join(' + ')
   : fallback;
 
+const reversalAmountForItem = (
+  item: PaymentBatchItemSnapshot,
+): readonly PaymentBatchMoneyTotal[] | null => {
+  if (item.actualPaidAmount !== undefined && Number.isFinite(item.actualPaidAmount) && item.actualPaidCurrency) {
+    return [{ currency: item.actualPaidCurrency, amount: -Math.abs(item.actualPaidAmount) }];
+  }
+  if (item.refundAmount !== undefined && Number.isFinite(item.refundAmount) && item.refundCurrency) {
+    return [{ currency: item.refundCurrency, amount: -Math.abs(item.refundAmount) }];
+  }
+  return null;
+};
+
+export const paymentBatchResultAmountLabel = (
+  batch: PaymentBatchRecord,
+  totals: PaymentBatchFinancialSummary['singlePaymentAmounts'],
+) => {
+  if (batch.purpose === 'REVERSAL' && batch.status === '冲退处理中') return '冲退处理中';
+  if (batch.status === '付款处理中') return '待渠道回写';
+  return paymentBatchMoneyTotalsLabel(totals ?? []);
+};
+
 export const paymentBatchFinancialSummary = (
   batch: PaymentBatchRecord,
 ): PaymentBatchFinancialSummary => {
@@ -1203,7 +1224,7 @@ export const paymentBatchFinancialSummary = (
   let paymentResultsAvailable = items.length > 0;
   items.forEach((item) => {
     const amounts = batch.purpose === 'REVERSAL'
-      ? [{ currency: item.currency, amount: 0 }]
+      ? reversalAmountForItem(item)
       : paymentSingleAmountTotalsForValues({
           principalAmount: item.amount,
           principalCurrency: item.currency,
@@ -1227,7 +1248,7 @@ export const paymentBatchFinancialSummary = (
       && item.paymentStatus !== '已退回'
       && item.paymentStatus !== '已冲退'
     ) return result;
-    paymentExpenditureTotalsForValues({
+    const amounts = batch.purpose === 'REVERSAL' ? reversalAmountForItem(item) ?? [] : paymentExpenditureTotalsForValues({
       principalAmount: item.amount,
       principalCurrency: item.currency,
       feeBearer: item.feeBearer,
@@ -1235,7 +1256,8 @@ export const paymentBatchFinancialSummary = (
       transferFeeCurrency: item.transferFeeCurrency,
       actualPaidAmount: item.actualPaidAmount,
       actualPaidCurrency: item.actualPaidCurrency,
-    }).forEach(({ currency, amount }) => {
+    });
+    amounts.forEach(({ currency, amount }) => {
       const invoiceCurrency = currency as InvoiceCurrency;
       result.set(invoiceCurrency, Math.round(((result.get(invoiceCurrency) ?? 0) + amount + Number.EPSILON) * 100) / 100);
     });

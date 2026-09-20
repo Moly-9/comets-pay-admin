@@ -230,7 +230,7 @@ describe('payment batch workbook', () => {
     expect(sheet?.autoFilter).toBe('A1:P1');
   });
 
-  it('exports reversal batches as zero payment while preserving the negative refund snapshot', () => {
+  it('exports reversal batches using the negative refund while retaining zero principal and fees', async () => {
     const reversal = batch({
       purpose: 'REVERSAL',
       status: '已冲退',
@@ -249,14 +249,27 @@ describe('payment batch workbook', () => {
       purpose: '冲退付款',
       paymentAmount: 'USD 0',
       transferFeeAmount: 'USD 0',
-      singlePaymentAmount: 'USD 0',
+      singlePaymentAmount: 'USD -1,000',
     });
     expect(reversal.items[0].actualPaidAmount).toBe(-1_000);
+    const workbookBlob = await createPaymentBatchWorkbook([{ batch: reversal }]);
+    const { Workbook } = await import('exceljs');
+    const workbook = new Workbook();
+    await workbook.xlsx.load(await workbookBlob.arrayBuffer());
+    const sheet = workbook.getWorksheet('付款明细');
+    expect(sheet?.getRow(1).values).toEqual([undefined, ...PAYMENT_BATCH_WORKBOOK_HEADERS]);
+    expect(sheet?.getRow(2).getCell(12).value).toBe('USD -1,000');
+    expect(sheet?.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
+    expect(sheet?.autoFilter).toBe('A1:P1');
     expect(buildPaymentBatchWorkbookRows([{ batch: {
       ...reversal,
       status: '冲退处理中',
       items: reversal.items.map((source) => ({ ...source, paymentStatus: '冲退处理中', actualPaidAmount: undefined })),
-    } }])[0]).toMatchObject({ singlePaymentAmount: 'USD 0', transferFeeAmount: 'USD 0' });
+    } }])[0]).toMatchObject({ singlePaymentAmount: '冲退处理中', transferFeeAmount: 'USD 0' });
+    expect(buildPaymentBatchWorkbookRows([{ batch: {
+      ...reversal,
+      items: reversal.items.map((source) => ({ ...source, actualPaidAmount: undefined, refundAmount: undefined })),
+    } }])[0].singlePaymentAmount).toBe('—');
   });
 
   it('uses Shanghai dates in list filenames and the batch code in detail filenames', () => {

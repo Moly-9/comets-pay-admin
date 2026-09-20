@@ -278,7 +278,22 @@ describe('payment batch filters and selection', () => {
         actualPaidAmount: undefined,
       })),
     }])[0];
-    expect(reversal).toMatchObject({ paymentAmount: 'USD 0', transferFeeAmount: 'USD 0', singlePaymentAmount: 'USD 0' });
+    expect(reversal).toMatchObject({ paymentAmount: 'USD 0', transferFeeAmount: 'USD 0', singlePaymentAmount: '冲退处理中' });
+
+    const confirmed = paymentBatchRows([{
+      ...processingBatch,
+      purpose: 'REVERSAL',
+      status: '已冲退',
+      items: processingBatch.items.map((item) => ({
+        ...item,
+        amount: 0,
+        paymentStatus: '已冲退',
+        transferFeeAmount: 0,
+        actualPaidAmount: -1_000,
+        actualPaidCurrency: 'USD',
+      })),
+    }])[0];
+    expect(confirmed).toMatchObject({ paymentAmount: 'USD 0', transferFeeAmount: 'USD 0', singlePaymentAmount: 'USD -1,000' });
   });
 });
 

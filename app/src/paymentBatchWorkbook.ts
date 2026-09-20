@@ -2,6 +2,7 @@ import {
   paymentBatchFinancialSummary,
   paymentBatchMoneyTotalsLabel,
   paymentBatchPurposeLabel,
+  paymentBatchResultAmountLabel,
   type PaymentBatchRecord,
 } from './paymentBatches';
 import { paymentProviderDisplayName } from './paymentProviderPresentation';
@@ -71,13 +72,6 @@ const paymentResultDate = (
     ?? '—';
 };
 
-const paymentResultTotal = (
-  batch: PaymentBatchRecord,
-  totals: ReturnType<typeof paymentBatchFinancialSummary>['singlePaymentAmounts'],
-) => batch.purpose !== 'REVERSAL' && batch.status === '付款处理中'
-  ? '待渠道回写'
-  : paymentBatchMoneyTotalsLabel(totals ?? []);
-
 export const buildPaymentBatchWorkbookRows = (
   entries: readonly PaymentBatchWorkbookEntry[],
 ): PaymentBatchWorkbookRow[] => entries.map(({ batch, currentRequestStatus }) => {
@@ -95,8 +89,10 @@ export const buildPaymentBatchWorkbookRows = (
       ? textOrFallback(batch.request.costTypeDetail)
       : '—',
     paymentAmount: paymentBatchMoneyTotalsLabel(summary.paymentAmounts),
-    transferFeeAmount: paymentResultTotal(batch, summary.transferFeeResultsAvailable ? summary.transferFeeAmounts : null),
-    singlePaymentAmount: paymentResultTotal(batch, summary.singlePaymentAmounts),
+    transferFeeAmount: batch.purpose !== 'REVERSAL' && batch.status === '付款处理中'
+      ? '待渠道回写'
+      : paymentBatchMoneyTotalsLabel(summary.transferFeeResultsAvailable ? summary.transferFeeAmounts : []),
+    singlePaymentAmount: paymentBatchResultAmountLabel(batch, summary.singlePaymentAmounts),
     actualPaymentDate: paymentResultDate(batch, summary.items),
     requestStatus: textOrFallback(currentRequestStatus ?? batch.request.requestStatus, '待同步'),
     initiator: textOrFallback(batch.request.media),

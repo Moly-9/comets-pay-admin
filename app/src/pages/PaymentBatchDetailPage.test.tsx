@@ -179,6 +179,37 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).not.toContain('payment-batch-order-result');
   });
 
+  it('shows the negative refund in reversal batch totals but zero for the single payment row', () => {
+    const reversal: PaymentBatchRecord = {
+      ...DETAIL_BATCH,
+      purpose: 'REVERSAL',
+      status: '已冲退',
+      items: DETAIL_BATCH.items.map((item) => ({
+        ...item,
+        amount: 0,
+        paymentStatus: '已冲退',
+        transferFeeAmount: 0,
+        actualPaidAmount: -1_250,
+        actualPaidCurrency: 'USD',
+        refundAmount: 1_250,
+        refundCurrency: 'USD',
+      })),
+    };
+    const html = renderToStaticMarkup(<PaymentBatchDetailPage batch={reversal} onBack={vi.fn()} />);
+    expect(html).toMatch(/payment-batch-detail-total[\s\S]*?<strong>USD -1,250<\/strong>/);
+    expect(html).toContain('<small>批次支付金额 USD -1,250</small>');
+    expect(html).toContain('<th class="payment-batch-col-actual" scope="col">单笔支付金额</th>');
+    expect(html).toContain('payment-batch-col-actual payment-batch-table-money-cell"><strong>USD 0</strong>');
+
+    const pendingHtml = renderToStaticMarkup(<PaymentBatchDetailPage batch={{
+      ...reversal,
+      status: '冲退处理中',
+      items: reversal.items.map((item) => ({ ...item, paymentStatus: '冲退处理中',
+        actualPaidAmount: undefined, refundAmount: undefined })),
+    }} onBack={vi.fn()} />);
+    expect(pendingHtml).toContain('<small>批次支付金额 冲退处理中</small>');
+  });
+
   it('highlights every supported payment provider in payment detail rows', () => {
     const providerItems = [
       DETAIL_BATCH.items[0],

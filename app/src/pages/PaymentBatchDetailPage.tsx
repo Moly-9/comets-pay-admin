@@ -24,8 +24,8 @@ import {
   paymentBatchItemForAttempt,
   paymentBatchItemAttemptLabel,
   paymentBatchItemOrderCode,
-  paymentBatchMoneyTotalsLabel,
   paymentBatchPurposeLabel,
+  paymentBatchResultAmountLabel,
   type PaymentBatchItemSnapshot,
   type PaymentBatchRecord,
 } from '../paymentBatches';
@@ -462,9 +462,7 @@ export function PaymentBatchDetailPage({
   const titleRef = useRef<HTMLHeadingElement>(null);
   const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
   const financialSummary = useMemo(() => paymentBatchFinancialSummary(batch), [batch]);
-  const singlePaymentTotal = batch.purpose !== 'REVERSAL' && batch.status === '付款处理中'
-    ? '待渠道回写'
-    : paymentBatchMoneyTotalsLabel(financialSummary.singlePaymentAmounts ?? []);
+  const singlePaymentTotal = paymentBatchResultAmountLabel(batch, financialSummary.singlePaymentAmounts);
   const batchItems = financialSummary.items;
   const paymentTypeLabel = paymentBatchPurposeLabel(batch.purpose);
   const projectStatus = currentRequestStatus || batch.request.requestStatus || '待同步';

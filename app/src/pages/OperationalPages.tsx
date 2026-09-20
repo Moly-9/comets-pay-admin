@@ -242,6 +242,7 @@ import {
   paymentBatchFinancialSummary,
   paymentBatchMoneyTotalsLabel,
   paymentBatchPurposeLabel,
+  paymentBatchResultAmountLabel,
   paymentBatchStatusCounts,
   type PaymentBatchPurpose,
   type PaymentBatchRecord,
@@ -4513,9 +4514,7 @@ export const paymentBatchRows = (
       transferFeeAmount: resultPending && batch.purpose !== 'REVERSAL'
         ? '待渠道回写'
         : paymentBatchMoneyTotalsLabel(financialSummary.transferFeeResultsAvailable ? financialSummary.transferFeeAmounts : []),
-      singlePaymentAmount: resultPending && batch.purpose !== 'REVERSAL'
-        ? '待渠道回写'
-        : paymentBatchMoneyTotalsLabel(financialSummary.singlePaymentAmounts ?? []),
+      singlePaymentAmount: paymentBatchResultAmountLabel(batch, financialSummary.singlePaymentAmounts),
       initiator: batch.request.media || '待补充',
       payer: batch.payer,
       paidAt: batch.paidAt,
