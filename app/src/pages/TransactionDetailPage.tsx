@@ -76,7 +76,6 @@ export function TransactionDetailPage({
   const [resourceView, setResourceView] = useState<TransactionResourceView | null>(null);
   const [selectedContractKey, setSelectedContractKey] = useState<string | null>(null);
   const details = transactionRecordDetails(payout, context);
-  const finalTime = record.occurredAt;
   const localClearingMethod = context?.item.localClearingSystem || details.transferMethod;
   const creatorIdentity = context
     ? paymentCreatorIdentityFromBatchItem(context.item)
@@ -148,7 +147,7 @@ export function TransactionDetailPage({
           }`}>
           <span className="transaction-detail-summary-label"><CircleCheckBig size={15} aria-hidden="true" />交易状态</span>
           <strong className="transaction-summary-value">{record.status}</strong>
-          <small>{displayTime(finalTime)}</small>
+          <small>渠道回写时间 · {displayTime(details.channelWritebackTime)}</small>
         </article>
       </section>
 
@@ -169,7 +168,7 @@ export function TransactionDetailPage({
           <div><h2>付款信息</h2><p>本笔交易的渠道、账户与付款执行快照。</p></div>
         </header>
         <dl className="transaction-detail-info-grid">
-          <div className="is-time"><dt><CalendarClock size={14} aria-hidden="true" />付款时间</dt><dd>{displayTime(details.paymentTime)}</dd></div>
+          <div className="is-time"><dt><CalendarClock size={14} aria-hidden="true" />付款时间</dt><dd>{displayTime(details.paymentTime)}{details.paymentTimeIsSimulated ? <small className="transaction-time-simulation">模拟时间</small> : null}</dd></div>
           <div className="is-payer"><dt><UserRoundCheck size={14} aria-hidden="true" />付款人</dt><dd>{details.payer}</dd></div>
           <div className="is-batch"><dt><Layers3 size={14} aria-hidden="true" />付款批次号</dt><dd>{details.paymentBatchCode}</dd></div>
           <div className="is-account"><dt><Landmark size={14} aria-hidden="true" />收款账户</dt><dd>{accountDisplayValue(details.accountSummary)}</dd></div>

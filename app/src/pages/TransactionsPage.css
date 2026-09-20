@@ -561,6 +561,13 @@
   line-height: 1.55;
 }
 
+.transaction-detail-info-grid .transaction-time-simulation {
+  display: block;
+  color: #687184;
+  font-size: 10.5px;
+  font-weight: 400;
+}
+
 .transaction-association-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -83,7 +83,7 @@ export function TransactionRecordsTable({
               <th>关联项目</th>
               <th>渠道</th>
               <th>单笔支付金额</th>
-              <th>手续费</th>
+              <th>渠道手续费</th>
               <th>对方实际收到金额</th>
               <th>付款人 / 付款时间</th>
               <th>付款状态</th>
@@ -94,7 +94,7 @@ export function TransactionRecordsTable({
             {pageItems.length ? pageItems.map((record) => {
               const { payout, context } = record;
               const details = transactionRecordDetails(payout, context);
-              const payerTime = displayTimeParts(details.paymentTime);
+              const payerTime = displayTimeParts(record.occurredAt);
               const creatorIdentity = context
                 ? paymentCreatorIdentityFromBatchItem(context.item)
                 : paymentCreatorIdentityFromPayout({ payout });

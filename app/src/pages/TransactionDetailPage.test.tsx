@@ -28,6 +28,7 @@ const context = {
     paymentBatchCode: 'PAY-20260810-001',
     provider: 'Airwallex',
     payer: '财务测试员',
+    submittedAt: '2026-08-10 16:25',
     paidAt: '2026-08-10 16:30',
     status: '已付款',
     request: {
@@ -40,6 +41,8 @@ const context = {
   },
   item: {
     paymentCode: 'PMT-2608100001',
+    paymentSubmittedAt: '2026-08-10 16:25',
+    paidAt: '2026-08-10 16:30',
     receiveCurrency: 'USD',
     transferMethod: 'LOCAL',
     localClearingSystem: '本地清算测试值',
@@ -99,6 +102,8 @@ describe('TransactionDetailPage', () => {
     expect(html).toContain('对方实收 USD 4,100');
     expect(html).toContain('付款渠道');
     expect(html).toContain('交易状态');
+    expect(html).toContain('渠道回写时间 · 2026-08-10 16:30');
+    expect(html).toContain('付款时间</dt><dd>2026-08-10 16:25</dd>');
     expect(html).toContain('<strong class="transaction-summary-value">Airwallex</strong>');
     expect(html).toContain('<strong class="transaction-summary-value">已付款</strong>');
     expect(html.match(/transaction-summary-value/g)).toHaveLength(3);
@@ -144,5 +149,45 @@ describe('TransactionDetailPage', () => {
     expect(html).toContain('历史数据待补全');
     expect(html).toContain('CON-20260810-001');
     expect(html).toContain('INV-20260810-001');
+    expect(html).toContain('付款时间待补全');
+  });
+
+  it('labels the synthetic time of a legacy demo payment', () => {
+    const html = renderToStaticMarkup(<TransactionDetailPage
+      record={{ ...record, context: {
+        ...context,
+        item: { ...context.item, paymentSubmittedAt: '2026-08-10 16:25', paymentSubmittedAtIsSimulated: true },
+      } }}
+      onBack={vi.fn()}
+    />);
+    expect(html).toContain('2026-08-10 16:25<small class="transaction-time-simulation">模拟时间</small>');
+  });
+
+  it('shows pending channel writeback without treating the submission time as a result', () => {
+    const html = renderToStaticMarkup(<TransactionDetailPage
+      record={{ ...record, status: '付款处理中', context: {
+        ...context,
+        item: { ...context.item, paymentStatus: '付款处理中', paidAt: undefined },
+      } }}
+      onBack={vi.fn()}
+    />);
+    expect(html).toContain('渠道回写时间 · 待渠道回写');
+    expect(html).toContain('付款时间</dt><dd>2026-08-10 16:25</dd>');
+  });
+
+  it('shows the failed channel result time separately from execution', () => {
+    const html = renderToStaticMarkup(<TransactionDetailPage
+      record={{ ...record, status: '付款失败', context: {
+        ...context,
+        item: {
+          ...context.item,
+          paymentStatus: '付款失败',
+          failure: { code: 'FAILED', response: 'Rejected', occurredAt: '2026-08-10 16:35' },
+        },
+      } }}
+      onBack={vi.fn()}
+    />);
+    expect(html).toContain('渠道回写时间 · 2026-08-10 16:35');
+    expect(html).toContain('付款时间</dt><dd>2026-08-10 16:25</dd>');
   });
 });

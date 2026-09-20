@@ -24,6 +24,7 @@ import type {
 import { accountDisplayValue } from './accountPresentation';
 import {
   HISTORICAL_PAYMENT_BATCH_SEEDS,
+  simulatedHistoricalPaymentSubmittedAt,
   type HistoricalPaymentBatchSeed,
 } from './historicalPaymentBatchFixtures';
 import {
@@ -86,6 +87,8 @@ export type PaymentBatchItemSnapshot = Readonly<{
   paymentBatchCode?: string;
   /** 财务执行打款并提交付款渠道的时间。 */
   paymentSubmittedAt?: string;
+  /** True only for the generated execution timestamp of a legacy demo payout. */
+  paymentSubmittedAtIsSimulated?: boolean;
   creatorId?: string;
   creatorName: string;
   creatorHandle: string;
@@ -331,6 +334,7 @@ const historicalPaymentBatchRecord = (
   seed: HistoricalPaymentBatchSeed,
 ): PaymentBatchRecord => {
   const paidAt = historicalPaymentBatchTime(payout);
+  const simulatedSubmittedAt = simulatedHistoricalPaymentSubmittedAt(paidAt);
   const failed = payout.status === '付款失败' || payout.status === '已退回';
   const status = aggregatePaymentStatus([payout.status]);
   const accountSummary = accountDisplayValue(payout.account);
@@ -381,6 +385,7 @@ const historicalPaymentBatchRecord = (
     fundingAccountId: PAYMENT_EXECUTION_FUNDING_ACCOUNTS[payout.provider],
     sourceCurrency: payout.currency,
     payer: seed.payer,
+    submittedAt: simulatedSubmittedAt,
     paidAt,
     status,
     lifecycle: failed
@@ -402,6 +407,8 @@ const historicalPaymentBatchRecord = (
       paymentOrderCode: seed.paymentListCode,
       sourcePaymentOrderCode: seed.paymentListCode,
       paymentAttemptNumber: 1,
+      paymentSubmittedAt: simulatedSubmittedAt,
+      paymentSubmittedAtIsSimulated: Boolean(simulatedSubmittedAt),
       paymentAttempts: payout.paymentAttempts
         ?.map((attempt) => normalizePaymentAttemptRecipient(attempt, receiveCurrency, feeBearer)),
       contracts: [{
@@ -1173,6 +1180,9 @@ export const paymentBatchItemForAttempt = (
     paymentBatchId: batch.paymentBatchId,
     paymentBatchCode: batch.paymentBatchCode,
     paymentSubmittedAt: attempt.submittedAt ?? batch.submittedAt,
+    paymentSubmittedAtIsSimulated: !attempt.submittedAt
+      && item.paymentSubmittedAtIsSimulated
+      && batch.submittedAt === item.paymentSubmittedAt,
     paymentCode: attempt.paymentCode ?? item.paymentCode,
     paymentOrderCode: batch.paymentOrderCode,
     sourcePaymentOrderCode: batch.sourcePaymentOrderCode ?? item.sourcePaymentOrderCode,
