@@ -49,8 +49,15 @@ describe('会话操作日志', () => {
     const empty = renderToStaticMarkup(<OperationLogPage events={[]} />);
     expect(empty).toContain('刷新后清空');
     expect(empty).toContain('当前会话还没有操作记录');
+    expect(empty).toContain('class="date-filter operation-log-date-filter"');
+    expect(empty).toContain('class="data-table operational-table operation-log-table"');
+    expect(empty).toContain('class="empty-table"');
+    expect(empty.match(/aria-label="按(?:操作者|功能模块|动作|结果)筛选"/g)).toHaveLength(4);
+    expect(empty).toContain('全部功能模块');
+    expect(empty).toContain('全部操作者');
     const populated = renderToStaticMarkup(<OperationLogPage events={[first]} />);
     expect(populated).toContain('CON-001');
     expect(populated).toContain('查看详情');
+    expect(populated).toContain('class="simple-status is-success"');
   });
 });
