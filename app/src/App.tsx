@@ -8,6 +8,7 @@ import { FinanceReviewWorkspace } from './components/FinanceReviewWorkspace';
 import { PayoutDrawer } from './components/PayoutDrawer';
 import { paymentProviderDisplayName } from './components/PaymentProviderBadge';
 import { BLOCKED_ACTION_EVENT, Toast } from './components/Common';
+import { createOperationLogEvent, type OperationLogEvent, type OperationLogInput } from './operationLog';
 import {
   canEditRequestProjectResources,
   type RequestProjectResourceActions,
@@ -80,6 +81,7 @@ import { PaymentProjectPaymentDetailPage } from './pages/PaymentProjectPaymentDe
 import { InvoiceBuilderPage } from './pages/InvoiceBuilderPage';
 import { InvoiceBatchBuilderPage } from './pages/InvoiceBatchBuilderPage';
 import { SystemSettingsPage } from './pages/SystemSettingsPage';
+import { OperationLogPage } from './pages/OperationLogPage';
 import { SystemConfigurationPage } from './pages/SystemConfigurationPage';
 import { FeishuCooperationProjectsPage } from './pages/FeishuCooperationProjectsPage';
 import {
@@ -566,6 +568,21 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(LOCAL_DEV_BYPASSES_AUTH);
   const [currentUser, setCurrentUser] = useState<SystemUser>(LOCAL_DEV_USER);
   const [activePage, setActivePage] = useState<NavPage>('dashboard');
+  const [operationEvents, setOperationEvents] = useState<OperationLogEvent[]>([]);
+  const operationSequence = useRef(0);
+  const lastVisitedPage = useRef<string | null>(null);
+  const recordOperation = useCallback((input: OperationLogInput) => {
+    operationSequence.current += 1;
+    const event = createOperationLogEvent(input, currentUser, `session-${operationSequence.current}`);
+    setOperationEvents((current) => [event, ...current]);
+  }, [currentUser]);
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const visitKey = `${currentUser.account}:${activePage}`;
+    if (lastVisitedPage.current === visitKey) return;
+    lastVisitedPage.current = visitKey;
+    recordOperation({ module: activePage, action: '进入页面' });
+  }, [activePage, currentUser.account, isAuthenticated, recordOperation]);
   const [requestStatusFilter, setRequestStatusFilter] = useState<RequestProjectStatusFilter>('all');
   const [payouts, setPayouts] = useState<Payout[]>(INITIAL_PAYMENT_BATCH_PROTOTYPE_RESOURCES.payouts);
   const [creators, setCreators] = useState<CreatorProfile[]>(INITIAL_CREATORS);
@@ -952,7 +969,10 @@ export default function App() {
       }),
       ...current,
     ]);
-  }, [currentUser]);
+    const module: NavPage = entityType === 'contract' ? 'contracts' : entityType === 'invoice' ? 'invoice' : 'projects';
+    const operationAction = action === 'create' ? '新增' : action === 'delete' ? '删除' : '编辑';
+    recordOperation({ module, action: operationAction, targetId: entityId });
+  }, [currentUser, recordOperation]);
 
   const persistProjectCreatorEngagements = useCallback((
     associations: ProjectCreatorEngagementInput[],
@@ -1146,8 +1166,9 @@ export default function App() {
     setEditingContractDraftId(record.contractId ?? record.id);
     setContractBuilderDirty(false);
     notify('合同草稿已保存', `${record.name} 已保存到草稿箱，可稍后继续编辑。`);
+    recordOperation({ module: 'contracts', action: existingDraft ? '编辑' : '新增', targetId: record.contractId ?? record.id });
     return record;
-  }, [contracts, currentUser.account, editingContractDraftId, notify, persistProjectCreatorEngagements]);
+  }, [contracts, currentUser.account, editingContractDraftId, notify, persistProjectCreatorEngagements, recordOperation]);
 
   const generateContract = useCallback((model: ContractGenerationModel, files: ContractGeneratedFiles) => {
     const existingDraft = contracts.find((contract) => (
@@ -1358,9 +1379,11 @@ export default function App() {
   };
 
   const saveCreator = (updated: CreatorProfile) => {
+    const existing = creators.some((creator) => creator.id === updated.id);
     setCreators((current) => current.some((creator) => creator.id === updated.id)
       ? current.map((creator) => creator.id === updated.id ? updated : creator)
       : [updated, ...current]);
+    recordOperation({ module: 'creators', action: existing ? '编辑' : '新增', targetId: updated.id });
   };
 
   const payoutFromGeneratedInvoice = (
@@ -1441,6 +1464,7 @@ export default function App() {
       });
     } catch (error) {
       notify('无法生成付款明细', error instanceof Error ? error.message : '付款编号生成失败。');
+      recordOperation({ module: 'invoice', action: '生成', result: '失败', failure: '校验未通过' });
       return;
     }
     const relationshipCreatedAt = nowIso();
@@ -1496,6 +1520,7 @@ export default function App() {
         ? `${records[0].id} 的 PDF 与 DOCX 已准备完成，当前为待发布，尚未通知达人。`
         : `${records.length} 张 Invoice 已生成并进入待发布，发布后才会通知对应达人。`,
     );
+    normalized.forEach((record) => recordOperation({ module: 'invoice', action: '生成', targetId: record.invoiceId }));
   };
 
   const addGeneratedInvoice = (record: GeneratedInvoiceRecord) => {
@@ -1847,6 +1872,7 @@ export default function App() {
       setInvoiceTab('signature');
       setActivePage('invoice');
       notify('待发布 Invoice 已保存', `${result.record.id} 仍为 v${result.record.version ?? 1}，尚未发布给达人。`);
+      recordOperation({ module: 'invoice', action: '编辑', targetId: result.record.invoiceId });
       return result.record;
     }
     const refreshedPaymentItem = invoicePaymentListItem(result.record, contracts);
@@ -1887,6 +1913,7 @@ export default function App() {
     ]);
     setInvoiceEditTarget(null);
     setInvoiceEditorDirty(false);
+    recordOperation({ module: 'invoice', action: '编辑', targetId: result.record.invoiceId });
     if (requestResourceReturn?.resource === 'invoice') {
       setFocusedProjectId(requestResourceReturn.requestId);
       setRequestResourceReturn(null);
@@ -2338,6 +2365,7 @@ export default function App() {
     ));
     if (!list) {
       notify('无法导出付款清单', '当前项目尚未生成付款清单。');
+      recordOperation({ module: 'projects', action: '导出', result: '失败', failure: '校验未通过' });
       return;
     }
     try {
@@ -2351,6 +2379,7 @@ export default function App() {
           ? `已按 ${providers.length} 个付款渠道导出执行文件，文件共用付款单号 ${list.paymentListCode}。`
           : 'Excel 由浏览器本地生成，包含付款资料，请按敏感文件管理。',
       );
+      recordOperation({ module: 'projects', action: '导出', targetId: list.paymentListCode });
     } catch (error) {
       const message = error instanceof PaymentListWorkbookError
         ? error.issues[0]
@@ -2358,6 +2387,7 @@ export default function App() {
           ? error.message
           : '付款清单导出失败';
       notify('无法导出付款清单', message);
+      recordOperation({ module: 'projects', action: '导出', targetId: list.paymentListCode, result: '失败', failure: '导出失败' });
     }
   };
 
@@ -2550,6 +2580,7 @@ export default function App() {
       '申请已提交',
       `${request.requestCode ?? request.id} 已进入${approval.status === 'PENDING_PM' ? ' PM 审批' : '媒介负责人审批'}。`,
     );
+    recordOperation({ module: 'projects', action: '提交', targetId: request.paymentRequestProjectId ?? request.id });
   };
 
   const cancelMediaPaymentRequest = (request: RequestProjectSummary, reason: string) => {
@@ -2592,6 +2623,7 @@ export default function App() {
       ...current,
     ]);
     notify('请款已取消', `${request.requestCode ?? request.id} 已保留为只读历史，关联 Invoice 已释放。`);
+    recordOperation({ module: 'projects', action: '取消请款', targetId: request.paymentRequestProjectId ?? request.id });
     return true;
   };
 
@@ -2797,6 +2829,7 @@ export default function App() {
             ? '项目请款与关联 Invoice 已通过，付款入口已解锁。'
             : `请款已进入“${REQUEST_APPROVAL_STATUS_LABEL[nextApproval.status]}”。`,
       );
+      recordOperation({ module: 'requests', action: isReturned ? '审核退回' : '审核通过', targetId: request.paymentRequestProjectId ?? request.id });
       if (currentStage === 'FINANCE') {
         const completedSessionKey = financeReviewSessionKey(
           request.id,
@@ -2812,6 +2845,7 @@ export default function App() {
       return true;
     } catch (error) {
       notify('审批操作失败', error instanceof Error ? error.message : '当前节点无法执行该操作。');
+      recordOperation({ module: 'requests', action: action === 'RETURN' ? '审核退回' : '审核通过', targetId: request.paymentRequestProjectId ?? request.id, result: '失败', failure: '操作失败' });
       return false;
     }
   };
@@ -3015,11 +3049,13 @@ export default function App() {
     }
     setSelectedPayout((current) => current?.id === payout.id ? updated : current);
     notify('付款状态已更新', `${payout.creator} 已进入“${nextStatus}”。`);
+    recordOperation({ module: 'payment-workbench', action: '付款', targetId: payout.paymentCode ?? payout.id });
   };
 
   const executePaymentRequest = (projectPayouts: Payout[]) => {
     if (!hasPermission(currentUser, 'payout_execute')) {
       notify('暂无付款权限', '当前账号不能执行项目付款。');
+      recordOperation({ module: 'payment-workbench', action: '付款', result: '失败', failure: '权限不足' });
       return false;
     }
     const waitingPayouts = projectPayouts.filter((payout) => payout.status === '等待付款');
@@ -3034,6 +3070,7 @@ export default function App() {
     const invalidPayout = projectPayouts.find((payout) => !isPayoutPaymentInformationValidated(payout));
     if (invalidPayout) {
       notify('付款信息校验未通过', `${invalidPayout.invoice} 的 Invoice 或付款清单仍需复核。`);
+      recordOperation({ module: 'payment-workbench', action: '付款', result: '失败', failure: '校验未通过' });
       return false;
     }
     const submittedAt = nowIso();
@@ -3056,6 +3093,7 @@ export default function App() {
         '无法执行打款',
         error instanceof Error ? error.message : '请款项目无法生成唯一付款批次。',
       );
+      recordOperation({ module: 'payment-workbench', action: '付款', result: '失败', failure: '操作失败' });
       return false;
     }
 
@@ -3102,6 +3140,7 @@ export default function App() {
       '项目付款已提交渠道',
       `${batchRecord.request.requestCode} 的 ${projectPayouts.length} 笔付款已进入“付款处理中”，批次号 ${batchRecord.paymentBatchCode}。`,
     );
+    recordOperation({ module: 'payment-workbench', action: '付款', targetId: batchRecord.paymentBatchCode });
     return true;
   };
 
@@ -3187,6 +3226,7 @@ export default function App() {
     setPayouts((current) => current.map((item) => item.id === payout.id ? updated : item));
     setSelectedPayout((current) => current?.id === payout.id ? updated : current);
     notify('已记录付款失败', '请由财务选择问题类型并退回媒介，当前不可直接重试付款。');
+    recordOperation({ module: 'payment-workbench', action: '记录付款失败', targetId: payout.paymentCode ?? payout.id });
   };
 
   const returnPayout = (
@@ -4066,8 +4106,10 @@ export default function App() {
       )));
       setInvoiceTab(getInvoicePageTab(updated.invoiceReviewStatus));
       notify('Invoice 审核状态已更新', `${payout.invoice} 已进入“${updated.invoiceReviewStatus}”。`);
+      recordOperation({ module: 'invoice', action: action === 'APPROVE_MEDIA' ? '审核通过' : action === 'RETURN_TO_CREATOR' ? '审核退回' : '编辑', targetId: generatedInvoice?.invoiceId ?? payout.id });
     } catch (error) {
       notify('状态更新失败', error instanceof Error ? error.message : '当前 Invoice 无法执行该操作。');
+      recordOperation({ module: 'invoice', action: action === 'RETURN_TO_CREATOR' ? '审核退回' : '审核通过', targetId: payout.id, result: '失败', failure: '操作失败' });
     }
   };
 
@@ -4449,6 +4491,11 @@ export default function App() {
       }),
       ...current,
     ]);
+    recordOperation({
+      module: entityType === 'contract' ? 'contracts' : entityType === 'invoice' ? 'invoice' : 'projects',
+      action: action === 'create' ? '新增' : action === 'delete' ? '删除' : '编辑',
+      targetId: entityId,
+    });
   };
 
   const changeRequestResourceLinks = (
@@ -4547,6 +4594,7 @@ export default function App() {
   const requestResourceActions: RequestProjectResourceActions = {
     onChangeLinks: changeRequestResourceLinks,
     onOpenContract: (request, contractId) => {
+      recordOperation({ module: 'contracts', action: '查看详情', targetId: contractId });
       setRequestResourceReturn({
         requestId: request.id,
         resource: 'contract',
@@ -4559,6 +4607,7 @@ export default function App() {
     onOpenInvoice: (request, invoiceId) => {
       const invoice = generatedInvoices.find((candidate) => candidate.invoiceId === invoiceId);
       if (!invoice) return;
+      recordOperation({ module: 'invoice', action: '查看详情', targetId: invoiceId });
       setRequestResourceReturn({
         requestId: request.id,
         resource: 'invoice',
@@ -4919,6 +4968,7 @@ export default function App() {
             ? `已按 ${providers.length} 个渠道导出执行文件，所有文件共用 ${list.paymentListCode}。`
             : `已使用 ${paymentProviderDisplayName(providers[0])} 对应的 Excel 模板生成审批文件。`,
         );
+        recordOperation({ module: 'requests', action: '导出', targetId: list.paymentListCode });
       } catch (error) {
         const message = error instanceof PaymentListWorkbookError
           ? error.issues[0]
@@ -4926,6 +4976,7 @@ export default function App() {
             ? error.message
             : '生成文件失败。';
         notify('无法导出付款清单', message);
+        recordOperation({ module: 'requests', action: '导出', targetId: list.paymentListCode, result: '失败', failure: '导出失败' });
       }
     },
   };
@@ -5080,6 +5131,7 @@ export default function App() {
     }));
     setPaymentBatches((current) => [batchRecord, ...current]);
     setActivePage('batches');
+    recordOperation({ module: 'batches', action: '付款', targetId: batchRecord.paymentBatchCode });
     notify(
       '模拟付款批次已提交',
       `${selected.length} 笔 ${paymentProviderDisplayName(execution.provider)} 付款已完成 create → add_items → quote → submit 契约模拟。`,
@@ -5140,6 +5192,7 @@ export default function App() {
         },
       });
       setProjectDirectory((current) => ({ ...current, records: nextRecords, lastSyncedAt: result.syncedAt }));
+      recordOperation({ module: 'feishu-projects', action: '配置' });
       setProjects((current) => {
         const currentById = new Map(current.map((project) => [String(project.cooperationProjectId ?? project.id), project]));
         return nextRecords.map((record) => ({
@@ -5177,6 +5230,7 @@ export default function App() {
       ? current.map((project) => String(project.cooperationProjectId ?? project.id) === record.id ? { ...project, ...projectFromDirectoryRecord(record) } : project)
       : [projectFromDirectoryRecord(record), ...current]);
     notify(previous ? '项目已更新' : '项目已添加', `${record.projectCode} 已保存。`);
+    recordOperation({ module: 'feishu-projects', action: previous ? '编辑' : '新增', targetId: record.projectCode });
     return undefined;
   };
   const updateCooperationProjectAvailability = (id: string, availability: 'ACTIVE' | 'DISABLED') => {
@@ -5192,6 +5246,7 @@ export default function App() {
     notify(availability === 'ACTIVE' ? '项目已设为可用' : '项目已停用', availability === 'ACTIVE'
       ? '该项目已恢复进入新请款的关联项目候选。'
       : '历史请款、合同和 Invoice 关联不受影响。');
+    recordOperation({ module: 'feishu-projects', action: '配置', targetId: id });
   };
   const manageableCooperationProjects = projects.filter((project) => (
     canManageCooperationProjectFor(currentUser, project)
@@ -5265,6 +5320,7 @@ export default function App() {
     case 'feishu-projects':
       pageContent = (
         <FeishuCooperationProjectsPage
+          onOperation={recordOperation}
           records={projectDirectory.records}
           metadata={feishuProjectMetadata}
           typeAllowlist={projectDirectory.typeAllowlist}
@@ -5282,6 +5338,7 @@ export default function App() {
     case 'projects':
       pageContent = (
         <MediaPaymentProjectsPage
+          onOperation={recordOperation}
           notify={notify}
           currentUser={currentUser}
           cooperationProjects={projects}
@@ -5299,6 +5356,7 @@ export default function App() {
           onCreated={(request) => {
             setRequestProjects((current) => [request, ...current]);
             generateMediaRequestPaymentLists(request);
+            recordOperation({ module: 'projects', action: '新增', targetId: request.paymentRequestProjectId ?? request.id });
           }}
           onUpdated={(request) => {
             const currentRequest = requestProjects.find((candidate) => (
@@ -5312,6 +5370,7 @@ export default function App() {
               candidate.paymentRequestProjectId === request.paymentRequestProjectId ? request : candidate
             )));
             generateMediaRequestPaymentLists(request);
+            recordOperation({ module: 'projects', action: '编辑', targetId: request.paymentRequestProjectId ?? request.id });
           }}
           onSubmitRequest={submitMediaPaymentRequest}
           onCancelRequest={cancelMediaPaymentRequest}
@@ -5327,6 +5386,7 @@ export default function App() {
     case 'requests':
       pageContent = (
         <RequestsPage
+          onOperation={recordOperation}
           notify={notify}
           currentUser={currentUser}
           requests={requestProjects}
@@ -5350,6 +5410,7 @@ export default function App() {
     case 'contracts':
       pageContent = (
         <ContractsPage
+          onOperation={recordOperation}
           notify={notify}
           contracts={contracts}
           projects={manageableCooperationProjects}
@@ -5451,6 +5512,7 @@ export default function App() {
     case 'creators':
       pageContent = (
         <CreatorsPage
+          onOperation={recordOperation}
           notify={notify}
           creators={creators}
           collaborationProjects={creatorCollaborationProjects}
@@ -5465,6 +5527,7 @@ export default function App() {
     case 'collaborations':
       pageContent = (
         <CollaborationsPage
+          onOperation={recordOperation}
           notify={notify}
           canExport={canManageCreators}
           creators={creators}
@@ -5481,6 +5544,7 @@ export default function App() {
     case 'invoice':
       pageContent = (
         <InvoicePage
+          onOperation={recordOperation}
           payouts={payouts}
           creators={creators}
           contracts={contracts}
@@ -5704,6 +5768,7 @@ export default function App() {
     case 'batches':
       pageContent = (
         <BatchesPage
+          onOperation={recordOperation}
           batches={paymentBatches}
           payouts={payouts}
           creators={creators}
@@ -5742,6 +5807,7 @@ export default function App() {
     case 'transactions':
       pageContent = (
         <TransactionsPage
+          onOperation={recordOperation}
           payouts={payouts}
           paymentBatches={paymentBatches}
           contracts={contracts}
@@ -5749,6 +5815,7 @@ export default function App() {
           onOpenPaymentBatch={(batchId) => {
             if (!navigate('batches')) return;
             setFocusedBatchId(batchId);
+            recordOperation({ module: 'batches', action: '查看详情', targetId: batchId });
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
         />
@@ -5759,14 +5826,14 @@ export default function App() {
         <OrganizationPage
           notify={notify}
           contractAdvertiserSettings={contractAdvertiserSettings}
-          onContractAdvertiserSettingsChange={setContractAdvertiserSettings}
+          onContractAdvertiserSettingsChange={(settings) => { setContractAdvertiserSettings(settings); recordOperation({ module: 'organization', action: '配置' }); }}
           invoiceBillingSettings={invoiceBillingSettings}
-          onInvoiceBillingSettingsChange={setInvoiceBillingSettings}
+          onInvoiceBillingSettingsChange={(settings) => { setInvoiceBillingSettings(settings); recordOperation({ module: 'organization', action: '配置' }); }}
         />
       );
       break;
     case 'channels':
-      pageContent = <ChannelsPage notify={notify} />;
+      pageContent = <ChannelsPage notify={notify} onOperation={recordOperation} />;
       break;
     case 'system-config':
       pageContent = (
@@ -5782,7 +5849,10 @@ export default function App() {
       break;
     case 'system-accounts':
     case 'system-settings':
-      pageContent = <SystemSettingsPage notify={notify} />;
+      pageContent = <SystemSettingsPage notify={notify} onOperation={recordOperation} />;
+      break;
+    case 'operation-log':
+      pageContent = <OperationLogPage events={operationEvents} />;
       break;
     case 'notifications':
       pageContent = (
@@ -5826,6 +5896,7 @@ export default function App() {
         />
       ) : (
         <PaymentWorkbenchPage
+          onOperation={recordOperation}
           payouts={payouts}
           requests={requestProjects}
           generatedInvoices={generatedInvoices}
@@ -5840,10 +5911,11 @@ export default function App() {
             if (project.requestId) {
               setPaymentWorkbenchInitialTab('paid');
               setPaymentDetailRequestId(project.requestId);
+              recordOperation({ module: 'payment-workbench', action: '查看详情', targetId: project.requestId });
               return;
             }
             const payout = project.payouts[0];
-            if (payout) setSelectedPayout(payout);
+            if (payout) { setSelectedPayout(payout); recordOperation({ module: 'payment-workbench', action: '查看详情', targetId: payout.paymentCode ?? payout.id }); }
           }}
           onOpenRequest={openPaymentRequestDetail}
           onReviewRequest={openFinanceReview}

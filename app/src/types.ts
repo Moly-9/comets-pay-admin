@@ -32,6 +32,7 @@ export type NavPage =
   | 'channels'
   | 'system-accounts'
   | 'system-config'
+  | 'operation-log'
   | 'system-settings'
   | 'notifications';
 

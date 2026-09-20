@@ -156,6 +156,7 @@ export const canDeleteContractSelection = (
 );
 
 export const canAccessPage = (user: SystemUser, page: NavPage) => {
+  if (page === 'operation-log') return user.roleKey === 'admin' || user.roleKey === 'owner';
   if (ROLE_BLOCKED_PAGES[user.roleKey]?.includes(page)) return false;
   const requiredPermissions = PAGE_PERMISSION_RULES[page];
   return !requiredPermissions || requiredPermissions.some((permission) => hasPermission(user, permission));

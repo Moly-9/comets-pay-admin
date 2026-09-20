@@ -37,6 +37,8 @@ describe('AppShell system navigation', () => {
     expect(html).toContain('系统设置');
     expect(html).toContain('系统账号');
     expect(html).toContain('系统配置');
+    expect(html).toContain('操作日志');
+    expect(renderFor('owner')).toContain('操作日志');
   });
 
   it('shows only system configuration to project leads and hides the group from media', () => {
@@ -45,7 +47,11 @@ describe('AppShell system navigation', () => {
     expect(projectHtml).toContain('系统设置');
     expect(projectHtml).toContain('系统配置');
     expect(projectHtml).not.toContain('系统账号');
+    expect(projectHtml).not.toContain('操作日志');
     expect(mediaHtml).not.toContain('系统设置');
     expect(mediaHtml).not.toContain('系统配置');
+    for (const role of ['media', 'pm', 'finance'] as const) {
+      expect(renderFor(role)).not.toContain('操作日志');
+    }
   });
 });

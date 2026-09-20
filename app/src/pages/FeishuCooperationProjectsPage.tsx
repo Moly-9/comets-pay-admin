@@ -8,6 +8,8 @@ import type {
   ManualCooperationProjectInput,
 } from '../cooperationProjectDirectory';
 import type { FeishuProjectMetadata } from '../cooperationProjects';
+import type { OperationLogInput } from '../operationLog';
+import { useOperationSearch } from '../useOperationSearch';
 import './FeishuCooperationProjectsPage.css';
 
 type FilterValue = 'all' | string;
@@ -77,6 +79,7 @@ export function FeishuCooperationProjectsPage({
   onSync,
   onSaveManual,
   onAvailabilityChange,
+  onOperation,
 }: {
   records: CooperationProjectDirectoryRecord[];
   metadata: FeishuProjectMetadata;
@@ -89,8 +92,10 @@ export function FeishuCooperationProjectsPage({
   onSync: () => void;
   onSaveManual: (draft: ManualCooperationProjectInput, editingId?: string) => string | undefined;
   onAvailabilityChange: (id: string, availability: 'ACTIVE' | 'DISABLED') => void;
+  onOperation?: (input: OperationLogInput) => void;
 }) {
   const [search, setSearch] = useState('');
+  useOperationSearch(search, 'feishu-projects', onOperation);
   const [typeFilter, setTypeFilter] = useState<FilterValue>('all');
   const [sourceFilter, setSourceFilter] = useState<FilterValue>('all');
   const [availabilityFilter, setAvailabilityFilter] = useState<FilterValue>('all');

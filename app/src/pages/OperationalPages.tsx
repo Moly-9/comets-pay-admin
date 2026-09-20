@@ -60,6 +60,8 @@ import type { ContractRecord } from '../contracts';
 import { CURRENT_USER, PM_USERS, PROJECT_FIXTURES, type SystemUser } from '../data';
 import { createMockFeishuCooperationProjectSource } from '../cooperationProjects';
 import { Pagination, usePagination } from '../components/Pagination';
+import type { OperationLogInput } from '../operationLog';
+import { useOperationSearch } from '../useOperationSearch';
 import { InvoiceManagementTable } from '../components/InvoiceManagementTable';
 import { CollaborationInvoiceDrawer } from '../components/CollaborationInvoiceDrawer';
 import {
@@ -1327,6 +1329,7 @@ export function RequestsPage({
   initialStatusFilter,
   focusedRequestId,
   onFocusCleared,
+  onOperation,
 }: {
   notify: Notify;
   currentUser: SystemUser;
@@ -1349,8 +1352,10 @@ export function RequestsPage({
   initialStatusFilter: RequestProjectStatusFilter;
   focusedRequestId: string | null;
   onFocusCleared: () => void;
+  onOperation?: (input: OperationLogInput) => void;
 }) {
   const [search, setSearch] = useState('');
+  useOperationSearch(search, 'requests', onOperation);
   const [filters, setFilters] = useState<ProjectListFilters>(() => ({
     ...createEmptyProjectListFilters(),
     statuses: requestProjectStatusesForFilter(initialStatusFilter),
@@ -1515,6 +1520,7 @@ export function RequestsPage({
 
   const openRequest = (requestId: string) => {
     setSelectedRequestId(requestId);
+    onOperation?.({ module: 'requests', action: '查看详情', targetId: requestId });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -2740,6 +2746,7 @@ export function CreatorsPage({
   currentUserAccount,
   focusedCreatorId,
   onFocusCleared,
+  onOperation,
 }: {
   notify: Notify;
   creators: CreatorProfile[];
@@ -2749,8 +2756,10 @@ export function CreatorsPage({
   currentUserAccount: string;
   focusedCreatorId?: string | null;
   onFocusCleared?: () => void;
+  onOperation?: (input: OperationLogInput) => void;
 }) {
   const [search, setSearch] = useState('');
+  useOperationSearch(search, 'creators', onOperation);
   const [providerFilter, setProviderFilter] = useState<CreatorDirectoryProviderFilter>('all');
   const [selectedCreatorIds, setSelectedCreatorIds] = useState<Set<string>>(() => new Set());
   const [exportingCreators, setExportingCreators] = useState(false);
@@ -2854,8 +2863,10 @@ export function CreatorsPage({
       const filename = creatorDirectoryWorkbookFilename();
       downloadBlob(workbook, filename);
       notify('达人档案已导出', `已导出 ${selectedCreators.length} 位达人的三张数据表，收款账户标识均已脱敏。`);
+      onOperation?.({ module: 'creators', action: '导出' });
     } catch (error) {
       notify('达人档案导出失败', error instanceof Error ? error.message : '无法生成 Excel 文件，请稍后重试。');
+      onOperation?.({ module: 'creators', action: '导出', result: '失败', failure: '导出失败' });
     } finally {
       setExportingCreators(false);
     }
@@ -2872,6 +2883,7 @@ export function CreatorsPage({
 
   const openProfile = (creator: CreatorProfile) => {
     setSelectedId(creator.id);
+    onOperation?.({ module: 'creators', action: '查看详情', targetId: creator.id });
     onFocusCleared?.();
     setEditing(false);
     setCreating(false);
@@ -3496,6 +3508,7 @@ export function CollaborationsPage({
   externalInvoices,
   requests,
   paymentLists,
+  onOperation,
 }: {
   notify: Notify;
   canExport: boolean;
@@ -3507,8 +3520,10 @@ export function CollaborationsPage({
   externalInvoices: ExternalInvoiceCollectionRecord[];
   requests: RequestProjectSummary[];
   paymentLists: PaymentListRecord[];
+  onOperation?: (input: OperationLogInput) => void;
 }) {
   const [search, setSearch] = useState('');
+  useOperationSearch(search, 'collaborations', onOperation);
   const [projectFilter, setProjectFilter] = useState('all');
   const [exportingCollaborations, setExportingCollaborations] = useState(false);
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
@@ -3547,8 +3562,10 @@ export function CollaborationsPage({
       const workbook = await createCollaborationWorkbook(filteredCollaborations);
       downloadBlob(workbook, collaborationWorkbookFilename());
       notify('合作名单已导出', `已导出 ${filteredCollaborations.length} 份 Invoice 合作记录。`);
+      onOperation?.({ module: 'collaborations', action: '导出' });
     } catch (error) {
       notify('合作名单导出失败', error instanceof Error ? error.message : '无法生成 Excel 文件，请稍后重试。');
+      onOperation?.({ module: 'collaborations', action: '导出', result: '失败', failure: '导出失败' });
     } finally {
       setExportingCollaborations(false);
     }
@@ -3602,6 +3619,7 @@ export function CollaborationsPage({
                       onClick={(event) => {
                         detailTriggerRef.current = event.currentTarget;
                         setSelectedRowId(item.rowId);
+                        onOperation?.({ module: 'collaborations', action: '查看详情', targetId: item.invoiceId });
                       }}
                     >查看详情</ListActionButton>
                   </td>
@@ -3706,6 +3724,7 @@ export function InvoicePage({
   onOpenPayment,
   canExecutePayout,
   notify,
+  onOperation,
 }: {
   payouts: Payout[];
   creators: CreatorProfile[];
@@ -3767,9 +3786,11 @@ export function InvoicePage({
   onOpenPayment: (payout: Payout) => void;
   canExecutePayout: boolean;
   notify: Notify;
+  onOperation?: (input: OperationLogInput) => void;
 }) {
   const invoiceEntity = invoiceEntitySnapshot(defaultInvoiceBillingEntity(invoiceBillingSettings)!);
   const [search, setSearch] = useState('');
+  useOperationSearch(search, 'invoice', onOperation);
   const [selectedProjectKeys, setSelectedProjectKeys] = useState<string[]>([]);
   const [providerFilter, setProviderFilter] = useState<InvoiceManagementFilters['provider']>('all');
   const [statusFilter, setStatusFilter] = useState<InvoiceManagementFilters['status']>('all');
@@ -4121,6 +4142,7 @@ export function InvoicePage({
   const openReviewInvoice = (payout: Payout) => {
     const generated = generatedInvoices.find((record) => record.sourcePayoutId === payout.id);
     setSelectedSourceKey(generated ? `generated:${generated.id}` : `payout:${payout.id}`);
+    onOperation?.({ module: 'invoice', action: '查看详情', targetId: generated?.invoiceId ?? payout.id });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -4133,6 +4155,7 @@ export function InvoicePage({
   const openInvoiceRow = (row: InvoiceManagementRow) => {
     if (row.source.kind === 'external') {
       setSelectedExternalInvoiceId(row.source.externalInvoiceId);
+      onOperation?.({ module: 'invoice', action: '查看详情', targetId: row.source.externalInvoiceId });
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
@@ -4651,6 +4674,7 @@ export function BatchesPage({
   focusedBatchId,
   onReturnPayout,
   onOpenFailurePaymentList,
+  onOperation,
 }: {
   batches: readonly PaymentBatchRecord[];
   payouts?: readonly Payout[];
@@ -4662,8 +4686,10 @@ export function BatchesPage({
   focusedBatchId?: string | null;
   onReturnPayout?: (payout: Payout, issueType: PaymentFailureIssueType, reason: string) => boolean;
   onOpenFailurePaymentList?: (requestId: string, payoutId: string) => void;
+  onOperation?: (input: OperationLogInput) => void;
 }) {
   const [search, setSearch] = useState('');
+  useOperationSearch(search, 'batches', onOperation);
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [provider, setProvider] = useState('all');
@@ -4762,8 +4788,10 @@ export function BatchesPage({
       const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
       downloadBlob(archive, `付款批次确认函-${date}.zip`);
       notify('确认函已导出', `已为 ${selectedAirwallexRows.length} 个 Airwallex 批次生成确认函压缩包。`);
+      onOperation?.({ module: 'batches', action: '导出' });
     } catch {
       notify('确认函导出失败', '无法读取付款确认函模板，请检查导出资源后重试。');
+      onOperation?.({ module: 'batches', action: '导出', result: '失败', failure: '导出失败' });
     } finally {
       setExporting(null);
     }
@@ -4779,8 +4807,10 @@ export function BatchesPage({
       const filename = paymentBatchWorkbookFilename();
       downloadBlob(workbook, filename);
       notify('付款明细已导出', `已导出 ${selectedBatches.length} 个付款批次。`);
+      onOperation?.({ module: 'batches', action: '导出' });
     } catch {
       notify('付款明细导出失败', '无法生成付款批次明细 Excel，请稍后重试。');
+      onOperation?.({ module: 'batches', action: '导出', result: '失败', failure: '导出失败' });
     } finally {
       setExporting(null);
     }
@@ -4788,6 +4818,7 @@ export function BatchesPage({
   const openBatchDetail = (batchId: PaymentBatchRecord['paymentBatchId']) => {
     listScrollPositionRef.current = window.scrollY;
     setSelectedBatchId(batchId);
+    onOperation?.({ module: 'batches', action: '查看详情', targetId: batchId });
   };
   const closeBatchDetail = () => {
     const batchId = selectedBatchId;
@@ -5019,15 +5050,18 @@ export function TransactionsPage({
   contracts = [],
   generatedInvoices = [],
   onOpenPaymentBatch,
+  onOperation,
 }: {
   payouts: Payout[];
   paymentBatches: readonly PaymentBatchRecord[];
   contracts?: readonly ContractRecord[];
   generatedInvoices?: readonly GeneratedInvoiceRecord[];
   onOpenPaymentBatch?: (batchId: PaymentBatchRecord['paymentBatchId']) => void;
+  onOperation?: (input: OperationLogInput) => void;
 }) {
   const [tab, setTab] = useState<TransactionTab>('all');
   const [search, setSearch] = useState('');
+  useOperationSearch(search, 'transactions', onOperation);
   const [provider, setProvider] = useState<TransactionProvider>('all');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatusFilter>(ALL_PAYMENT_STATUSES);
   const [startDate, setStartDate] = useState('');
@@ -5109,6 +5143,7 @@ export function TransactionsPage({
   const openTransactionDetail = (record: TransactionRecord) => {
     detailReturnKeyRef.current = record.key;
     setDetailRecordKey(record.key);
+    onOperation?.({ module: 'transactions', action: '查看详情', targetId: record.payout.paymentCode ?? record.key });
   };
   const closeTransactionDetail = () => {
     const returnKey = detailReturnKeyRef.current;
@@ -5127,8 +5162,10 @@ export function TransactionsPage({
     try {
       const workbook = await loadTransactionRecordsWorkbook(selectedTransactions);
       downloadBlob(workbook, transactionRecordsFilename());
+      onOperation?.({ module: 'transactions', action: '导出' });
     } catch (error) {
       setExportError(error instanceof Error ? error.message : '交易流水导出失败，请稍后重试');
+      onOperation?.({ module: 'transactions', action: '导出', result: '失败', failure: '导出失败' });
     } finally {
       setExporting(false);
     }
@@ -5366,13 +5403,14 @@ const CHANNELS = [
   { name: 'PayPal', tag: '数字钱包', description: '通过达人 PayPal 邮箱快速付款', currencies: 'USD · EUR', state: '已连接', color: '#1689e5' },
 ];
 
-export function ChannelsPage({ notify }: { notify: Notify }) {
+export function ChannelsPage({ notify, onOperation }: { notify: Notify; onOperation?: (input: OperationLogInput) => void }) {
   const [testing, setTesting] = useState<string | null>(null);
   const test = (name: string) => {
     setTesting(name);
     window.setTimeout(() => {
       setTesting(null);
       notify(`${name} 连接正常`, 'API 凭证有效，回调地址可访问。');
+      onOperation?.({ module: 'channels', action: '测试连接' });
     }, 700);
   };
   return <div className="page-stack"><PageHeading title="渠道设置" subtitle="配置付款服务商、API 凭证与回调状态。" actions={<Button variant="secondary" icon={<Settings2 size={16} />}>路由规则</Button>} /><NoticeBanner>演示环境仅展示渠道配置状态，不会发起真实付款或写入服务商账户。</NoticeBanner><div className="channel-grid">{CHANNELS.map((channel) => <article className="channel-card" key={channel.name}><header><span className="channel-logo" style={{ backgroundColor: channel.color }}>{channel.name.slice(0, 1)}</span><div><h2>{channel.name}</h2><p>{channel.tag}</p></div><span className="connected-state"><i />{channel.state}</span></header><p className="channel-description">{channel.description}</p><dl><div><dt>支持币种</dt><dd>{channel.currencies}</dd></div><div><dt>最近校验</dt><dd>2026-07-17 10:24</dd></div></dl><footer><Button variant="secondary" icon={<Link2 size={16} />} disabled={testing === channel.name} disabledReason="连接正在校验，请稍候。" onClick={() => test(channel.name)}>{testing === channel.name ? '校验中…' : '测试连接'}</Button><button className="icon-button" type="button" aria-label={`配置 ${channel.name}`}><MoreHorizontal size={19} /></button></footer></article>)}</div></div>;
