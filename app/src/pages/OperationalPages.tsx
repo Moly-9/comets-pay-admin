@@ -28,7 +28,6 @@ import {
   Settings2,
   ShieldCheck,
   Trash2,
-  Upload,
   Users,
   WalletCards,
   X,
@@ -71,7 +70,9 @@ import {
 import {
   buildCollaborationInvoiceRows,
   collaborationStatusTone,
+  type CollaborationInvoiceRow,
 } from '../collaborationInvoices';
+import { collaborationWorkbookFilename, createCollaborationWorkbook } from '../collaborationWorkbook';
 import { buildInvoiceReviewModel } from '../invoice/invoiceReview';
 import { resolveInvoiceCreatorIdentity } from '../invoice/invoiceCreatorIdentity';
 import {
@@ -3474,9 +3475,19 @@ const formatCollaborationRequestTime = (value?: string) => {
   }).format(date).replace(/\//g, '-');
 };
 
+export const filterCollaborationInvoiceRows = (
+  rows: readonly CollaborationInvoiceRow[],
+  search: string,
+  projectFilter: string,
+) => {
+  const query = search.trim().toLowerCase();
+  return filterCollaborationRowsByProject(rows, projectFilter)
+    .filter((item) => !query || item.searchText.includes(query));
+};
+
 export function CollaborationsPage({
   notify,
-  canImport,
+  canExport,
   creators,
   projects,
   contracts,
@@ -3487,7 +3498,7 @@ export function CollaborationsPage({
   paymentLists,
 }: {
   notify: Notify;
-  canImport: boolean;
+  canExport: boolean;
   creators: CreatorProfile[];
   projects: ProjectSummary[];
   contracts: ContractRecord[];
@@ -3499,6 +3510,7 @@ export function CollaborationsPage({
 }) {
   const [search, setSearch] = useState('');
   const [projectFilter, setProjectFilter] = useState('all');
+  const [exportingCollaborations, setExportingCollaborations] = useState(false);
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
   const collaborationRows = useMemo(() => buildCollaborationInvoiceRows({
@@ -3515,27 +3527,42 @@ export function CollaborationsPage({
     () => buildCollaborationProjectFilterOptions(collaborationRows),
     [collaborationRows],
   );
-  const query = search.trim().toLowerCase();
-  const projectFilteredCollaborations = filterCollaborationRowsByProject(collaborationRows, projectFilter);
-  const filteredCollaborations = projectFilteredCollaborations.filter((item) => !query || item.searchText.includes(query));
+  const filteredCollaborations = filterCollaborationInvoiceRows(collaborationRows, search, projectFilter);
   const {
     page,
     pageItems: visibleCollaborations,
     pageSize,
     setPage,
     setPageSize,
-  } = usePagination(filteredCollaborations, { resetKey: `${query}\u0000${projectFilter}` });
+  } = usePagination(filteredCollaborations, { resetKey: `${search.trim().toLowerCase()}\u0000${projectFilter}` });
   const selectedRow = selectedRowId
     ? collaborationRows.find((row) => row.rowId === selectedRowId) ?? null
     : null;
   const closeDetail = useCallback(() => setSelectedRowId(null), []);
   const waitingForPaymentCount = collaborationRows.filter((row) => row.status !== '已付款').length;
-  const importAction = canImport
-    ? <Button icon={<Upload size={17} />} onClick={() => notify('导入模板', '已准备达人合作名单模板。')}>导入合作名单</Button>
+  const exportCollaborations = async () => {
+    if (exportingCollaborations || !filteredCollaborations.length) return;
+    setExportingCollaborations(true);
+    try {
+      const workbook = await createCollaborationWorkbook(filteredCollaborations);
+      downloadBlob(workbook, collaborationWorkbookFilename());
+      notify('合作名单已导出', `已导出 ${filteredCollaborations.length} 份 Invoice 合作记录。`);
+    } catch (error) {
+      notify('合作名单导出失败', error instanceof Error ? error.message : '无法生成 Excel 文件，请稍后重试。');
+    } finally {
+      setExportingCollaborations(false);
+    }
+  };
+  const exportAction = canExport
+    ? <Button
+        icon={exportingCollaborations ? <LoaderCircle className="is-spinning" size={17} /> : <Download size={17} />}
+        disabled={exportingCollaborations || filteredCollaborations.length === 0}
+        onClick={exportCollaborations}
+      >{exportingCollaborations ? '正在导出...' : '导出合作名单'}</Button>
     : undefined;
   return (
     <div className="page-stack">
-      <PageHeading title="合作名单" subtitle="查看达人交付、Invoice 与付款状态的统一视图。" actions={importAction} />
+      <PageHeading title="合作名单" subtitle="查看达人交付、Invoice 与付款状态的统一视图。" actions={exportAction} />
       <section className="content-card">
         <div className="content-toolbar collaboration-list-toolbar">
           <SearchBar value={search} onChange={setSearch} placeholder="搜索达人、项目、Invoice 或合同" />
@@ -4537,7 +4564,7 @@ export const filterPaymentBatchRows = (
 ) => {
   const query = filters.search.trim().toLowerCase();
   return rows.filter((row) => (
-    (!query || row.id.toLowerCase().includes(query))
+    (!query || row.id.toLowerCase().includes(query) || row.projectName.toLowerCase().includes(query))
     && (!filters.start || row.paidAt >= filters.start)
     && (!filters.end || row.paidAt <= filters.end)
     && (filters.provider === 'all' || row.provider === filters.provider)
@@ -4809,7 +4836,7 @@ export function BatchesPage({
       </div>
       <section className="content-card">
         <div className="content-toolbar payment-batch-toolbar">
-          <SearchBar value={search} onChange={setSearch} placeholder="搜索批次号" />
+          <SearchBar value={search} onChange={setSearch} placeholder="搜索批次号或项目名称" />
           <div className="payment-batch-date-range" role="group" aria-label="付款时间范围">
             <label>
               <span>开始</span>

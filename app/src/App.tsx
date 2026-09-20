@@ -5466,7 +5466,7 @@ export default function App() {
       pageContent = (
         <CollaborationsPage
           notify={notify}
-          canImport={canManageCreators}
+          canExport={canManageCreators}
           creators={creators}
           projects={projects}
           contracts={contracts}

@@ -107,6 +107,16 @@ describe('payment batch filters and selection', () => {
       provider: 'Airwallex',
     })).toEqual([]);
 
+    expect(filterPaymentBatchRows(TEST_BATCH_ROWS, {
+      search: '  测试项目  ', start: '', end: '', provider: 'Airwallex', status: '已付款',
+    }).map((row) => row.id)).toEqual(['BAT-20260716-007']);
+    expect(filterPaymentBatchRows(TEST_BATCH_ROWS, {
+      search: '测试项目', start: '', end: '', provider: 'PayPal', purpose: 'RETRY',
+    })).toEqual([]);
+    expect(filterPaymentBatchRows([{ ...TEST_BATCH_ROWS[0], projectName: 'Launch Project' }], {
+      search: '  lAuNcH  ', start: '', end: '', provider: 'all',
+    })).toHaveLength(1);
+
     const purposeRows = TEST_BATCH_ROWS.map((row, index) => ({
       ...row,
       purpose: index === 0 ? 'RETRY' as const : row.purpose,

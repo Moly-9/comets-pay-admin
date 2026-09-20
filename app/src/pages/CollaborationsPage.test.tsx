@@ -10,7 +10,7 @@ import type { ContractRecord } from '../contracts';
 import type { ProjectSummary } from './ProjectDetailPage';
 import type { RequestProjectSummary } from './RequestProjectDetailPage';
 import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
-import { CollaborationsPage } from './OperationalPages';
+import { CollaborationsPage, filterCollaborationInvoiceRows } from './OperationalPages';
 
 const creator = {
   id: 'creator-collaboration',
@@ -133,7 +133,7 @@ const request = {
 
 const commonProps = {
   notify: vi.fn(),
-  canImport: true,
+  canExport: true,
   creators: [creator],
   projects: [project],
   contracts: [contract],
@@ -158,6 +158,8 @@ describe('CollaborationsPage', () => {
     expect(html).toContain('aria-label="关联项目筛选"');
     expect(html).toContain('全部关联项目');
     expect(html).toContain('查看详情');
+    expect(html).toContain('导出合作名单');
+    expect(html).not.toContain('导入合作名单');
     expect(html).not.toContain('查看链路');
     expect(html).not.toContain('所属项目');
   });
@@ -207,6 +209,26 @@ describe('CollaborationsPage', () => {
     expect(emptyHtml).not.toContain('Collaboration Display Name');
     expect(emptyHtml).not.toContain('Launch Project');
     expect(emptyHtml).not.toContain('INV-COLLABORATION');
+    expect(emptyHtml).toMatch(/<button[^>]*disabled=""[^>]*>.*?导出合作名单<\/span><\/button>/s);
+    expect(renderToStaticMarkup(<CollaborationsPage {...commonProps} canExport={false} />))
+      .not.toContain('导出合作名单');
+  });
+
+  it('exports from the same search and project-filter result before pagination', () => {
+    const rows = buildCollaborationInvoiceRows(commonProps);
+    const [row] = rows;
+    const otherProject = { ...row, rowId: 'other', projectLinkId: 'another-project', searchText: 'other' };
+    const allMatching = Array.from({ length: 15 }, (_, index) => ({
+      ...row,
+      rowId: `invoice:${index}`,
+      invoiceNumber: `INV-${index}`,
+    }));
+    const filtered = filterCollaborationInvoiceRows(
+      [otherProject, ...allMatching], '  LAUNCH PROJECT ', 'project:project-collaboration',
+    );
+    expect(filtered).toHaveLength(15);
+    expect(filtered.map((item) => item.invoiceNumber)).toEqual(allMatching.map((item) => item.invoiceNumber));
+    expect(filterCollaborationInvoiceRows([row], 'missing', 'all')).toEqual([]);
   });
 });
 

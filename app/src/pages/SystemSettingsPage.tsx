@@ -98,7 +98,7 @@ const ROLE_DEFINITIONS: Record<RoleKey, RoleDefinition> = {
     icon: Megaphone,
     summary: '业务资料维护、项目发起',
     permissions: [
-      '新增、编辑达人档案并导入合作名单',
+      '新增、编辑达人档案并导出合作名单',
       '上传和管理合同，生成并维护 Invoice',
       '新建项目并维护达人、PM 与预算资料',
       '查看本人负责项目的执行进度',
