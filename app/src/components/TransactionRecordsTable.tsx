@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { formatAmount } from '../data';
+import { paymentSingleAmountLabel } from '../paymentAttempts';
 import {
   transactionRecordDetails,
   type TransactionRecord,
@@ -82,7 +82,7 @@ export function TransactionRecordsTable({
               <th>达人</th>
               <th>关联项目</th>
               <th>渠道</th>
-              <th>支付金额</th>
+              <th>单笔支付金额</th>
               <th>手续费</th>
               <th>对方实际收到金额</th>
               <th>付款人 / 付款时间</th>
@@ -124,7 +124,7 @@ export function TransactionRecordsTable({
                   <td><PaymentProviderBadge compact provider={record.provider} /></td>
                   <td>
                     <span className="transaction-data-cell transaction-amount-cell">
-                      <span className="transaction-primary-value">{formatAmount({ currency: record.paymentCurrency, amount: record.paymentAmount })}</span>
+                      <span className="transaction-primary-value">{paymentSingleAmountLabel(record.paymentAmountTotals, record.status === '付款处理中' ? '待渠道回写' : '—')}</span>
                       <small>收款 {details.receiveCurrency}</small>
                     </span>
                   </td>

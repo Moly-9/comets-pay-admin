@@ -111,7 +111,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
       '收款银行账号',
       '付款日期',
       '请款金额',
-      '支出金额',
+      '单笔支付金额',
       '手续费',
       '退款金额',
       '付款状态',
@@ -141,7 +141,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
     const returnBadgeIndex = html.indexOf('付款退回');
     const returnRowStart = html.lastIndexOf('<tr', returnBadgeIndex);
     const returnRow = html.slice(returnRowStart, html.indexOf('</tr>', returnBadgeIndex));
-    expect(returnRow).toContain('<td class="payment-project-detail-money-cell">HKD -15,288</td>');
+    expect(returnRow).toContain('<td class="payment-project-detail-money-cell">HKD 0</td>');
     expect(returnRow).toContain('<td class="payment-project-detail-money-cell">HKD 15,288</td>');
     const retriedPayout = resources.payouts.find((payout) => (
       payout.currentPaymentAttempt?.paymentBatchCode === PAYMENT_BATCH_RETRY_DEMO.retryBatchCode
@@ -268,7 +268,7 @@ describe('PaymentProjectPaymentDetailPage', () => {
 
     expect(paidHtml).toContain('2026-08-25');
     expect(paidHtml).not.toContain('2026-08-26');
-    expect(paidHtml).toContain('USD 1,258.5');
+    expect(paidHtml).toContain('HKD 15,288 + USD 8.5');
     expect(paidHtml).toContain('USD 8.5');
     expect(paidHtml).toContain('simple-status is-success');
     expect(paidHtml).toContain('payment-project-detail-status-cell');

@@ -31,6 +31,7 @@ import type { ContractRecord } from '../contracts';
 import { paymentFeeBearerDisplayName } from '../paymentFeeBearerPresentation';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import { formatAmount } from '../data';
+import { paymentSingleAmountLabel } from '../paymentAttempts';
 import { transactionRecordDetails, type TransactionRecord } from '../transactionRecords';
 import {
   paymentCreatorIdentityFromBatchItem,
@@ -122,8 +123,8 @@ export function TransactionDetailPage({
 
       <section className="transaction-detail-summary" aria-label="交易摘要">
         <article className="is-amount transaction-summary-card">
-          <span className="transaction-detail-summary-label"><Banknote size={15} aria-hidden="true" />支付金额</span>
-          <strong className="transaction-summary-value">{formatAmount({ currency: record.paymentCurrency, amount: record.paymentAmount })}</strong>
+          <span className="transaction-detail-summary-label"><Banknote size={15} aria-hidden="true" />单笔支付金额</span>
+          <strong className="transaction-summary-value">{paymentSingleAmountLabel(record.paymentAmountTotals, record.status === '付款处理中' ? '待渠道回写' : '—')}</strong>
           <small>
             手续费 {record.transferFeeAmount !== undefined && record.transferFeeCurrency
               ? formatAmount({ currency: record.transferFeeCurrency, amount: record.transferFeeAmount })
@@ -371,7 +372,7 @@ export function TransactionDetailPage({
           {resourceView === 'payment-detail' ? (
             <div className="transaction-payment-detail-modal">
               <div className="transaction-payment-detail-modal-summary" aria-label="付款金额摘要">
-                <div><span>支付金额</span><strong>{transactionMoney(record.paymentCurrency, record.paymentAmount)}</strong></div>
+                <div><span>单笔支付金额</span><strong>{paymentSingleAmountLabel(record.paymentAmountTotals, record.status === '付款处理中' ? '待渠道回写' : '—')}</strong></div>
                 <div><span>手续费</span><strong>{record.transferFeeAmount !== undefined && record.transferFeeCurrency
                   ? transactionMoney(record.transferFeeCurrency, record.transferFeeAmount)
                   : record.status === '付款处理中' ? '待渠道回写' : '—'}</strong></div>

@@ -139,6 +139,8 @@ const transactionBatches = (payouts: readonly Payout[]): PaymentBatchRecord[] =>
         accountSummary: payout.account,
         payoutAccountVersion: 'legacy-v1',
         feeBearer: '广告主承担',
+        transferFeeAmount: 0,
+        transferFeeCurrency: payout.currency,
         paymentReason: '达人合作款',
         transactionReference: `TEST-${payout.id}`,
         description: '测试交付物',
@@ -263,7 +265,7 @@ describe('TransactionsPage currency overview', () => {
     expect(html).toContain('>关联项目</th>');
     expect(html).not.toContain('>Invoice</th>');
     expect(html).toContain('>渠道</th>');
-    expect(html).toContain('>支付金额</th>');
+    expect(html).toContain('>单笔支付金额</th>');
     expect(html).toContain('>手续费</th>');
     expect(html).toContain('>对方实际收到金额</th>');
     expect(html).not.toContain('>时间</th>');
@@ -274,7 +276,7 @@ describe('TransactionsPage currency overview', () => {
       '>达人</th>',
       '>关联项目</th>',
       '>渠道</th>',
-      '>支付金额</th>',
+      '>单笔支付金额</th>',
       '>手续费</th>',
       '>对方实际收到金额</th>',
       '>付款人 / 付款时间</th>',

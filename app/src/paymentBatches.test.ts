@@ -701,6 +701,7 @@ describe('payment batch snapshots', () => {
     expect(paymentBatchMoneyTotalsLabel(summary.paymentAmounts)).toBe('USD 1,250');
     expect(paymentBatchMoneyTotalsLabel(summary.transferFeeAmounts)).toBe('USD 8.5');
     expect(paymentBatchMoneyTotalsLabel(summary.actualPaidAmounts)).toBe('USD 1,258.5');
+    expect(paymentBatchMoneyTotalsLabel(summary.singlePaymentAmounts ?? [])).toBe('USD 1,258.5');
     expect(summary.items[0].paymentStatus).toBe('已付款');
   });
 

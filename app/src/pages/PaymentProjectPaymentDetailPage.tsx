@@ -32,7 +32,12 @@ import {
   type PaymentBatchItemSnapshot,
   type PaymentProjectPaymentRecord,
 } from '../paymentBatches';
-import { paymentAttemptAmountTotals, paymentExpenditureTotalsForValues } from '../paymentAttempts';
+import {
+  paymentAttemptAmountTotals,
+  paymentExpenditureTotalsForValues,
+  paymentSingleAmountLabel,
+  paymentSingleAmountTotalsForValues,
+} from '../paymentAttempts';
 import type { ContractRecord } from '../contracts';
 import { downloadBlob } from '../invoice/invoiceUtils';
 import {
@@ -103,17 +108,15 @@ const paymentAttemptMoney = (amount?: number, currency?: string) => (
   amount !== undefined && currency ? money(currency, amount) : '待补充'
 );
 
-const paymentAttemptExpenditureLabel = (item: PaymentBatchItemSnapshot) => {
+const paymentAttemptSingleLabel = (item: PaymentBatchItemSnapshot) => {
   if (item.paymentStatus === '付款处理中') return '待渠道回写';
-  return paymentExpenditureTotalsForValues({
+  return paymentSingleAmountLabel(paymentSingleAmountTotalsForValues({
     principalAmount: item.amount,
     principalCurrency: item.currency,
     feeBearer: item.feeBearer,
     transferFeeAmount: item.transferFeeAmount,
     transferFeeCurrency: item.transferFeeCurrency,
-    actualPaidAmount: item.actualPaidAmount,
-    actualPaidCurrency: item.actualPaidCurrency,
-  }).map(({ currency, amount }) => money(currency, amount)).join(' · ') || '—';
+  }));
 };
 
 const paymentAttemptsForDrawer = (
@@ -568,7 +571,7 @@ export function PaymentProjectItemDrawer({
                       <div><dt>执行打款时间</dt><dd>{displayTime(attempt.submittedAt)}</dd></div>
                       <div><dt>请款金额</dt><dd>{paymentAttemptMoney(attempt.principalAmount, attempt.principalCurrency)}</dd></div>
                       <div><dt>手续费</dt><dd>{paymentAttemptMoney(attempt.transferFeeAmount, attempt.transferFeeCurrency)}</dd></div>
-                      <div className="is-full"><dt>支出金额</dt><dd>{paymentExpenditureTotalsForValues({ ...attempt, feeBearer: item.feeBearer, refundAmount: undefined, refundCurrency: undefined }).map(({ currency, amount }) => money(currency, amount)).join(' · ')}</dd></div>
+                      <div className="is-full"><dt>单笔支付金额</dt><dd>{paymentSingleAmountLabel(paymentSingleAmountTotalsForValues({ ...attempt, feeBearer: item.feeBearer }))}</dd></div>
                       {attempt.status === '付款失败' ? (
                         <>
                           <div><dt>错误码</dt><dd>{attempt.errorCode || '未记录'}</dd></div>
@@ -1101,7 +1104,7 @@ export function PaymentProjectPaymentDetailPage({
                   <th className="payment-project-detail-account-heading">收款银行账号</th>
                   <th className="payment-project-detail-date-heading">付款日期</th>
                   <th className="payment-project-detail-money-heading">请款金额</th>
-                  <th className="payment-project-detail-money-heading">支出金额</th>
+                  <th className="payment-project-detail-money-heading">单笔支付金额</th>
                   <th className="payment-project-detail-money-heading">手续费</th>
                   <th className="payment-project-detail-money-heading">退款金额</th>
                   <th className="payment-project-detail-status-cell">付款状态</th>
@@ -1162,8 +1165,8 @@ export function PaymentProjectPaymentDetailPage({
                       <td className="payment-project-detail-date-cell">{paymentSubmittedDate(isReturn ? row.refundedAt : item.paymentSubmittedAt)}</td>
                       <td className="payment-project-detail-money-cell">{isReturn ? '—' : money(item.currency, item.amount)}</td>
                       <td className="payment-project-detail-money-cell">{isReturn
-                        ? returnConfirmed ? money(row.refundCurrency!, -Math.abs(row.refundAmount!)) : '待渠道回写'
-                        : paymentAttemptExpenditureLabel(item)}</td>
+                        ? money(row.refundCurrency || item.currency, 0)
+                        : paymentAttemptSingleLabel(item)}</td>
                       <td className="payment-project-detail-money-cell">{isReturn ? '—' : paymentAttemptResultMoney(currentStatus, item.transferFeeAmount, item.transferFeeCurrency)}</td>
                       <td className="payment-project-detail-money-cell">{isReturn
                         ? returnConfirmed ? money(row.refundCurrency!, Math.abs(row.refundAmount!)) : '待渠道回写'

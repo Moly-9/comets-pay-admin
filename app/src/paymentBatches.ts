@@ -36,7 +36,7 @@ import {
 import { aggregatePaymentStatus } from './paymentStatusFilters';
 import { prototypeRecipientReceivedAmountFor } from './prototypePaymentResults';
 import { nextPaymentBusinessCode } from './paymentNumbering';
-import { paymentExpenditureTotalsForValues } from './paymentAttempts';
+import { paymentExpenditureTotalsForValues, paymentSingleAmountTotalsForValues } from './paymentAttempts';
 
 export type PaymentBatchPurpose = 'NORMAL' | 'REVERSAL' | 'RETRY';
 
@@ -1119,7 +1119,9 @@ export type PaymentBatchFinancialSummary = Readonly<{
   items: readonly PaymentBatchItemSnapshot[];
   paymentAmounts: readonly PaymentBatchMoneyTotal[];
   transferFeeAmounts: readonly PaymentBatchMoneyTotal[];
+  transferFeeResultsAvailable: boolean;
   actualPaidAmounts: readonly PaymentBatchMoneyTotal[];
+  singlePaymentAmounts: readonly PaymentBatchMoneyTotal[] | null;
 }>;
 
 const paymentAttemptForBatchItem = (
@@ -1197,6 +1199,27 @@ export const paymentBatchFinancialSummary = (
   batch: PaymentBatchRecord,
 ): PaymentBatchFinancialSummary => {
   const items = batch.items.map((item) => paymentBatchItemForAttempt(batch, item));
+  const paymentTotals = new Map<InvoiceCurrency, number>();
+  let paymentResultsAvailable = items.length > 0;
+  items.forEach((item) => {
+    const amounts = batch.purpose === 'REVERSAL'
+      ? [{ currency: item.currency, amount: 0 }]
+      : paymentSingleAmountTotalsForValues({
+          principalAmount: item.amount,
+          principalCurrency: item.currency,
+          feeBearer: item.feeBearer,
+          transferFeeAmount: item.transferFeeAmount,
+          transferFeeCurrency: item.transferFeeCurrency,
+        });
+    if (!amounts) {
+      paymentResultsAvailable = false;
+      return;
+    }
+    amounts.forEach(({ currency, amount }) => {
+      const key = currency as InvoiceCurrency;
+      paymentTotals.set(key, Math.round(((paymentTotals.get(key) ?? 0) + amount + Number.EPSILON) * 100) / 100);
+    });
+  });
   const expenditureTotals = items.reduce<Map<InvoiceCurrency, number>>((result, item) => {
     if (
       item.paymentStatus !== '已付款'
@@ -1226,7 +1249,13 @@ export const paymentBatchFinancialSummary = (
       (item) => item.transferFeeAmount,
       (item) => item.transferFeeCurrency,
     ),
+    transferFeeResultsAvailable: items.length > 0 && items.every((item) => (
+      item.transferFeeAmount !== undefined && Boolean(item.transferFeeCurrency)
+    )),
     actualPaidAmounts: [...expenditureTotals.entries()].map(([currency, amount]) => ({ currency, amount })),
+    singlePaymentAmounts: paymentResultsAvailable
+      ? [...paymentTotals.entries()].map(([currency, amount]) => ({ currency, amount }))
+      : null,
   };
 };
 

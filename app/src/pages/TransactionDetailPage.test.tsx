@@ -77,8 +77,7 @@ const record: TransactionRecord = {
   status: '已付款',
   occurredAt: '2026-08-10 16:30',
   provider: 'Airwallex',
-  paymentAmount: 4100,
-  paymentCurrency: 'USD',
+  paymentAmountTotals: [{ currency: 'USD', amount: 4108.2 }],
   transferFeeAmount: 8.2,
   transferFeeCurrency: 'USD',
   recipientReceivedAmount: 4100,
@@ -95,7 +94,7 @@ describe('TransactionDetailPage', () => {
     expect(html).toContain('transaction-creator-summary-project');
     expect(html).not.toContain('transaction-detail-header');
     expect(html.match(/transaction-summary-card/g)).toHaveLength(3);
-    expect(html).toContain('支付金额');
+    expect(html).toContain('单笔支付金额');
     expect(html).toContain('手续费 USD 8.2');
     expect(html).toContain('对方实收 USD 4,100');
     expect(html).toContain('付款渠道');

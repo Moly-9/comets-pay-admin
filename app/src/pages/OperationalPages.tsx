@@ -4454,7 +4454,7 @@ export type PaymentBatchRow = {
   projectName: string;
   paymentAmount: string;
   transferFeeAmount: string;
-  actualPaidAmount: string;
+  singlePaymentAmount: string;
   initiator: string;
   payer: string;
   paidAt: string;
@@ -4510,12 +4510,12 @@ export const paymentBatchRows = (
       paymentEntity: batch.request.paymentEntity || '待补充',
       projectName: batch.request.cooperationProjectName,
       paymentAmount: paymentBatchAmountLabel(batch),
-      transferFeeAmount: resultPending
+      transferFeeAmount: resultPending && batch.purpose !== 'REVERSAL'
         ? '待渠道回写'
-        : paymentBatchMoneyTotalsLabel(financialSummary.transferFeeAmounts),
-      actualPaidAmount: resultPending
+        : paymentBatchMoneyTotalsLabel(financialSummary.transferFeeResultsAvailable ? financialSummary.transferFeeAmounts : []),
+      singlePaymentAmount: resultPending && batch.purpose !== 'REVERSAL'
         ? '待渠道回写'
-        : paymentBatchMoneyTotalsLabel(financialSummary.actualPaidAmounts),
+        : paymentBatchMoneyTotalsLabel(financialSummary.singlePaymentAmounts ?? []),
       initiator: batch.request.media || '待补充',
       payer: batch.payer,
       paidAt: batch.paidAt,
@@ -4904,7 +4904,7 @@ export function BatchesPage({
                 <th>项目名称</th>
                 <th>请款金额及币种</th>
                 <th>转账手续费及币种</th>
-                <th>批次总支出金额及币种</th>
+                <th>批次支付金额及币种</th>
                 <th>发起人</th>
                 <th>付款人 / 时间</th>
                 <th className="payment-batch-status-cell">付款状态</th>
@@ -4937,7 +4937,7 @@ export function BatchesPage({
                     <td className="payment-batch-project-cell" title={batch.projectName}><strong>{batch.projectName}</strong></td>
                     <td className="payment-batch-money-cell">{batch.paymentAmount}</td>
                     <td className="payment-batch-money-cell">{batch.transferFeeAmount}</td>
-                    <td className="payment-batch-money-cell"><strong>{batch.actualPaidAmount}</strong></td>
+                    <td className="payment-batch-money-cell"><strong>{batch.singlePaymentAmount}</strong></td>
                     <td className="payment-batch-text-cell" title={batch.initiator}>{batch.initiator}</td>
                     <td><strong>{batch.payer}</strong><small className="cell-subtext">{displayPaymentBatchTime(batch.paidAt)}</small></td>
                     <td className="payment-batch-status-cell"><span className={`simple-status ${paymentBatchStatusTone(batch.status)}`}><i />{batch.status}</span></td>
@@ -5034,10 +5034,7 @@ export function TransactionsPage({
     paid: transactions.filter((record) => ['已付款', '付款处理中'].includes(record.status)).length,
     failed: failed.length,
   };
-  const paidCurrencies = aggregatePayoutCurrencies(paid.map((record) => ({
-    amount: record.paymentAmount,
-    currency: record.paymentCurrency,
-  })), true);
+  const paidCurrencies = aggregatePayoutCurrencies(paid.flatMap((record) => record.paymentAmountTotals ?? []), true);
   const formatSuccessRate = (successfulCount: number, failedCount: number) => {
     const total = successfulCount + failedCount;
     return total ? `${((successfulCount / total) * 100).toFixed(1)}%` : '—';

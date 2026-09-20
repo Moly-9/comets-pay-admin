@@ -360,6 +360,11 @@ describe('transaction records', () => {
 
     const records = createTransactionRecords(feePayouts, [feeBatch]);
     expect(records.slice(0, 3).map((record) => record.recipientReceivedAmount)).toEqual([100, 90, 95]);
+    expect(records.slice(0, 3).map((record) => record.paymentAmountTotals)).toEqual([
+      [{ currency: 'USD', amount: 110 }],
+      [{ currency: 'USD', amount: 100 }],
+      [{ currency: 'USD', amount: 105 }],
+    ]);
     const crossCurrency = records.find((record) => record.payout.id === 'cross-currency');
     expect(crossCurrency?.recipientReceivedAmount).toBe(121.62);
     expect(crossCurrency?.recipientReceivedCurrency).toBe('SGD');

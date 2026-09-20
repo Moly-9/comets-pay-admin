@@ -1,7 +1,7 @@
 import type { InvoiceCurrency, PaymentAttemptSnapshot, Payout } from './types';
 
 export type PaymentAttemptAmountTotal = Readonly<{
-  currency: string;
+  currency: InvoiceCurrency;
   amount: number;
 }>;
 
@@ -22,6 +22,33 @@ const payerFeeRatio = (feeBearer?: string) => {
   if (['SHARED', '共同承担', '双方共同承担'].includes(feeBearer ?? '')) return 0.5;
   return 1;
 };
+
+export const paymentSingleAmountTotalsForValues = (
+  values: Pick<ExpenditureValues, 'principalAmount' | 'principalCurrency' | 'feeBearer' | 'transferFeeAmount' | 'transferFeeCurrency'>,
+): readonly PaymentAttemptAmountTotal[] | null => {
+  if (!Number.isFinite(values.principalAmount) || !values.principalCurrency) return null;
+  const feeRatio = payerFeeRatio(values.feeBearer);
+  if (feeRatio && (values.transferFeeAmount === undefined || !Number.isFinite(values.transferFeeAmount))) return null;
+  if (feeRatio && values.transferFeeAmount && !values.transferFeeCurrency) return null;
+
+  const totals = new Map<string, number>();
+  addMoney(totals, values.principalCurrency, values.principalAmount);
+  if (feeRatio && values.transferFeeAmount) {
+    addMoney(
+      totals,
+      values.transferFeeCurrency ?? values.principalCurrency,
+      Math.round((values.transferFeeAmount * feeRatio + Number.EPSILON) * 100) / 100,
+    );
+  }
+  return [...totals.entries()].map(([currency, amount]) => ({ currency: currency as InvoiceCurrency, amount }));
+};
+
+export const paymentSingleAmountLabel = (
+  totals: readonly PaymentAttemptAmountTotal[] | null,
+  fallback = '—',
+) => totals?.length
+  ? totals.map(({ currency, amount }) => `${currency} ${amount.toLocaleString('en-US')}`).join(' + ')
+  : fallback;
 
 const addMoney = (
   totals: Map<string, number>,
@@ -50,7 +77,7 @@ export const paymentExpenditureTotalsForValues = (
     );
   }
   addMoney(totals, values.refundCurrency, values.refundAmount === undefined ? undefined : -values.refundAmount);
-  return [...totals.entries()].map(([currency, amount]) => ({ currency, amount }));
+  return [...totals.entries()].map(([currency, amount]) => ({ currency: currency as InvoiceCurrency, amount }));
 };
 
 export const paymentPayoutExpenditureTotals = (
@@ -79,7 +106,7 @@ export const paymentPayoutExpenditureTotals = (
       addMoney(totals, currency, amount);
     });
   });
-  return [...totals.entries()].map(([currency, amount]) => ({ currency, amount }));
+  return [...totals.entries()].map(([currency, amount]) => ({ currency: currency as InvoiceCurrency, amount }));
 };
 
 const attemptIdentity = (attempt: PaymentAttemptSnapshot) => (
@@ -210,5 +237,5 @@ export const paymentAttemptAmountTotals = (
     }
     return result;
   }, new Map());
-  return [...totals.entries()].map(([currency, amount]) => ({ currency, amount }));
+  return [...totals.entries()].map(([currency, amount]) => ({ currency: currency as InvoiceCurrency, amount }));
 };

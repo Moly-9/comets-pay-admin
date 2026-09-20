@@ -13,6 +13,7 @@ import {
 } from './paymentBatches';
 import type { InvoiceCurrency, Payout } from './types';
 import { prototypeRecipientReceivedAmountFor } from './prototypePaymentResults';
+import { paymentSingleAmountTotalsForValues, type PaymentAttemptAmountTotal } from './paymentAttempts';
 import {
   ALL_PAYMENT_STATUSES,
   aggregatePaymentStatus,
@@ -51,8 +52,7 @@ export type TransactionRecord = Readonly<{
   status: TransactionRecordStatus;
   occurredAt: string;
   provider: Payout['provider'];
-  paymentAmount: number;
-  paymentCurrency: InvoiceCurrency;
+  paymentAmountTotals: readonly PaymentAttemptAmountTotal[] | null;
   transferFeeAmount?: number;
   transferFeeCurrency?: InvoiceCurrency;
   recipientReceivedAmount?: number;
@@ -188,8 +188,8 @@ const transactionRecordFromBatchItem = (
     paymentCode: attempt.paymentCode ?? item.paymentCode,
     paymentStatus: attempt.status,
     paidAt: attempt.occurredAt ?? item.paidAt,
-    transferFeeAmount: attempt.transferFeeAmount ?? item.transferFeeAmount,
-    transferFeeCurrency: attempt.transferFeeCurrency ?? item.transferFeeCurrency,
+    transferFeeAmount: attempt.transferFeeAmount,
+    transferFeeCurrency: attempt.transferFeeCurrency,
     actualPaidAmount: attempt.actualPaidAmount ?? item.actualPaidAmount,
     actualPaidCurrency: attempt.actualPaidCurrency ?? item.actualPaidCurrency,
     recipientReceivedAmount: attempt.recipientReceivedAmount ?? item.recipientReceivedAmount,
@@ -240,8 +240,13 @@ const transactionRecordFromBatchItem = (
     status,
     occurredAt: resolvedItem.failure?.occurredAt ?? resolvedItem.paidAt ?? batch.paidAt,
     provider: resolvedItem.provider,
-    paymentAmount: resolvedItem.amount,
-    paymentCurrency: resolvedItem.currency,
+    paymentAmountTotals: status === '付款处理中' ? null : paymentSingleAmountTotalsForValues({
+      principalAmount: resolvedItem.amount,
+      principalCurrency: resolvedItem.currency,
+      feeBearer: resolvedItem.feeBearer,
+      transferFeeAmount: resolvedItem.transferFeeAmount,
+      transferFeeCurrency: resolvedItem.transferFeeCurrency,
+    }),
     transferFeeAmount: resolvedItem.transferFeeAmount,
     transferFeeCurrency: resolvedItem.transferFeeCurrency,
     recipientReceivedAmount: status === '付款失败'
@@ -428,7 +433,7 @@ const matchesTransactionSearch = (record: TransactionRecord, search: string) => 
     payout.contract,
     payout.paymentCode,
     record.provider,
-    record.paymentCurrency,
+    ...(record.paymentAmountTotals?.map(({ currency }) => currency) ?? []),
     record.status,
     details.paymentBatchCode,
     context?.batch.paymentOrderCode,
