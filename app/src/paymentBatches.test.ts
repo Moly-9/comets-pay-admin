@@ -248,6 +248,51 @@ const buildInput = () => {
 };
 
 describe('payment batch snapshots', () => {
+  it('freezes a cross-channel retry account without changing the original batch or approved documents', () => {
+    const input = buildInput();
+    const original = createPaymentBatchRecord(input);
+    const approvedPaymentList = JSON.stringify(input.paymentLists[0]);
+    const originalPayout = input.payouts[0];
+    const paypalSnapshot: DocumentPayoutSnapshot = {
+      ...paymentSnapshot(''),
+      payoutAccountId: 'paypal-retry-account',
+      payoutAccountVersion: 'v3',
+      accountFingerprint: 'fp_paypal_retry',
+      payoutProvider: 'PayPal',
+      validationStatus: 'VERIFIED',
+      transferMethod: 'PAYPAL',
+      paypalUsername: 'retry.creator',
+      paypalEmail: 'retry@example.test',
+      accountCurrency: 'USD',
+    };
+    const retry = createPaymentBatchRecord({
+      ...input,
+      payouts: [{ ...originalPayout, provider: 'PayPal', payoutAccountId: 'paypal-retry-account', account: 'retry@example.test' }],
+      paymentBatchId: 'payment_batch_paypal_retry' as PaymentBatchId,
+      paymentBatchCode: 'BAT-PAYPAL-RETRY',
+      provider: 'PayPal',
+      fundingAccountId: 'mock-paypal-balance',
+      purpose: 'RETRY',
+      sourcePaymentBatchId: original.paymentBatchId,
+      sourcePaymentBatchCode: original.paymentBatchCode,
+      paymentOrderCode: original.paymentOrderCode,
+      paymentAttemptNumber: 2,
+      executionAccountsByPayoutId: {
+        [originalPayout.id]: { snapshot: paypalSnapshot, summary: 'retry@example.test' },
+      },
+    });
+
+    expect(retry.items[0]).toMatchObject({
+      provider: 'PayPal', payoutAccountId: 'paypal-retry-account', payoutAccountVersion: 'v3',
+      accountIdentifier: 'retry@example.test', accountIdentifierLabel: 'PayPal 邮箱',
+      paymentAttemptNumber: 2, paymentOrderCode: original.paymentOrderCode,
+    });
+    expect(original.items[0].provider).toBe('Airwallex');
+    expect(original.items[0].payoutAccountId).not.toBe('paypal-retry-account');
+    expect(input.generatedInvoices[0].snapshot.payoutProvider).toBe('Airwallex');
+    expect(JSON.stringify(input.paymentLists[0])).toBe(approvedPaymentList);
+  });
+
   it('matches legacy attempt execution dates by attempt number instead of the latest batch', () => {
     const input = buildInput();
     const template = createPaymentBatchRecord(input);

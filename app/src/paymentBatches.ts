@@ -303,6 +303,7 @@ type CreatePaymentBatchRecordInput = PaymentBatchSourceData & Readonly<{
   sourcePaymentOrderCode?: string;
   paymentAttemptNumber?: number;
   feeBearerByPayoutId?: Readonly<Record<string, NonNullable<Payout['feeBearer']>>>;
+  executionAccountsByPayoutId?: Readonly<Record<string, { snapshot: DocumentPayoutSnapshot; summary: string }>>;
 }>;
 
 type CreatePaymentExecutionBatchRecordInput = PaymentBatchSourceData & Readonly<{
@@ -683,6 +684,7 @@ const snapshotItem = ({
   paymentOrderCode,
   paymentAttemptNumber,
   feeBearerOverride,
+  executionAccountOverride,
 }: {
   payout: Payout;
   request: RequestProjectSummary;
@@ -696,6 +698,7 @@ const snapshotItem = ({
   paymentOrderCode?: string;
   paymentAttemptNumber?: number;
   feeBearerOverride?: NonNullable<Payout['feeBearer']>;
+  executionAccountOverride?: { snapshot: DocumentPayoutSnapshot; summary: string };
 }): PaymentBatchItemSnapshot => {
   const invoice = generatedInvoices.find((candidate) => candidate.sourcePayoutId === payout.id);
   const invoiceId = invoice?.invoiceId;
@@ -725,18 +728,20 @@ const snapshotItem = ({
       .map((contractId) => `合同 ${contractId} 关联记录缺失`),
   ].filter(Boolean);
   const documentPayment = invoice?.snapshot.payment;
-  const rawAccountSummary = effectiveAccount?.accountSummary
+  const rawAccountSummary = executionAccountOverride?.summary || effectiveAccount?.accountSummary
     || documentPayment?.accountName
     || payout.account;
   const receiveCurrency = invoiceCurrency(
-    paymentListItem ? paymentListItemValue(paymentListItem, 'receiveCurrency') : documentPayment?.accountCurrency,
+    executionAccountOverride
+      ? executionAccountOverride.snapshot.accountCurrency || payout.currency
+      : paymentListItem ? paymentListItemValue(paymentListItem, 'receiveCurrency') : documentPayment?.accountCurrency,
     payout.currency,
   );
   const feeBearer = feeBearerOverride ?? (paymentListItem
     ? paymentListItemValue(paymentListItem, 'feeBearer')
     : payout.feeBearer);
   const feeBearerSnapshot = feeBearerLabel(feeBearer);
-  const effectivePaymentDetails = effectiveAccount?.paymentDetails ?? documentPayment;
+  const effectivePaymentDetails = executionAccountOverride?.snapshot ?? effectiveAccount?.paymentDetails ?? documentPayment;
   const accountRecipient = paymentRecipientSnapshot({
     provider: payout.provider,
     payment: effectivePaymentDetails,
@@ -805,21 +810,21 @@ const snapshotItem = ({
     currency: payout.currency,
     receiveCurrency,
     transferMethod: transferMethodLabel(
-      effectiveAccount?.transferMethod ?? payout.transferMethod ?? documentPayment?.transferMethod,
+      executionAccountOverride?.snapshot.transferMethod ?? effectiveAccount?.transferMethod ?? payout.transferMethod ?? documentPayment?.transferMethod,
       payout.provider,
     ),
-    localClearingSystem: effectivePaymentDetails?.localClearingSystem
-      || payout.localClearingSystem
-      || undefined,
-    recipientCountry: effectivePaymentDetails?.bankCountry
-      || payout.recipientCountry
-      || undefined,
+    localClearingSystem: executionAccountOverride
+      ? executionAccountOverride.snapshot.localClearingSystem || undefined
+      : effectivePaymentDetails?.localClearingSystem || payout.localClearingSystem || undefined,
+    recipientCountry: executionAccountOverride
+      ? executionAccountOverride.snapshot.bankCountry || undefined
+      : effectivePaymentDetails?.bankCountry || payout.recipientCountry || undefined,
     accountSummary: accountDisplayValue(rawAccountSummary),
     ...accountRecipient,
-    payoutAccountId: effectiveAccount?.payoutAccountId
+    payoutAccountId: executionAccountOverride?.snapshot.payoutAccountId ?? effectiveAccount?.payoutAccountId
       ?? payout.payoutAccountId
       ?? invoice?.snapshot.payoutAccountId,
-    payoutAccountVersion: effectiveAccount?.payoutAccountVersion
+    payoutAccountVersion: executionAccountOverride?.snapshot.payoutAccountVersion ?? effectiveAccount?.payoutAccountVersion
       ?? payout.payoutAccountVersion
       ?? invoice?.snapshot.payoutAccountVersion
       ?? 'legacy-v1',
@@ -860,6 +865,7 @@ export const createPaymentBatchRecord = ({
   sourcePaymentOrderCode,
   paymentAttemptNumber,
   feeBearerByPayoutId = {},
+  executionAccountsByPayoutId = {},
   ...batch
 }: CreatePaymentBatchRecordInput): PaymentBatchRecord => {
   if (!payouts.length) throw new Error('付款批次至少需要一笔付款明细');
@@ -891,6 +897,7 @@ export const createPaymentBatchRecord = ({
     paymentOrderCode: '',
     paymentAttemptNumber: 1,
     feeBearerOverride: feeBearerByPayoutId[payout.id],
+    executionAccountOverride: executionAccountsByPayoutId[payout.id],
   }));
   const sourceOrderCodes = new Set(sourceItems.map((item) => item.sourcePaymentOrderCode));
   if (sourceOrderCodes.size !== 1) {
@@ -934,6 +941,7 @@ export const createPaymentBatchRecord = ({
       paymentOrderCode: resolvedPaymentOrderCode,
       paymentAttemptNumber: resolvedPaymentAttemptNumber,
       feeBearerOverride: feeBearerByPayoutId[payout.id],
+      executionAccountOverride: executionAccountsByPayoutId[payout.id],
     })),
   };
 };
@@ -1073,8 +1081,23 @@ export const createPaymentProjectPaymentRecord = ({
       paymentBatchId: currentAttempt?.paymentBatchId ?? payout.currentPaymentAttempt?.paymentBatchId,
       attemptNumber: currentAttemptNumber,
     });
+    const currentBatchItem = currentBatch?.items.find((batchItem) => batchItem.payoutId === payout.id);
     return {
       ...item,
+      ...(currentBatchItem ? {
+        provider: currentBatchItem.provider,
+        accountSummary: currentBatchItem.accountSummary,
+        accountName: currentBatchItem.accountName,
+        accountIdentifier: currentBatchItem.accountIdentifier,
+        accountIdentifierLabel: currentBatchItem.accountIdentifierLabel,
+        payoutAccountId: currentBatchItem.payoutAccountId,
+        payoutAccountVersion: currentBatchItem.payoutAccountVersion,
+        receiveCurrency: currentBatchItem.receiveCurrency,
+        transferMethod: currentBatchItem.transferMethod,
+        localClearingSystem: currentBatchItem.localClearingSystem,
+        recipientCountry: currentBatchItem.recipientCountry,
+        feeBearer: currentBatchItem.feeBearer,
+      } : {}),
       paymentBatchId: currentAttempt?.paymentBatchId
         ?? payout.currentPaymentAttempt?.paymentBatchId
         ?? currentBatch?.paymentBatchId,
@@ -1103,7 +1126,10 @@ export const createPaymentProjectPaymentRecord = ({
       ...requestLists.map((list) => list.paymentListCode),
       ...items.map((item) => item.paymentListCode).filter((code) => code !== '关联资料缺失'),
     ])],
-    providers: [...new Set(linkedPayouts.map((payout) => payout.provider))],
+    providers: [...new Set([
+      ...linkedPayouts.map((payout) => payout.provider),
+      ...paymentBatches.flatMap((batch) => batch.items.some((item) => sourcePayoutIds.has(item.payoutId)) ? [batch.provider] : []),
+    ])],
     status,
     lastActivityAt,
     items,

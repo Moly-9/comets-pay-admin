@@ -51,8 +51,11 @@ import {
 } from './permissions';
 import {
   executeMockBatchSubmission,
+  retryExecutionAccountFor,
   resolvePaymentFailureSourceBatch,
   selectBatchWizardPayouts,
+  validatePayoutForBatch,
+  validateRetryExecutionAccount,
   type MockBatchSubmission,
 } from './batchTransfers';
 import {
@@ -4931,7 +4934,8 @@ export default function App() {
     const selected = batchReadyPayouts.filter((payout) => (
       submission.items.some((item) => item.payoutId === payout.id)
     ));
-    if (!selected.length || selected.length !== submission.items.length) {
+    if (!selected.length || selected.length !== submission.items.length
+      || new Set(submission.items.map((item) => item.payoutId)).size !== submission.items.length) {
       notify('无法创建付款批次', '所选失败明细已变化，请重新选择。');
       return false;
     }
@@ -4961,14 +4965,59 @@ export default function App() {
       return false;
     }
     if (
-      submission.provider !== retrySourceBatch.provider
+      !['Airwallex', 'PayPal'].includes(submission.provider)
       || submission.sourceCurrency !== retrySourceBatch.sourceCurrency
       || submission.sourcePaymentOrderCode !== retrySourceBatch.paymentOrderCode
       || submission.paymentAttemptNumber !== retrySourceBatch.paymentAttemptNumber + 1
     ) {
-      notify('无法创建付款批次', '重新付款必须沿用原批次渠道、支付币种、付款单号和尝试顺序。');
+      notify('无法创建付款批次', '重新付款必须沿用原批次支付币种、付款单号和尝试顺序。');
       return false;
     }
+    const fundingAccounts = submission.provider === 'PayPal'
+      ? ['mock-paypal-balance']
+      : ['mock-awx-operating', 'mock-awx-reserve'];
+    if (!fundingAccounts.includes(submission.fundingAccountId)) {
+      notify('无法创建付款批次', '资金账户与本次付款渠道不匹配。');
+      return false;
+    }
+    let verifiedAccounts: Map<string, ReturnType<typeof retryExecutionAccountFor>>;
+    try {
+      verifiedAccounts = new Map(selected.map((payout) => {
+        const item = submission.items.find((candidate) => candidate.payoutId === payout.id)!;
+        const creator = creators.find((candidate) => candidate.id === payout.creatorId);
+        const account = creator?.payoutAccounts.find((candidate) => getPayoutAccountId(candidate) === item.payoutAccountId);
+        const issue = validateRetryExecutionAccount(account, String(payout.creatorId ?? ''), submission.provider);
+        if (issue || !account) throw new Error(`${payout.creator}：${issue || '收款账户不可用'}`);
+        const verified = retryExecutionAccountFor(account, String(payout.creatorId));
+        if (
+          JSON.stringify(verified.snapshot) !== JSON.stringify(item.executionAccount)
+          || verified.summary !== item.accountSummary
+          || item.provider !== submission.provider
+          || item.payoutAccountVersion !== verified.snapshot.payoutAccountVersion
+          || item.accountFingerprint !== verified.snapshot.accountFingerprint
+          || item.transferAmount !== payout.amount
+          || item.transferCurrency !== payout.currency
+          || validatePayoutForBatch(payout, submission.provider, item.feeBearer, verified.snapshot).length
+        ) throw new Error(`${payout.creator}：付款账户或请款资料已变化，请重新确认。`);
+        return [payout.id, verified] as const;
+      }));
+    } catch (error) {
+      notify('无法创建付款批次', error instanceof Error ? error.message : '收款账户校验失败。');
+      return false;
+    }
+    const executionPayouts = selected.map((payout) => {
+      const account = verifiedAccounts.get(payout.id)!;
+      const item = submission.items.find((candidate) => candidate.payoutId === payout.id)!;
+      return { ...payout, provider: submission.provider, account: account.summary,
+        feeBearer: item.feeBearer,
+        payoutAccountId: account.snapshot.payoutAccountId,
+        payoutAccountVersion: account.snapshot.payoutAccountVersion,
+        payoutAccountFingerprint: account.snapshot.accountFingerprint,
+        externalBeneficiaryId: account.snapshot.externalBeneficiaryId,
+        transferMethod: account.snapshot.transferMethod,
+        localClearingSystem: account.snapshot.localClearingSystem,
+      };
+    });
     const execution = executeMockBatchSubmission(submission);
     const now = new Date();
     const localPaymentTime = new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
@@ -4977,7 +5026,7 @@ export default function App() {
     let batchRecord: ReturnType<typeof createPaymentBatchRecord>;
     try {
       batchRecord = createPaymentBatchRecord({
-        payouts: selected,
+        payouts: executionPayouts,
         requests: requestProjects,
         generatedInvoices,
         paymentLists,
@@ -5002,6 +5051,7 @@ export default function App() {
         feeBearerByPayoutId: Object.fromEntries(
           submission.items.map((item) => [item.payoutId, item.feeBearer]),
         ),
+        executionAccountsByPayoutId: Object.fromEntries(verifiedAccounts),
       });
     } catch (error) {
       notify(
@@ -5014,8 +5064,9 @@ export default function App() {
       const submittedPayout = selected.find((item) => item.id === payout.id);
       if (!submittedPayout) return payout;
       const batchItem = batchRecord.items.find((item) => item.payoutId === payout.id)!;
+      const executionPayout = executionPayouts.find((item) => item.id === payout.id)!;
       return markPaymentFailureRetrySubmitted(
-        submittedPayout,
+        executionPayout,
         execution.batchId,
         execution.batchCode,
         localPaymentTime,
@@ -5757,6 +5808,7 @@ export default function App() {
         <PaymentProjectPaymentDetailPage
           record={paymentDetailRecord}
           payouts={payouts}
+          paymentBatches={paymentBatches}
           contracts={contracts}
           invoices={generatedInvoices}
           creators={creators}

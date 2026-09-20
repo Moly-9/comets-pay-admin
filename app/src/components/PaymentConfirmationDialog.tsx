@@ -7,6 +7,8 @@ import {
   type PaymentPreview,
 } from '../paymentPreview';
 import { Button, Modal } from './Common';
+import { PaymentProviderBadge } from './PaymentProviderBadge';
+import type { Provider } from '../types';
 import './PaymentConfirmationDialog.css';
 
 export type PaymentConfirmationRow = Readonly<{
@@ -21,10 +23,12 @@ export function PaymentConfirmationDialog({
   rows,
   onClose,
   onConfirm,
+  provider,
 }: {
   rows: readonly PaymentConfirmationRow[];
   onClose: () => void;
   onConfirm: () => void;
+  provider?: Provider;
 }) {
   const totals = paymentPreviewActualPaidTotals(rows.map((row) => row.preview));
 
@@ -62,7 +66,7 @@ export function PaymentConfirmationDialog({
     >
       <div className="payment-confirmation-intro">
         <ReceiptText size={19} aria-hidden="true" />
-        <div><strong>请确认每一笔交易信息</strong><p>确认后将提交付款渠道，当前共 {rows.length} 笔。</p></div>
+        <div><strong>请确认每一笔交易信息</strong><p>确认后将提交付款渠道，当前共 {rows.length} 笔。{provider ? <>本次渠道：<PaymentProviderBadge compact provider={provider} /></> : null}</p></div>
       </div>
       <div className="payment-confirmation-list" role="list">
         {rows.map((row, index) => (

@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { applyPaymentBatchPrototypeScenario, PAYMENT_BATCH_RETRY_DEMO } from '../paymentBatchPrototypeScenario';
-import { createInitialPaymentBatches, createPaymentProjectPaymentRecord } from '../paymentBatches';
+import { createInitialPaymentBatches, createPaymentProjectPaymentRecord, type PaymentBatchRecord } from '../paymentBatches';
 import { INITIAL_COMPLETE_REQUEST_RESOURCES } from '../requestProjectPrototypeResources';
 import {
   buildPaymentProjectAttemptRows,
@@ -46,6 +46,28 @@ const partialFailureRecord = createPaymentProjectPaymentRecord({
 });
 
 describe('PaymentProjectPaymentDetailPage', () => {
+  it('uses each frozen batch channel and account for historical attempt rows', () => {
+    const first = failedRecord.items[0];
+    const source = resources.payouts.find((payout) => payout.id === first.payoutId)!;
+    const oldId = 'cross-channel-old' as PaymentBatchRecord['paymentBatchId'];
+    const newId = 'cross-channel-new' as PaymentBatchRecord['paymentBatchId'];
+    const batches: PaymentBatchRecord[] = [
+      { ...paymentBatches[0], paymentBatchId: oldId, purpose: 'NORMAL', provider: 'Airwallex', items: [{ ...first, provider: 'Airwallex', accountIdentifier: 'old-account' }] },
+      { ...paymentBatches[0], paymentBatchId: newId, purpose: 'RETRY', provider: 'PayPal', items: [{ ...first, provider: 'PayPal', accountIdentifier: 'new@example.test' }] },
+    ];
+    const paymentAttempts = [
+      { paymentBatchId: oldId, attemptNumber: 1, status: '付款失败' as const, principalAmount: first.amount, principalCurrency: first.currency },
+      { paymentBatchId: newId, attemptNumber: 2, status: '已付款' as const, principalAmount: first.amount, principalCurrency: first.currency },
+    ];
+    const rows = buildPaymentProjectAttemptRows({
+      items: [{ ...first, provider: 'PayPal', accountIdentifier: 'new@example.test' }],
+      payouts: [{ ...source, paymentAttempts, currentPaymentAttempt: { paymentBatchId: newId, paymentBatchCode: 'BAT-NEW', submittedAt: '2026-09-20T10:00', attemptNumber: 2 } }],
+      paymentBatches: batches,
+    }).filter((row) => row.recordKind === 'PAYMENT');
+    expect(rows.map((row) => [row.item.provider, row.item.accountIdentifier])).toEqual([
+      ['Airwallex', 'old-account'], ['PayPal', 'new@example.test'],
+    ]);
+  });
   it('renders the dedicated three-item partial-failure demo and its failure action', () => {
     const html = renderToStaticMarkup(
       <PaymentProjectPaymentDetailPage

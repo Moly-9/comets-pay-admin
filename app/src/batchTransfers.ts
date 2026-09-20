@@ -1,8 +1,11 @@
 import { createPrototypeCode, createPrototypeId } from './businessWorkflow';
 import { isPaymentFailureRetryCandidate } from './paymentFailureRecovery';
 import type { PaymentBatchRecord } from './paymentBatches';
+import { createDocumentPayoutSnapshot, getPayoutAccountIdentifier, isPayoutAccountUsableForDocuments } from './payoutAccounts';
 import type {
   AirwallexTransferMethod,
+  CreatorPayoutAccount,
+  DocumentPayoutSnapshot,
   InvoiceCurrency,
   Payout,
   PayoutAccountVersion,
@@ -31,6 +34,31 @@ export type BatchTransferItem = {
   swiftChargeOption?: AirwallexSwiftChargeOption;
   paypalEmail?: string;
   transferNote?: string;
+  executionAccount?: DocumentPayoutSnapshot;
+  accountSummary?: string;
+};
+
+export type RetryExecutionAccount = Readonly<{
+  snapshot: DocumentPayoutSnapshot;
+  summary: string;
+}>;
+
+export const retryExecutionAccountFor = (account: CreatorPayoutAccount, creatorId: string): RetryExecutionAccount => ({
+  snapshot: createDocumentPayoutSnapshot(account, creatorId),
+  summary: getPayoutAccountIdentifier(account),
+});
+
+export const validateRetryExecutionAccount = (
+  account: CreatorPayoutAccount | undefined,
+  creatorId: string | undefined,
+  provider: ExecutableBatchProvider,
+) => {
+  if (!account) return '请选择本次收款账户';
+  if (!creatorId || account.creatorId !== creatorId) return '收款账户不属于当前达人';
+  if (account.provider !== provider) return '收款账户与本次付款渠道不一致';
+  if (!isPayoutAccountUsableForDocuments(account)) return '收款账户尚未验证或付款资料不完整';
+  if (account.provider === 'Airwallex' && !account.beneficiaryId) return '缺少 Airwallex beneficiary_id';
+  return '';
 };
 
 export type MockBatchSubmission = {
@@ -79,19 +107,20 @@ export const validatePayoutForBatch = (
   payout: Payout,
   provider: ExecutableBatchProvider,
   feeBearer: Payout['feeBearer'] = payout.feeBearer,
+  executionAccount?: DocumentPayoutSnapshot,
 ) => {
-  const snapshot = payoutSnapshot(payout);
-  const payoutProvider = payout.invoiceSnapshot?.payoutProvider
+  const snapshot = executionAccount ?? payoutSnapshot(payout);
+  const payoutProvider = executionAccount?.payoutProvider ?? payout.invoiceSnapshot?.payoutProvider
     ?? snapshot?.payoutProvider
     ?? payout.provider;
-  const transferMethod = payout.transferMethod ?? snapshot?.transferMethod;
-  const payoutAccountId = payout.payoutAccountId
+  const transferMethod = executionAccount ? executionAccount.transferMethod : payout.transferMethod ?? snapshot?.transferMethod;
+  const payoutAccountId = executionAccount ? executionAccount.payoutAccountId : payout.payoutAccountId
     ?? payout.invoiceSnapshot?.payoutAccountId
     ?? snapshot?.payoutAccountId;
-  const accountFingerprint = payout.payoutAccountFingerprint
+  const accountFingerprint = executionAccount ? executionAccount.accountFingerprint : payout.payoutAccountFingerprint
     ?? payout.invoiceSnapshot?.payoutAccountFingerprint
     ?? snapshot?.accountFingerprint;
-  const externalBeneficiaryId = payout.externalBeneficiaryId
+  const externalBeneficiaryId = executionAccount ? executionAccount.externalBeneficiaryId : payout.externalBeneficiaryId
     ?? snapshot?.externalBeneficiaryId;
   return [
     payout.paymentListRequiresRevalidation
@@ -109,7 +138,7 @@ export const validatePayoutForBatch = (
     provider === 'Airwallex' && !externalBeneficiaryId ? '缺少 Airwallex beneficiary_id' : '',
     provider === 'Airwallex' && !transferMethod ? '缺少 Airwallex 转账方式' : '',
     provider === 'Airwallex' && transferMethod === 'LOCAL'
-      && !(payout.localClearingSystem ?? snapshot?.localClearingSystem)
+      && !(executionAccount ? executionAccount.localClearingSystem : payout.localClearingSystem ?? snapshot?.localClearingSystem)
       ? 'LOCAL 付款缺少本地清算方式'
       : '',
     !feeBearer ? '关联合同缺少手续费承担方' : '',
@@ -191,6 +220,7 @@ export const createMockBatchSubmission = ({
   sourcePaymentOrderCode,
   paymentAttemptNumber,
   feeBearerByPayoutId = {},
+  executionAccountsByPayoutId = {},
 }: {
   payouts: Payout[];
   provider: ExecutableBatchProvider;
@@ -201,6 +231,7 @@ export const createMockBatchSubmission = ({
   sourcePaymentOrderCode: string;
   paymentAttemptNumber: number;
   feeBearerByPayoutId?: Readonly<Record<string, PaymentFeeBearer>>;
+  executionAccountsByPayoutId?: Readonly<Record<string, RetryExecutionAccount>>;
 }): MockBatchSubmission => {
   if (!payouts.length) throw new Error('至少选择一笔付款');
   if (!fundingAccountId) throw new Error('请选择资金账户');
@@ -221,6 +252,7 @@ export const createMockBatchSubmission = ({
         payout,
         provider,
         feeBearerByPayoutId[payout.id] ?? payout.feeBearer,
+        executionAccountsByPayoutId[payout.id]?.snapshot,
       ),
     }))
     .find(({ issues }) => issues.length > 0);
@@ -228,13 +260,14 @@ export const createMockBatchSubmission = ({
     throw new Error(`${invalid.payout.invoice}：${invalid.issues[0]}`);
   }
   const items = payouts.map((payout): BatchTransferItem => {
-    const snapshot = payoutSnapshot(payout);
+    const executionAccount = executionAccountsByPayoutId[payout.id];
+    const snapshot = executionAccount?.snapshot ?? payoutSnapshot(payout);
     const feeBearer = feeBearerByPayoutId[payout.id] ?? payout.feeBearer;
     if (!feeBearer) throw new Error(`${payout.invoice}：关联合同缺少手续费承担方`);
     const transferMethod = (
       provider === 'PayPal'
         ? 'PAYPAL'
-        : payout.transferMethod ?? snapshot?.transferMethod
+        : executionAccount ? executionAccount.snapshot.transferMethod : payout.transferMethod ?? snapshot?.transferMethod
     ) as BatchTransferItem['transferMethod'];
     const feeOptions = provider === 'Airwallex'
       ? airwallexFeeOptions(transferMethod as AirwallexTransferMethod, feeBearer)
@@ -244,32 +277,34 @@ export const createMockBatchSubmission = ({
       invoiceNumber: payout.invoice,
       creatorId: String(payout.creatorId ?? payout.invoiceSnapshot?.creatorId),
       payoutAccountId: String(
-        payout.payoutAccountId
+        executionAccount?.snapshot.payoutAccountId ?? payout.payoutAccountId
         ?? payout.invoiceSnapshot?.payoutAccountId
         ?? snapshot?.payoutAccountId,
       ),
-      payoutAccountVersion: payout.payoutAccountVersion
+      payoutAccountVersion: executionAccount?.snapshot.payoutAccountVersion ?? payout.payoutAccountVersion
         ?? payout.invoiceSnapshot?.payoutAccountVersion
         ?? snapshot?.payoutAccountVersion
         ?? 'legacy-v1',
       accountFingerprint: String(
-        payout.payoutAccountFingerprint
+        executionAccount?.snapshot.accountFingerprint ?? payout.payoutAccountFingerprint
         ?? payout.invoiceSnapshot?.payoutAccountFingerprint
         ?? snapshot?.accountFingerprint,
       ),
       provider,
       externalBeneficiaryId: provider === 'Airwallex'
-        ? payout.externalBeneficiaryId ?? snapshot?.externalBeneficiaryId
+        ? executionAccount ? executionAccount.snapshot.externalBeneficiaryId : payout.externalBeneficiaryId ?? snapshot?.externalBeneficiaryId
         : undefined,
       transferMethod,
       localClearingSystem: transferMethod === 'LOCAL'
-        ? payout.localClearingSystem ?? snapshot?.localClearingSystem
+        ? executionAccount ? executionAccount.snapshot.localClearingSystem : payout.localClearingSystem ?? snapshot?.localClearingSystem
         : undefined,
       transferAmount: payout.amount,
       transferCurrency: payout.currency,
       feeBearer,
       paypalEmail: provider === 'PayPal' ? snapshot?.paypalEmail : undefined,
       transferNote: provider === 'PayPal' ? snapshot?.transferRemarks : undefined,
+      executionAccount: executionAccount?.snapshot,
+      accountSummary: executionAccount?.summary,
       ...feeOptions,
     };
   });

@@ -4,11 +4,14 @@ import {
   createMockBatchSubmission,
   executeMockBatchSubmission,
   resolvePaymentFailureSourceBatch,
+  retryExecutionAccountFor,
   selectBatchWizardPayouts,
+  validatePayoutForBatch,
+  validateRetryExecutionAccount,
 } from './batchTransfers';
 import type { PaymentBatchId } from './businessWorkflow';
 import type { PaymentBatchRecord } from './paymentBatches';
-import type { Payout } from './types';
+import type { PayPalPayoutAccount, Payout } from './types';
 
 const payment = {
   bankCountry: 'United States',
@@ -107,6 +110,44 @@ const retrySubmissionSource = {
 };
 
 describe('batch transfer contract', () => {
+  it('validates the target creator account and freezes a different retry provider', () => {
+    const paypal: PayPalPayoutAccount = {
+      id: 'paypal-creator-1', creatorId: 'creator-1', provider: 'PayPal',
+      nickname: 'PayPal 演示账户', isDefault: false, status: 'VERIFIED',
+      paypalUsername: 'synthetic.creator', paypalEmail: 'creator@example.test',
+      payoutAccountId: 'paypal-creator-1', payoutAccountVersion: 'v2',
+      accountFingerprint: 'fp_paypal_v2',
+    };
+    expect(validateRetryExecutionAccount(paypal, 'creator-1', 'PayPal')).toBe('');
+    expect(validateRetryExecutionAccount(paypal, 'creator-2', 'PayPal')).toContain('不属于');
+    expect(validateRetryExecutionAccount(paypal, 'creator-1', 'Airwallex')).toContain('不一致');
+    expect(validateRetryExecutionAccount({ ...paypal, status: 'INVALID' }, 'creator-1', 'PayPal')).toContain('尚未验证');
+    expect(validateRetryExecutionAccount({ ...paypal, paypalEmail: '' }, 'creator-1', 'PayPal')).toContain('不完整');
+    const source = payout({ paymentRequestProjectId: 'request-1' as Payout['paymentRequestProjectId'] });
+    const submission = createMockBatchSubmission({
+      payouts: [source], provider: 'PayPal', fundingAccountId: 'mock-paypal-balance',
+      sourceCurrency: 'USD', ...retrySubmissionSource,
+      executionAccountsByPayoutId: { [source.id]: retryExecutionAccountFor(paypal, 'creator-1') },
+    });
+    expect(submission.items[0]).toMatchObject({
+      provider: 'PayPal', payoutAccountId: 'paypal-creator-1',
+      accountFingerprint: 'fp_paypal_v2', paypalEmail: 'creator@example.test',
+      transferMethod: 'PAYPAL', accountSummary: 'creator@example.test',
+    });
+    expect(source.provider).toBe('Airwallex');
+    expect(source.invoiceSnapshot?.payoutProvider).toBe('Airwallex');
+    const incompleteNewAccount = {
+      ...retryExecutionAccountFor(paypal, 'creator-1').snapshot,
+      payoutProvider: 'Airwallex' as const,
+      transferMethod: 'LOCAL' as const,
+      externalBeneficiaryId: undefined,
+      localClearingSystem: undefined,
+    };
+    expect(validatePayoutForBatch(source, 'Airwallex', source.feeBearer, incompleteNewAccount))
+      .toContain('缺少 Airwallex beneficiary_id');
+    expect(validatePayoutForBatch(source, 'Airwallex', source.feeBearer, incompleteNewAccount))
+      .toContain('LOCAL 付款缺少本地清算方式');
+  });
   it('maps LOCAL and SWIFT fee rules exactly', () => {
     expect(airwallexFeeOptions('LOCAL', 'PUBLISHER')).toEqual({ feePaidBy: 'PAYER' });
     expect(airwallexFeeOptions('SWIFT', 'ADVERTISER')).toEqual({

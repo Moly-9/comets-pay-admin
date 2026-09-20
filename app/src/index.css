@@ -12719,8 +12719,20 @@ button:disabled {
 }
 
 .batch-wizard-table .batch-wizard-col-account {
-  width: 210px;
-  min-width: 210px;
+  width: 220px;
+  min-width: 220px;
+}
+
+.batch-retry-account-select.custom-select-compact {
+  width: 200px;
+  max-width: 100%;
+}
+
+.batch-retry-account-error {
+  display: block;
+  margin-top: 5px;
+  color: #b42318;
+  font-size: 11px;
 }
 
 .batch-wizard-table .batch-wizard-col-validation {
@@ -13021,6 +13033,10 @@ button:disabled {
 
 .batch-inherited-fields dd.mono-cell {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.batch-inherited-fields .custom-select-form {
+  width: 100%;
 }
 
 .validation-summary {

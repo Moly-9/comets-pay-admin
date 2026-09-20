@@ -197,7 +197,7 @@ describe('BatchWizardPage payment failure retries', () => {
     expect(html).toContain('<th class="batch-wizard-col-request">请款编号</th>');
     expect(html).toContain('<th class="batch-wizard-col-amount">请款金额</th>');
     expect(html).toContain('<th class="batch-wizard-col-project">合作项目</th>');
-    expect(html).toContain('<th class="batch-wizard-col-account">银行账号</th>');
+    expect(html).toContain('<th class="batch-wizard-col-account">本次收款账户</th>');
     expect(html).toContain('<th class="batch-wizard-col-validation">账户校验</th>');
     expect(html).toContain('<th class="batch-wizard-col-fee-bearer">手续费承担方</th>');
     expect(html.indexOf('batch-wizard-col-request')).toBeLessThan(html.indexOf('batch-wizard-col-amount'));
@@ -211,6 +211,8 @@ describe('BatchWizardPage payment failure retries', () => {
     expect(html).toContain('原付款批次');
     expect(html).toContain('付款单号');
     expect(html).toContain('支付币种');
+    expect(html).toContain('aria-label="本次付款渠道"');
+    expect(html).toContain('aria-label="Retry Creator 本次收款账户"');
     expect(html).not.toContain('source_currency');
     expect(html).not.toContain('INV-RETRY-1');
   });
@@ -275,5 +277,16 @@ describe('BatchWizardPage payment failure retries', () => {
     expect(batchWizardSelectionScopeIssue({ ...baseRows[1], sourcePaymentBatchId: undefined }, selectedRow))
       .toBe('原付款批次无法唯一确认');
     expect(batchWizardSelectionScopeIssue(baseRows[1], selectedRow)).toBe('');
+  });
+
+  it('retains the original execution account ID for same-channel restoration', () => {
+    const source = sourceBatchFor(['retry-payout'], {
+      items: [{ payoutId: 'retry-payout', paymentStatus: '付款失败', payoutAccountId: 'original-frozen-account' }] as unknown as PaymentBatchRecord['items'],
+    });
+    const [row] = buildBatchWizardRows({
+      payouts: [retryPayout()], requests: [requestProject()], generatedInvoices: [],
+      paymentLists: [], creators: [], paymentBatches: [source],
+    });
+    expect(row.sourcePayoutAccountId).toBe('original-frozen-account');
   });
 });
