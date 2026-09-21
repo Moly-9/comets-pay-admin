@@ -47,34 +47,71 @@
   font-size: 12px;
 }
 
-.payment-confirmation-list {
-  display: grid;
+.payment-confirmation-table-shell {
   margin-top: 14px;
-  gap: 12px;
-}
-
-.payment-confirmation-card {
-  overflow: hidden;
   border: 1px solid #e2e5ea;
   border-radius: 12px;
   background: #fff;
   box-shadow: 0 6px 18px rgb(27 31 39 / 5%);
 }
 
-.payment-confirmation-card > header {
-  display: flex;
-  min-height: 54px;
-  align-items: center;
-  gap: 10px;
-  border-bottom: 1px solid #eceef2;
-  padding: 10px 14px;
+.payment-confirmation-table {
+  width: 100%;
+  table-layout: fixed;
+  border-spacing: 0;
+  color: #20242c;
+  font-size: 12px;
 }
 
-.payment-confirmation-card > header > span {
+.payment-confirmation-col-index { width: 54px; }
+.payment-confirmation-col-identity { width: 15.5%; }
+.payment-confirmation-col-account { width: 15.5%; }
+.payment-confirmation-col-requested { width: 13.5%; }
+.payment-confirmation-col-fee { width: 12%; }
+.payment-confirmation-col-fee-bearer { width: 11%; }
+.payment-confirmation-col-paid { width: 13.5%; }
+.payment-confirmation-col-received { width: 13.5%; }
+
+.payment-confirmation-table th,
+.payment-confirmation-table td {
+  min-width: 0;
+  border-bottom: 1px solid #eceef2;
+  padding: 12px 10px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.payment-confirmation-table th {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  background: #f2f4f7;
+  color: #5f6672;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.payment-confirmation-table th:first-child {
+  border-top-left-radius: 11px;
+}
+
+.payment-confirmation-table th:last-child {
+  border-top-right-radius: 11px;
+}
+
+.payment-confirmation-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.payment-confirmation-table tbody tr:hover td {
+  background: #fafbfc;
+}
+
+.payment-confirmation-index-cell > span {
   display: inline-flex;
   width: 30px;
   height: 30px;
-  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   border-radius: 9px;
@@ -84,58 +121,47 @@
   font-weight: 800;
 }
 
-.payment-confirmation-card > header div {
-  display: grid;
+.payment-confirmation-identity-cell {
+  overflow-wrap: anywhere;
+}
+
+.payment-confirmation-identity-cell > div {
   min-width: 0;
-  gap: 2px;
 }
 
-.payment-confirmation-card > header strong,
-.payment-confirmation-card > header small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.payment-confirmation-identity-cell strong,
+.payment-confirmation-identity-cell small {
+  display: block;
 }
 
-.payment-confirmation-card > header strong {
+.payment-confirmation-identity-cell strong {
   color: #20242c;
-  font-size: 14px;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
-.payment-confirmation-card > header small {
-  color: #747b89;
-  font-size: 11px;
-}
-
-.payment-confirmation-card dl {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  margin: 0;
-  gap: 8px;
-  padding: 12px 14px 14px;
-}
-
-.payment-confirmation-card dl > div {
-  min-width: 0;
-  border: 1px solid #edf0f3;
-  border-radius: 9px;
-  background: #f8f9fb;
-  padding: 10px 11px;
-}
-
-.payment-confirmation-card dt {
+.payment-confirmation-identity-cell small {
+  margin-top: 3px;
   color: #747b89;
   font-size: 11px;
   line-height: 1.35;
 }
 
-.payment-confirmation-card dd {
+.payment-confirmation-account-cell {
   overflow-wrap: anywhere;
-  margin: 5px 0 0;
-  color: #20242c;
-  font-size: 12px;
+  line-height: 1.45;
+}
+
+.payment-confirmation-money-heading,
+.payment-confirmation-money-cell {
+  text-align: right !important;
+}
+
+.payment-confirmation-money-cell {
+  font-variant-numeric: tabular-nums;
   font-weight: 700;
   line-height: 1.45;
+  white-space: nowrap;
 }
 
 .payment-confirmation-footer {
@@ -173,9 +199,76 @@
   min-height: 44px;
 }
 
-@media (max-width: 1000px) {
-  .payment-confirmation-card dl {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+@media (max-width: 760px) {
+  .payment-confirmation-table-shell {
+    border-radius: 10px;
+  }
+
+  .payment-confirmation-table,
+  .payment-confirmation-table tbody,
+  .payment-confirmation-table tr,
+  .payment-confirmation-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .payment-confirmation-table colgroup {
+    display: none;
+  }
+
+  .payment-confirmation-table thead {
+    position: absolute;
+    overflow: hidden;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .payment-confirmation-table tbody tr + tr {
+    border-top: 8px solid #eef0f3;
+  }
+
+  .payment-confirmation-table td {
+    display: grid;
+    grid-template-columns: minmax(92px, 34%) minmax(0, 1fr);
+    align-items: start;
+    gap: 12px;
+    padding: 10px 12px;
+    text-align: left !important;
+  }
+
+  .payment-confirmation-table td::before {
+    content: attr(data-label);
+    color: #747b89;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.45;
+  }
+
+  .payment-confirmation-table tbody tr:last-child td:last-child {
+    border-bottom: 0;
+  }
+
+  .payment-confirmation-table tbody tr:not(:last-child) td:last-child {
+    border-bottom: 0;
+  }
+
+  .payment-confirmation-index-cell {
+    align-items: center !important;
+    background: #fafbfc;
+  }
+
+  .payment-confirmation-index-cell > span {
+    width: 28px;
+    height: 28px;
+  }
+
+  .payment-confirmation-money-cell {
+    white-space: normal;
   }
 }
 
@@ -196,10 +289,6 @@
   .payment-confirmation-dialog .modal-footer {
     padding-right: 14px;
     padding-left: 14px;
-  }
-
-  .payment-confirmation-card dl {
-    grid-template-columns: 1fr;
   }
 
   .payment-confirmation-footer {
