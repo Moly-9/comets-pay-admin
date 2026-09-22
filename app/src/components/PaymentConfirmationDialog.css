@@ -152,8 +152,12 @@
   line-height: 1.45;
 }
 
+.payment-confirmation-money-heading,
 .payment-confirmation-money-cell {
   text-align: right !important;
+}
+
+.payment-confirmation-money-cell {
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   line-height: 1.45;
