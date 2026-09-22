@@ -49,7 +49,6 @@ import {
 } from '../paymentFeeBearerPresentation';
 import {
   DEFAULT_BATCH_FEE_BEARER,
-  formatPaymentPreviewMoney,
   paymentPreviewFor,
 } from '../paymentPreview';
 import { ApprovalTimeline } from './FinanceReviewWorkspace';
@@ -211,7 +210,7 @@ export function PaymentExecutionWorkspace({
   const [downloadingResource, setDownloadingResource] = useState<ProjectPdfArchiveKind | null>(null);
   const [downloadingResourceRecord, setDownloadingResourceRecord] = useState('');
   const [resourceDownloadError, setResourceDownloadError] = useState('');
-  const [paymentConfirmationOpen, setPaymentConfirmationOpen] = useState(false);
+  const [paymentConfirmationRows, setPaymentConfirmationRows] = useState<PaymentConfirmationRow[] | null>(null);
   const overviewFocusRef = useRef<HTMLElement>(null);
   const paymentListFocusRef = useRef<HTMLElement>(null);
   const payablePayouts = project.payouts.filter((payout) => payout.status === '等待付款');
@@ -316,16 +315,8 @@ export function PaymentExecutionWorkspace({
       paymentReason,
       transactionReference,
       feeBearer,
-      preview: paymentPreviewFor({ payout, receiveCurrency, feeBearer }),
     };
   });
-  const confirmationRows: PaymentConfirmationRow[] = executionRows.map(({ payout, preview }) => ({
-    id: payout.id,
-    creatorName: payout.creator,
-    invoiceNumber: payout.invoice,
-    account: accountDisplayValue(payout.account, '账户待补充'),
-    preview,
-  }));
   const paymentCurrencies = [...new Set(project.payouts.map((payout) => payout.currency))].join(' / ') || '待确认';
   const validationReady = accountValidationIssueCount === 0 && project.payouts.length > 0;
   const showOverview = stage === 'overview';
@@ -339,12 +330,18 @@ export function PaymentExecutionWorkspace({
   };
 
   const executePayment = () => {
-    setPaymentConfirmationOpen(true);
+    setPaymentConfirmationRows(executionRows.map(({ payout, receiveCurrency, feeBearer }) => ({
+      id: payout.id,
+      creatorName: payout.creator,
+      invoiceNumber: payout.invoice,
+      account: accountDisplayValue(payout.account, '账户待补充'),
+      preview: paymentPreviewFor({ payout, receiveCurrency, feeBearer }),
+    })));
   };
 
   const confirmPayment = () => {
     if (onExecute(project.payouts)) {
-      setPaymentConfirmationOpen(false);
+      setPaymentConfirmationRows(null);
       onClose();
     }
   };
@@ -513,7 +510,7 @@ export function PaymentExecutionWorkspace({
                   disabledReason={!canExecute ? '当前账号或付款状态不允许执行打款。' : '请先完成付款资料与执行账户校验。'}
                   onClick={executePayment}
                 >
-                  执行打款
+                  测算手续费并打款
                 </Button>
               ) : null}
             </div>
@@ -549,7 +546,7 @@ export function PaymentExecutionWorkspace({
                     disabledReason={!canExecute ? '当前账号或付款状态不允许执行打款。' : '请先完成付款资料与执行账户校验。'}
                     onClick={executePayment}
                   >
-                    执行打款
+                    测算手续费并打款
                   </Button>
                 </>
               ) : null}
@@ -691,7 +688,6 @@ export function PaymentExecutionWorkspace({
                       paymentReason,
                       transactionReference,
                       feeBearer,
-                      preview,
                     }) => {
                       const informationValidated = payout.status === '等待付款';
                       return (
@@ -702,8 +698,8 @@ export function PaymentExecutionWorkspace({
                           <td><span className="payment-execution-currency">{receiveCurrency}</span></td>
                           <td className="payment-execution-amount-cell">{formatPayoutAmount(payout)}</td>
                           <td className="payment-execution-compact-cell" title={paymentFeeBearerDisplayName(feeBearer)}>{paymentFeeBearerDisplayName(feeBearer)}</td>
-                          <td className="payment-execution-amount-cell">{formatPaymentPreviewMoney(preview.channelFeeCurrency, preview.channelFeeAmount)}</td>
-                          <td className="payment-execution-amount-cell">{formatPaymentPreviewMoney(preview.payerFeeCurrency, preview.payerFeeAmount)}</td>
+                          <td className="payment-execution-amount-cell" aria-label="待测算" />
+                          <td className="payment-execution-amount-cell" aria-label="待测算" />
                           <td className="payment-execution-compact-cell" title={paymentReason}>{paymentReason}</td>
                           <td className="payment-execution-compact-cell" title={transactionReference}>{transactionReference}</td>
                           <td><span className={`payment-execution-table-status is-${informationValidated ? 'valid' : 'pending'}`}>{informationValidated ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}{informationValidated ? '已通过' : '待校验'}</span></td>
@@ -925,10 +921,10 @@ export function PaymentExecutionWorkspace({
         </div>
       </Modal>
 
-      {!isReturned && paymentConfirmationOpen ? (
+      {!isReturned && paymentConfirmationRows ? (
         <PaymentConfirmationDialog
-          rows={confirmationRows}
-          onClose={() => setPaymentConfirmationOpen(false)}
+          rows={paymentConfirmationRows}
+          onClose={() => setPaymentConfirmationRows(null)}
           onConfirm={confirmPayment}
         />
       ) : null}

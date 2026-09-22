@@ -93,8 +93,12 @@ describe('PaymentConfirmationDialog', () => {
     const css = readFileSync(new URL('./PaymentConfirmationDialog.css', import.meta.url), 'utf8');
     expect(css).toMatch(/\.payment-confirmation-dialog \.modal-footer \{[\s\S]*?display: flex;[\s\S]*?padding-block: 16px;/);
     expect(css).toMatch(/\.payment-confirmation-table th \{[\s\S]*?position: sticky;[\s\S]*?top: 0;/);
+    expect(css).toMatch(/\.payment-confirmation-table th,[\s\S]*?\.payment-confirmation-table td \{[\s\S]*?text-align: center;/);
+    expect(css).toMatch(/\.payment-confirmation-table th:first-child \{[\s\S]*?padding-left: 20px;/);
+    expect(css).toMatch(/\.payment-confirmation-table td:last-child \{[\s\S]*?padding-right: 20px;/);
+    expect(css).not.toContain('.payment-confirmation-money-heading,\n.payment-confirmation-money-cell');
     expect(css).toMatch(/\.payment-confirmation-money-cell \{[\s\S]*?font-variant-numeric: tabular-nums;/);
-    expect(css).toMatch(/@media \(max-width: 760px\) \{[\s\S]*?\.payment-confirmation-table td \{[\s\S]*?display: grid;[\s\S]*?grid-template-columns:/);
+    expect(css).toMatch(/@media \(max-width: 760px\) \{[\s\S]*?\.payment-confirmation-table td \{[\s\S]*?display: grid;[\s\S]*?grid-template-columns:[\s\S]*?text-align: left !important;/);
     expect(css).toContain('content: attr(data-label);');
   });
 });
