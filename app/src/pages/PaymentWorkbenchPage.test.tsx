@@ -258,7 +258,14 @@ describe('PaymentWorkbenchPage currency overview', () => {
       status: '部分失败',
       actionLabel: '处理失败',
       payouts: expect.arrayContaining([
-        expect.objectContaining({ id: 'payout_fixture_15_01', status: '付款失败' }),
+        expect.objectContaining({
+          id: 'payout_fixture_15_01',
+          status: '付款失败',
+          paymentFailureRecovery: expect.objectContaining({
+            status: 'READY_FOR_RETRY',
+            readyReason: 'ACCOUNT_UNCHANGED',
+          }),
+        }),
         expect.objectContaining({ id: 'payout_fixture_15_02', status: '已付款' }),
         expect.objectContaining({ id: 'payout_fixture_15_03', status: '已付款' }),
       ]),

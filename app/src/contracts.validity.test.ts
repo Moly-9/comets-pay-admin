@@ -150,6 +150,8 @@ describe('contract validity', () => {
       expect(contract.extractionStage).toBe('review');
       expect(contract.recognitionResults?.length).toBeGreaterThan(0);
       expect(contract.issues.some((issue) => issue.id === 'recognition-review')).toBe(true);
+      expect(contract.generationSnapshot?.totalFee).toBe('');
+      expect(contract.totalFee).toBeNull();
     });
 
     const uploads = CONTRACT_MANAGEMENT_DEMO_CONTRACTS.filter((contract) => (

@@ -88,7 +88,7 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html.indexOf('请款项目信息')).toBeLessThan(html.indexOf('当前审批流'));
     expect(html).toContain('付款信息已完成校验，可直接执行打款；也可先查看付款清单逐笔确认。');
     expect(html).toContain('>查看付款清单</span>');
-    expect(html).toContain('>执行打款</span>');
+    expect(html).toContain('>测算手续费并打款</span>');
     expect(html).toContain('>关闭</span>');
     expect(html).not.toContain('class="payment-execution-table"');
     expect(html).not.toContain('payment-execution-return-action');
@@ -142,7 +142,9 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).toContain('aria-label="校验结果"');
     expect(html).toContain('tabindex="-1"');
     expect(html).toContain('class="payment-execution-table"');
-    expect(html).toContain('<th>达人名称</th><th>收款账户</th><th>支付币种</th><th>收款方币种</th><th>金额</th><th>手续费承担方</th><th>付款原因</th><th>交易附言</th><th>校验状态</th>');
+    expect(html).toContain('<th>达人名称</th><th>收款账户</th><th>支付币种</th><th>收款方币种</th><th>请款金额</th><th>手续费承担方</th><th>付款原因</th><th>交易附言</th><th>校验状态</th>');
+    expect(html).not.toContain('<th>渠道手续费</th>');
+    expect(html).not.toContain('<th>我方支付手续费</th>');
     expect(html).toContain(project.payouts[0].creator);
     expect(html).toContain(`${project.requestCode}-01`);
     expect(html).toContain(`>${project.payouts[0].currency}</span>`);
@@ -166,8 +168,12 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).toContain('>待打款</span>');
     expect(html).toContain('>返回项目</span>');
     expect(html).toContain('>退回媒介修改</span>');
-    expect(html).toContain('>执行打款</span>');
+    expect(html).toContain('>测算手续费并打款</span>');
     expect(html).toMatch(/class="button button-primary payment-execution-submit-action"(?![^>]*disabled)/);
+    const styles = readFileSync(new URL('./PaymentExecutionWorkspace.css', import.meta.url), 'utf8');
+    expect(styles).toContain('min-width: 1360px;');
+    expect(styles).not.toContain('col.is-channel-fee');
+    expect(styles).not.toContain('col.is-payer-fee');
   });
 
   it('uses the same soft system surfaces in payment, returned, and execution summaries', () => {
@@ -185,6 +191,18 @@ describe('PaymentExecutionWorkspace', () => {
     expect(styles).toContain('linear-gradient(125deg, #fff9ea 0%, #fff2df 100%)');
     expect(styles).toMatch(/\.payment-execution-hero-summary span\s*{[^}]*color:\s*#747b89;/s);
     expect(styles).toMatch(/\.payment-execution-hero-summary strong\s*{[^}]*color:\s*#20242c;/s);
+  });
+
+  it('gates both execution entry points behind the shared confirmation dialog', () => {
+    const source = readFileSync(new URL('./PaymentExecutionWorkspace.tsx', import.meta.url), 'utf8');
+
+    expect(source).toContain('setPaymentConfirmationRows(executionRows.map');
+    expect(source).toContain('preview: paymentPreviewFor({ payout, receiveCurrency, feeBearer })');
+    expect(source).toContain('<PaymentConfirmationDialog');
+    expect(source).toContain('rows={paymentConfirmationRows}');
+    expect(source).toContain('onClose={() => setPaymentConfirmationRows(null)}');
+    expect(source).toContain('onConfirm={confirmPayment}');
+    expect(source).toContain('if (onExecute(project.payouts))');
   });
 
   it('treats every waiting-payment item as validated and blocks items outside that state', () => {
@@ -253,7 +271,7 @@ describe('PaymentExecutionWorkspace', () => {
       />,
     );
 
-    expect(html).toContain('>执行打款</span>');
+    expect(html).toContain('>测算手续费并打款</span>');
     expect(html).toMatch(/class="button button-primary payment-execution-overview-submit-action"[^>]*aria-disabled="true"/);
     expect(html).toContain('data-disabled-reason="请先完成付款资料与执行账户校验。"');
   });

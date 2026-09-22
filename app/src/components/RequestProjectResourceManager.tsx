@@ -53,7 +53,7 @@ import {
   requestApprovalReturnItemForPaymentListEdit,
 } from '../requestApprovalWorkflow';
 import type { CreatorProfile, GeneratedInvoiceRecord, Payout } from '../types';
-import { Avatar, Button, ListActionButton, Modal, NoticeBanner } from './Common';
+import { AmountInput, Avatar, Button, ListActionButton, Modal, NoticeBanner } from './Common';
 import { PaymentListEditor } from './PaymentListEditor';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
 import { CreatorIdentity } from './CreatorIdentity';
@@ -1091,7 +1091,7 @@ export function RequestProjectResourceManager({
                             </dl>
                           ) : (
                             <div className="payment-list-inline-form">
-                              <label>付款金额<input aria-label="行内编辑付款金额" type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'amount', Number(event.target.value))} /></label>
+                              <label>付款金额<AmountInput aria-label="行内编辑付款金额" min={0} value={paymentListItemValue(item, 'amount')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'amount', Number(event.target.value))} /></label>
                               <label>支付币种<select aria-label="行内编辑支付币种" value={String(paymentListItemValue(item, 'currency'))} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'currency', event.target.value)}>{PAYMENT_CURRENCY_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
                               <label>收款币种<select aria-label="行内编辑收款币种" value={String(paymentListItemValue(item, 'receiveCurrency'))} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'receiveCurrency', event.target.value)}>{PAYMENT_CURRENCY_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
                               <label>手续费承担方<select aria-label="行内编辑手续费承担方" value={String(paymentListItemValue(item, 'feeBearer') || '')} onChange={(event) => onUpdatePaymentItem(list.paymentListId, item.invoiceId, 'feeBearer', event.target.value)}><option value="">请选择</option><option value="ADVERTISER">付款方承担</option><option value="PUBLISHER">收款方承担</option><option value="SHARED">各自承担</option></select></label>

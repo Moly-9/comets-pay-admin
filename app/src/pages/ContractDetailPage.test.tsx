@@ -19,10 +19,13 @@ import {
   contractPaymentFieldsFor,
   contractRecognitionKeysToConfirm,
   contractExpiryDisplayValue,
+  generatedContractPaymentFieldsFor,
   contractSignaturePaymentInformationFor,
   contractSignatureStatusLabel,
   contractSummaryFieldsFor,
 } from './ContractDetailPage';
+
+const contractDetailSource = readFileSync(new URL('./ContractDetailPage.tsx', import.meta.url), 'utf8');
 
 const source: ContractSourceLocation = {
   documentId: 'contract-detail-test-document',
@@ -74,11 +77,9 @@ const paymentSnapshot = (
 
 describe('ContractDetailPage expiry presentation', () => {
   it('supports a request-scoped read-only contract detail', () => {
-    const detailSource = readFileSync(new URL('./ContractDetailPage.tsx', import.meta.url), 'utf8');
-
-    expect(detailSource).toContain('canEdit = true');
-    expect(detailSource).toContain('const canEditCurrentContract = canEdit && (!contract.isTemplate || canEditTemplate)');
-    expect(detailSource).toContain("recognitionLocked={recognitionApplied || !canEditCurrentContract || contract.lifecycle === 'SENT_FOR_SIGNATURE'}");
+    expect(contractDetailSource).toContain('canEdit = true');
+    expect(contractDetailSource).toContain('const canEditCurrentContract = canEdit && (!contract.isTemplate || canEditTemplate)');
+    expect(contractDetailSource).toContain("recognitionLocked={recognitionApplied || !canEditCurrentContract || contract.lifecycle === 'SENT_FOR_SIGNATURE'}");
   });
 
   it.each(['INDEPENDENT', 'FRAMEWORK', 'IO'] as ContractType[])('shows expiry and derived signature status for %s', (contractType) => {
@@ -88,6 +89,92 @@ describe('ContractDetailPage expiry presentation', () => {
     expect(fields).toContainEqual({ key: 'signatureStatus', label: '签署状态' });
     expect(fields.some((field) => field.key === 'campaignPeriod')).toBe(false);
     expect(fields.some((field) => field.key === 'effectiveDate')).toBe(false);
+  });
+
+  it('splits the optional social platform and channel link in applicable formal summaries', () => {
+    expect(contractSummaryFieldsFor('INDEPENDENT')).toEqual(expect.arrayContaining([
+      { key: 'socialPlatform', label: '社媒平台（可选）' },
+      { key: 'channelLink', label: '频道链接（可选）' },
+    ]));
+    expect(contractSummaryFieldsFor('IO')).toEqual(expect.arrayContaining([
+      { key: 'socialPlatform', label: '社媒平台（可选）' },
+      { key: 'channelLink', label: '频道链接（可选）' },
+    ]));
+    expect(contractSummaryFieldsFor('FRAMEWORK').some((field) => (
+      field.key === 'socialPlatform' || field.key === 'channelLink'
+    ))).toBe(false);
+  });
+
+  it('hides only the generated amount row when the generation snapshot has no valid amount', () => {
+    const fields = contractPaymentFieldsFor('INDEPENDENT');
+    const withoutAmount = {
+      generationSnapshot: { totalFee: '' } as ContractRecord['generationSnapshot'],
+    };
+    const withAmount = {
+      generationSnapshot: { totalFee: '3600' } as ContractRecord['generationSnapshot'],
+    };
+
+    expect(generatedContractPaymentFieldsFor(withoutAmount, fields)).toEqual([
+      { key: 'paymentMethod', label: '付款渠道' },
+      { key: 'transferFee', label: '手续费费用承担方' },
+    ]);
+    expect(generatedContractPaymentFieldsFor(withAmount, fields)).toEqual(fields);
+  });
+
+  it('uses structured controls for recognized money and transfer-fee fields', () => {
+    expect(contractDetailSource).toContain('ariaLabel="合同金额币种"');
+    expect(contractDetailSource).toContain('aria-label="合同金额"');
+    expect(contractDetailSource).toContain("{ value: 'ADVERTISER', label: '我方承担' }");
+    expect(contractDetailSource).toContain("{ value: 'PUBLISHER', label: '对方承担' }");
+    expect(contractDetailSource).toContain("{ value: 'SHARED', label: '双方各自承担' }");
+  });
+
+  it('renders one grouped recognition result as platform and channel-link controls', () => {
+    const platformChannel = {
+      ...recognitionField('platformChannel', 'YouTube · https://youtube.com/@sample', {
+        platform: 'YouTube',
+        channelName: '@sample',
+        handle: '@sample',
+        channelUrl: 'https://youtube.com/@sample',
+      }),
+      status: 'detected' as const,
+    };
+    const contract = {
+      ...INITIAL_CONTRACTS[0],
+      contractType: 'INDEPENDENT' as const,
+      lifecycle: 'UPLOADED_PENDING_CONFIRMATION' as const,
+      extractionStage: 'review' as const,
+      recognitionAppliedAt: undefined,
+      recognitionResults: [platformChannel],
+    } satisfies ContractRecord;
+
+    const html = renderToStaticMarkup(
+      <ContractDetailPage contract={contract} onBack={() => undefined} notify={() => undefined} />,
+    );
+
+    expect(html).toContain('aria-label="社媒平台"');
+    expect(html).toContain('aria-label="频道链接"');
+    expect(contractDetailSource).toMatch(/YouTube[\s\S]*TikTok[\s\S]*Twitch[\s\S]*Instagram[\s\S]*Face Book[\s\S]*X[\s\S]*SOOP[\s\S]*CHZZK/);
+    expect(html).not.toContain('aria-label="平台 / 频道"');
+  });
+
+  it('keeps the formal platform and channel link split after recognition is applied', () => {
+    const contract = {
+      ...INITIAL_CONTRACTS[0],
+      contractType: 'INDEPENDENT' as const,
+      platform: 'Twitch',
+      channelLink: 'https://twitch.tv/sample',
+      recognitionAppliedAt: '2026-09-22T08:00:00.000Z',
+    } satisfies ContractRecord;
+
+    const html = renderToStaticMarkup(
+      <ContractDetailPage contract={contract} onBack={() => undefined} notify={() => undefined} />,
+    );
+
+    expect(html).toContain('社媒平台（可选）');
+    expect(html).toContain('频道链接（可选）');
+    expect(html).toContain('href="https://twitch.tv/sample"');
+    expect(html).not.toContain('查看达人社媒账号主页');
   });
 
   it('uses the same formal campaignEnd and long-term rules as contract-list validity', () => {

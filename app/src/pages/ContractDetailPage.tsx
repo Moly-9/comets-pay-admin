@@ -21,8 +21,7 @@ import {
 } from 'lucide-react';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { accountDisplayValue } from '../accountPresentation';
-import { formatCreatorHandle } from '../creatorSearchOptions';
-import { Button, Modal, PageHeading, SelectField } from '../components/Common';
+import { AmountInput, Button, Modal, PageHeading, SelectField } from '../components/Common';
 import { ContractUploadWizard } from '../components/ContractUploadWizard';
 import { ContractDocumentView } from '../components/ContractDocumentView';
 import { ContractTemplateFieldEditor } from '../components/ContractTemplateFieldEditor';
@@ -30,7 +29,10 @@ import {
   canConfirmRecognitionFields,
   confirmRecognitionFields,
   contractExpiryRangeValidationMessage,
+  contractRecognitionMoneyValidationMessage,
   editContractExpiryRange,
+  editContractRecognitionMoney,
+  editPlatformChannelRecognitionField,
   editRecognitionField,
   isContractExpiryRangeValid,
   normalizeContractRecognitionFields,
@@ -76,6 +78,7 @@ import { resolveSystemUser } from '../data';
 import type { ContractId } from '../businessWorkflow';
 import type { PaymentRequestProjectLike } from '../paymentRequestProjects';
 import { normalizePaymentProviderName, paymentProviderDisplayName } from '../paymentProviderPresentation';
+import { PAYMENT_CURRENCY_OPTIONS } from '../paymentCurrencies';
 import { invoicePaymentForCreator } from '../payoutAccounts';
 import type { CreatorProfile, DocumentPayoutSnapshot } from '../types';
 import type { ProjectSummary } from './ProjectDetailPage';
@@ -89,8 +92,10 @@ import {
 type ContractDetailTab = 'summary' | 'payment' | 'checks';
 type Notify = (title: string, message: string) => void;
 
+type ContractDetailFieldKey = ContractFieldKey | 'campaignEnd' | 'socialPlatform' | 'channelLink';
+
 type ContractDetailField = {
-  key: ContractFieldKey | 'campaignEnd';
+  key: ContractDetailFieldKey;
   label: string;
 };
 
@@ -106,7 +111,7 @@ type ContractPaymentField = {
 
 const isRecognitionFieldKey = (
   key: ContractDetailField['key'],
-): key is ContractFieldKey => key !== 'campaignEnd';
+): key is ContractFieldKey => !['campaignEnd', 'socialPlatform', 'channelLink'].includes(key);
 
 const recognitionFieldHasValue = (field: ContractRecognitionField | undefined) => Boolean(
   field && (field.editedValue?.trim() || field.rawValue.trim()),
@@ -128,7 +133,8 @@ const SUMMARY_FIELDS_BY_TYPE: Record<ContractType, ContractDetailField[]> = {
     { key: 'publisher', label: 'Publisher' },
     { key: 'contractNumber', label: '合同编号' },
     { key: 'projectBrand', label: 'Project Name' },
-    { key: 'platformChannel', label: '平台 / 频道（可选）' },
+    { key: 'socialPlatform', label: '社媒平台（可选）' },
+    { key: 'channelLink', label: '频道链接（可选）' },
     { key: 'campaignEnd', label: '合同有效期' },
     { key: 'signatureStatus', label: '签署状态' },
   ],
@@ -144,7 +150,8 @@ const SUMMARY_FIELDS_BY_TYPE: Record<ContractType, ContractDetailField[]> = {
     { key: 'publisher', label: 'Publisher' },
     { key: 'contractNumber', label: '合同编号' },
     { key: 'projectBrand', label: 'Project Name' },
-    { key: 'platformChannel', label: '平台 / 频道（可选）' },
+    { key: 'socialPlatform', label: '社媒平台（可选）' },
+    { key: 'channelLink', label: '频道链接（可选）' },
     { key: 'campaignEnd', label: '合同有效期' },
     { key: 'signatureStatus', label: '签署状态' },
   ],
@@ -172,6 +179,19 @@ const PAYMENT_FIELDS_BY_TYPE: Record<ContractType, ContractPaymentField[]> = {
 export const contractPaymentFieldsFor = (contractType: ContractType) => (
   PAYMENT_FIELDS_BY_TYPE[contractType]
 );
+
+export const generatedContractPaymentFieldsFor = (
+  contract: Pick<ContractRecord, 'generationSnapshot'>,
+  fields: ContractPaymentField[],
+) => {
+  const generatedAmount = Number(contract.generationSnapshot?.totalFee.trim() ?? '');
+  const hasGeneratedAmount = Boolean(contract.generationSnapshot?.totalFee.trim())
+    && Number.isFinite(generatedAmount)
+    && generatedAmount > 0;
+  return hasGeneratedAmount
+    ? fields
+    : fields.filter((field) => field.key !== 'projectTotalFees');
+};
 
 const DETAIL_FIELD_LABELS: Partial<Record<ContractFieldKey, string>> = Object.fromEntries(
   [...SUMMARY_FIELDS_BY_TYPE.INDEPENDENT, ...PAYMENT_FIELDS_BY_TYPE.INDEPENDENT]
@@ -201,11 +221,17 @@ export const contractSignatureStatusLabel = (
 };
 
 const FEE_BEARER_LABELS = {
-  ADVERTISER: 'Advertiser承担',
-  PUBLISHER: 'Publisher承担',
-  SHARED: '双方共同承担',
+  ADVERTISER: '我方承担',
+  PUBLISHER: '对方承担',
+  SHARED: '双方各自承担',
   '': '待选择',
 } as const;
+
+const CONTRACT_TRANSFER_FEE_OPTIONS = [
+  { value: 'ADVERTISER', label: '我方承担' },
+  { value: 'PUBLISHER', label: '对方承担' },
+  { value: 'SHARED', label: '双方各自承担' },
+] as const;
 
 const PAYMENT_METHOD_LABELS = {
   BANK: '银行转账',
@@ -377,6 +403,17 @@ const FIELD_STATUS_LABELS = {
   confirmed: '已确认',
 } as const;
 
+const CONTRACT_SOCIAL_PLATFORM_OPTIONS = [
+  { value: 'YouTube', label: 'YouTube' },
+  { value: 'TikTok', label: 'TikTok' },
+  { value: 'Twitch', label: 'Twitch' },
+  { value: 'Instagram', label: 'Instagram' },
+  { value: 'Facebook', label: 'Face Book' },
+  { value: 'X', label: 'X' },
+  { value: 'SOOP', label: 'SOOP' },
+  { value: 'CHZZK', label: 'CHZZK' },
+] as const;
+
 const sourceLabel = (source: ContractSourceLocation | null) => {
   if (!source) return '未找到可靠来源';
   const documentLabel = source.documentId === 'system-contract'
@@ -405,10 +442,8 @@ function ContractDefinitionList({
       case 'publisher': return contract.publisher || '待补充';
       case 'contractNumber': return contract.id;
       case 'projectBrand': return projectName || '待补充';
-      case 'platformChannel': return formatCreatorHandle(
-        contract.creatorHandle ?? contract.channelName,
-        contract.creatorPlatform ?? contract.platform,
-      );
+      case 'socialPlatform': return contract.platform || contract.creatorPlatform || '待补充';
+      case 'channelLink': return contract.channelLink || '待补充';
       case 'campaignEnd': return contractExpiryDisplayValue(contract);
       case 'signatureStatus': return contractSignatureStatusLabel(contract);
       case 'effectiveDate': return contract.effectiveDate || '待补充';
@@ -421,7 +456,12 @@ function ContractDefinitionList({
         <div key={field.key}>
           <dt>{field.label}</dt>
           <dd>
-            {valueFor(field.key)}
+            {field.key === 'channelLink' && contract.channelLink ? (
+              <a className="contract-definition-link" href={contract.channelLink} target="_blank" rel="noreferrer">
+                {contract.channelLink}
+                <ExternalLink size={12} />
+              </a>
+            ) : valueFor(field.key)}
             <small>{field.key === 'contractNumber'
               ? '系统字段'
               : field.key === 'signatureStatus'
@@ -483,6 +523,8 @@ function RecognitionFieldList({
   fieldKeys,
   onChange,
   onChangeExpiry,
+  onChangeMoney,
+  onChangePlatformChannel,
   onSelectCandidate,
   onOpenSource,
   fieldLabels = {},
@@ -492,6 +534,8 @@ function RecognitionFieldList({
   fieldKeys: ContractFieldKey[];
   onChange: (fieldKey: ContractFieldKey, value: string) => void;
   onChangeExpiry: (startDate: string, endDate: string) => void;
+  onChangeMoney: (patch: { currency?: string; amount?: number | null }) => void;
+  onChangePlatformChannel: (patch: { platform?: string; channelUrl?: string }) => void;
   onSelectCandidate: (fieldKey: ContractFieldKey, candidate: ContractFieldCandidate) => void;
   onOpenSource: (source: ContractSourceLocation) => void;
   fieldLabels?: Partial<Record<ContractFieldKey, string>>;
@@ -519,13 +563,131 @@ function RecognitionFieldList({
         const expiryError = field.fieldKey === 'contractExpiry'
           ? contractExpiryRangeValidationMessage(field.normalizedValue)
           : '';
+        const moneyValue = field.fieldKey === 'projectTotalFees'
+          && field.normalizedValue
+          && typeof field.normalizedValue === 'object'
+          ? field.normalizedValue as { amount?: number | null; currency?: string }
+          : undefined;
+        const moneyCurrency = moneyValue?.currency?.trim().toUpperCase() ?? '';
+        const moneyAmount = typeof moneyValue?.amount === 'number' && Number.isFinite(moneyValue.amount)
+          ? String(moneyValue.amount)
+          : '';
+        const moneyError = field.fieldKey === 'projectTotalFees'
+          ? contractRecognitionMoneyValidationMessage(field.normalizedValue)
+          : '';
+        const moneyCurrencyOptions = moneyCurrency
+          && !PAYMENT_CURRENCY_OPTIONS.some((option) => option.value === moneyCurrency)
+          ? [{ value: moneyCurrency, label: moneyCurrency, description: '合同识别币种' }, ...PAYMENT_CURRENCY_OPTIONS]
+          : PAYMENT_CURRENCY_OPTIONS;
+        const transferFeeValue = field.fieldKey === 'transferFee'
+          && typeof field.normalizedValue === 'string'
+          && ['ADVERTISER', 'PUBLISHER', 'SHARED'].includes(field.normalizedValue)
+          ? field.normalizedValue
+          : '';
+        const platformChannelValue = field.fieldKey === 'platformChannel'
+          && field.normalizedValue
+          && typeof field.normalizedValue === 'object'
+          ? field.normalizedValue as { platform?: string; channelUrl?: string }
+          : undefined;
+        const socialPlatform = platformChannelValue?.platform === 'Face Book'
+          ? 'Facebook'
+          : platformChannelValue?.platform?.trim() ?? '';
+        const channelUrl = platformChannelValue?.channelUrl?.trim() ?? '';
+        const fieldMetadata = (
+          <>
+            {field.source ? (
+              <button className="contract-recognition-source" type="button" onClick={() => onOpenSource(field.source!)}>
+                <FileSearch size={12} />
+                {sourceLabel(field.source)}
+              </button>
+            ) : <small className="contract-recognition-missing-source">未识别，需人工补充</small>}
+            {field.status === 'conflict' && field.candidates.length > 1 ? (
+              <div className="contract-recognition-candidates">
+                <strong><AlertTriangle size={13} />发现多个候选，请选择后确认</strong>
+                {field.candidates.map((candidate, index) => (
+                  <button type="button" key={`${candidate.source.blockId}-${index}`} onClick={() => onSelectCandidate(field.fieldKey, candidate)}>
+                    <span>{candidate.rawValue}</span>
+                    <small>{sourceLabel(candidate.source)}</small>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {field.profileComparison?.status === 'conflict' ? (
+              <div className="contract-recognition-profile-conflict">
+                <AlertTriangle size={13} />
+                <span>与达人档案账户不一致：{field.profileComparison.referenceLabels.join('、')}。合同值仅用于比对，不会覆盖达人档案。</span>
+              </div>
+            ) : null}
+          </>
+        );
         return (
           <Fragment key={field.fieldKey}>
             <article
-              className={`contract-recognition-detail contract-recognition-field-${field.status}${fieldLocked ? ' contract-recognition-detail-readonly' : ''}`}
+              className={`contract-recognition-detail contract-recognition-field-${field.status}${field.fieldKey === 'platformChannel' ? ' contract-recognition-platform-channel-detail' : ''}${field.fieldKey === 'projectTotalFees' ? ' contract-recognition-money-detail' : ''}${fieldLocked ? ' contract-recognition-detail-readonly' : ''}`}
             >
-              <div className="contract-recognition-label">{fieldLabels[field.fieldKey] ?? field.label}</div>
-              <div className="contract-recognition-value">
+              {field.fieldKey === 'platformChannel' ? (
+                <div className="contract-recognition-platform-channel-fields">
+                  <label>
+                    <span className="contract-recognition-label">社媒平台</span>
+                    <SelectField<string>
+                      ariaLabel="社媒平台"
+                      variant="form"
+                      menuStrategy="fixed"
+                      value={socialPlatform}
+                      placeholder="待选择"
+                      options={CONTRACT_SOCIAL_PLATFORM_OPTIONS}
+                      disabled={fieldLocked}
+                      onChange={(value) => onChangePlatformChannel({ platform: value })}
+                    />
+                  </label>
+                  <label>
+                    <span className="contract-recognition-label">频道链接</span>
+                    <input
+                      aria-label="频道链接"
+                      value={channelUrl}
+                      placeholder="待补充"
+                      readOnly={fieldLocked}
+                      onChange={(event) => onChangePlatformChannel({ channelUrl: event.target.value })}
+                    />
+                  </label>
+                  <div className="contract-recognition-platform-channel-meta">{fieldMetadata}</div>
+                </div>
+              ) : field.fieldKey === 'projectTotalFees' ? (
+                <div className="contract-recognition-money-fields">
+                  <label>
+                    <span className="contract-recognition-label">币种</span>
+                    <SelectField<string>
+                      ariaLabel="合同金额币种"
+                      variant="form"
+                      menuStrategy="fixed"
+                      value={moneyCurrency}
+                      placeholder="待选择"
+                      options={moneyCurrencyOptions}
+                      disabled={fieldLocked}
+                      onChange={(value) => onChangeMoney({ currency: value })}
+                    />
+                  </label>
+                  <label>
+                    <span className="contract-recognition-label">金额</span>
+                    <AmountInput
+                      aria-label="合同金额"
+                      min={0.01}
+                      value={moneyAmount}
+                      placeholder="待补充"
+                      readOnly={fieldLocked}
+                      aria-invalid={Boolean(moneyError)}
+                      onChange={(event) => onChangeMoney({
+                        amount: event.target.value === '' ? null : Number(event.target.value),
+                      })}
+                    />
+                  </label>
+                  {moneyError ? <small className="contract-recognition-money-error" role="alert">{moneyError}</small> : null}
+                  <div className="contract-recognition-money-meta">{fieldMetadata}</div>
+                </div>
+              ) : (
+                <>
+                  <div className="contract-recognition-label">{fieldLabels[field.fieldKey] ?? field.label}</div>
+                  <div className="contract-recognition-value">
                 {field.fieldKey === 'signatureStatus' ? (
                   <select
                     aria-label={fieldLabels[field.fieldKey] ?? field.label}
@@ -564,6 +726,17 @@ function RecognitionFieldList({
                     </label>
                     {expiryError ? <small className="contract-expiry-error" role="alert">{expiryError}</small> : null}
                   </div>
+                ) : field.fieldKey === 'transferFee' ? (
+                  <SelectField<string>
+                    ariaLabel={fieldLabels[field.fieldKey] ?? field.label}
+                    variant="form"
+                    menuStrategy="fixed"
+                    value={transferFeeValue}
+                    placeholder="待选择"
+                    options={CONTRACT_TRANSFER_FEE_OPTIONS}
+                    disabled={fieldLocked}
+                    onChange={(value) => onChange(field.fieldKey, value)}
+                  />
                 ) : (
                   <input
                     aria-label={fieldLabels[field.fieldKey] ?? field.label}
@@ -573,30 +746,10 @@ function RecognitionFieldList({
                     onChange={(event) => onChange(field.fieldKey, event.target.value)}
                   />
                 )}
-                {field.source ? (
-                  <button className="contract-recognition-source" type="button" onClick={() => onOpenSource(field.source!)}>
-                    <FileSearch size={12} />
-                    {sourceLabel(field.source)}
-                  </button>
-                ) : <small className="contract-recognition-missing-source">未识别，需人工补充</small>}
-                {field.status === 'conflict' && field.candidates.length > 1 ? (
-                  <div className="contract-recognition-candidates">
-                    <strong><AlertTriangle size={13} />发现多个候选，请选择后确认</strong>
-                    {field.candidates.map((candidate, index) => (
-                      <button type="button" key={`${candidate.source.blockId}-${index}`} onClick={() => onSelectCandidate(field.fieldKey, candidate)}>
-                        <span>{candidate.rawValue}</span>
-                        <small>{sourceLabel(candidate.source)}</small>
-                      </button>
-                    ))}
+                    {fieldMetadata}
                   </div>
-                ) : null}
-                {field.profileComparison?.status === 'conflict' ? (
-                  <div className="contract-recognition-profile-conflict">
-                    <AlertTriangle size={13} />
-                    <span>与达人档案账户不一致：{field.profileComparison.referenceLabels.join('、')}。合同值仅用于比对，不会覆盖达人档案。</span>
-                  </div>
-                ) : null}
-              </div>
+                </>
+              )}
               <div className="contract-recognition-actions">
                 <span className="contract-recognition-status">{field.readOnly ? '系统生成' : FIELD_STATUS_LABELS[field.status]}</span>
               </div>
@@ -848,6 +1001,17 @@ export function ContractDetailPage({
     contract.uploadedFromDraftId
     && contract.lifecycle === 'UPLOADED_PENDING_CONFIRMATION',
   );
+  const generatedPaymentFields = generatedContractPaymentFieldsFor(contract, paymentFields);
+  const generatedAmount = Number(contract.generationSnapshot?.totalFee.trim() ?? '');
+  const generatedPaymentContract: ContractRecord = {
+    ...contract,
+    currency: contract.generationSnapshot?.currency ?? contract.currency,
+    totalFee: contract.generationSnapshot?.totalFee.trim()
+      && Number.isFinite(generatedAmount)
+      && generatedAmount > 0
+      ? generatedAmount
+      : null,
+  };
   const frameworkContracts = contracts.filter((candidate) => (
     isFrameworkContract(candidate)
     && candidate.contractId
@@ -935,6 +1099,24 @@ export function ContractDetailPage({
     setDraftFields((current) => current.map((field) => (
       field.fieldKey === 'contractExpiry'
         ? editContractExpiryRange(field, startDate, endDate)
+        : field
+    )));
+  };
+
+  const updateContractMoney = (patch: { currency?: string; amount?: number | null }) => {
+    if (!canEditCurrentContract || contract.lifecycle === 'SENT_FOR_SIGNATURE') return;
+    setDraftFields((current) => current.map((field) => (
+      field.fieldKey === 'projectTotalFees'
+        ? editContractRecognitionMoney(field, patch)
+        : field
+    )));
+  };
+
+  const updatePlatformChannel = (patch: { platform?: string; channelUrl?: string }) => {
+    if (!canEditCurrentContract || contract.lifecycle === 'SENT_FOR_SIGNATURE') return;
+    setDraftFields((current) => current.map((field) => (
+      field.fieldKey === 'platformChannel'
+        ? editPlatformChannelRecognitionField(field, patch)
         : field
     )));
   };
@@ -1424,6 +1606,8 @@ export function ContractDetailPage({
                     fieldKeys={summaryFieldKeys}
                     onChange={updateField}
                     onChangeExpiry={updateContractExpiry}
+                    onChangeMoney={updateContractMoney}
+                    onChangePlatformChannel={updatePlatformChannel}
                     onSelectCandidate={selectCandidate}
                     onOpenSource={openSource}
                     fieldLabels={usesModernUploadRecognition ? {} : DETAIL_FIELD_LABELS}
@@ -1437,7 +1621,6 @@ export function ContractDetailPage({
                     formalFieldsHidden={contract.lifecycle === 'GENERATED_DRAFT'}
                   />
                 )}
-                {contract.channelLink && contract.lifecycle !== 'GENERATED_DRAFT' ? <a className="contract-channel-link" href={contract.channelLink} target="_blank" rel="noreferrer"><ExternalLink size={15} />查看达人社媒账号主页</a> : null}
               </>
             ) : null}
 
@@ -1474,7 +1657,7 @@ export function ContractDetailPage({
                       <strong>生成合同付款快照</strong>
                       <small>回传文件人工确认前，以生成合同中的付款与 Invoice 信息为准</small>
                     </div>
-                    <ContractPaymentList contract={contract} fields={paymentFields} paymentSnapshot={paymentSnapshot} />
+                    <ContractPaymentList contract={generatedPaymentContract} fields={generatedPaymentFields} paymentSnapshot={paymentSnapshot} />
                   </div>
                 ) : null}
                 {hasRecognition ? (
@@ -1485,6 +1668,8 @@ export function ContractDetailPage({
                       fieldKeys={paymentFieldKeys}
                       onChange={updateField}
                       onChangeExpiry={updateContractExpiry}
+                      onChangeMoney={updateContractMoney}
+                      onChangePlatformChannel={updatePlatformChannel}
                       onSelectCandidate={selectCandidate}
                       onOpenSource={openSource}
                       fieldLabels={usesModernUploadRecognition ? {} : DETAIL_FIELD_LABELS}

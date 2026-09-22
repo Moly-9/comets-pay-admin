@@ -4,7 +4,10 @@ import {
   confirmRecognitionField,
   confirmRecognitionFields,
   contractExpiryRangeValidationMessage,
+  contractRecognitionMoneyValidationMessage,
   editContractExpiryRange,
+  editContractRecognitionMoney,
+  editPlatformChannelRecognitionField,
   editRecognitionField,
   normalizeCampaignPeriod,
   normalizeContractRecognitionFields,
@@ -81,9 +84,94 @@ describe('contract field recognition', () => {
       handle: '',
       channelUrl: 'https://youtube.com/@LeaPlayFR',
     });
+    expect(results.find((item) => item.fieldKey === 'platformChannel')?.rawValue)
+      .toBe('YouTube · https://youtube.com/@LeaPlayFR');
     expect(results.find((item) => item.fieldKey === 'campaignPeriod')?.normalizedValue).toEqual({
       startDate: '2026-08-01',
       endDate: '2026-08-31',
+    });
+  });
+
+  it('edits social platform and channel URL independently in one recognition field', () => {
+    const io = documentFixture('channel-edit', 'IO', [
+      'Platform: YouTube',
+      'Channel Name: LeaPlay FR',
+      'Handle: @LeaPlayFR',
+      'Channel Link: https://youtube.com/@LeaPlayFR',
+    ]);
+    const recognized = field([io], 'platformChannel');
+    const changedPlatform = editPlatformChannelRecognitionField(recognized, { platform: 'CHZZK' });
+    const changedLink = editPlatformChannelRecognitionField(changedPlatform, {
+      channelUrl: 'https://chzzk.naver.com/example',
+    });
+
+    expect(changedPlatform.normalizedValue).toEqual({
+      platform: 'CHZZK',
+      channelName: '',
+      handle: '',
+      channelUrl: 'https://youtube.com/@LeaPlayFR',
+    });
+    expect(changedLink.normalizedValue).toEqual({
+      platform: 'CHZZK',
+      channelName: '',
+      handle: '',
+      channelUrl: 'https://chzzk.naver.com/example',
+    });
+    expect(changedLink.rawValue).toBe('CHZZK · https://chzzk.naver.com/example');
+  });
+
+  it('edits recognized contract currency and amount as one validated field', () => {
+    const recognized = field([], 'projectTotalFees');
+    const withCurrency = editContractRecognitionMoney(recognized, { currency: 'USD' });
+    const complete = editContractRecognitionMoney(withCurrency, { amount: 1250.5 });
+    const invalid = editContractRecognitionMoney(complete, { amount: 0 });
+
+    expect(withCurrency).toMatchObject({
+      rawValue: 'USD',
+      normalizedValue: { amount: null, currency: 'USD' },
+      status: 'missing',
+    });
+    expect(contractRecognitionMoneyValidationMessage(withCurrency.normalizedValue)).toBe('请输入大于 0 的金额');
+    expect(complete).toMatchObject({
+      rawValue: 'USD 1250.5',
+      normalizedValue: { amount: 1250.5, currency: 'USD' },
+      status: 'detected',
+    });
+    expect(canConfirmRecognitionFields([complete], ['projectTotalFees'])).toBe(true);
+    expect(invalid.status).toBe('missing');
+    expect(canConfirmRecognitionFields([invalid], ['projectTotalFees'])).toBe(false);
+  });
+
+  it('maps the transfer-fee selector values to the existing contract enums', () => {
+    const recognized = field([], 'transferFee');
+
+    expect(editRecognitionField(recognized, 'ADVERTISER')).toMatchObject({
+      rawValue: '我方承担',
+      normalizedValue: 'ADVERTISER',
+      status: 'detected',
+    });
+    expect(editRecognitionField(recognized, 'PUBLISHER')).toMatchObject({
+      rawValue: '对方承担',
+      normalizedValue: 'PUBLISHER',
+      status: 'detected',
+    });
+    expect(editRecognitionField(recognized, 'SHARED')).toMatchObject({
+      rawValue: '双方各自承担',
+      normalizedValue: 'SHARED',
+      status: 'detected',
+    });
+  });
+
+  it('keeps a channel-link-only recognition result visible and optional', () => {
+    const io = documentFixture('channel-link-only', 'IO', [
+      'Channel Link: https://twitch.tv/example',
+    ]);
+    const recognized = field([io], 'platformChannel');
+
+    expect(recognized.rawValue).toBe('https://twitch.tv/example');
+    expect(recognized.normalizedValue).toMatchObject({
+      platform: '',
+      channelUrl: 'https://twitch.tv/example',
     });
   });
 

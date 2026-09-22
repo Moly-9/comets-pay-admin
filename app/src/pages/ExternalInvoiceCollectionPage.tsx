@@ -9,7 +9,7 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
+import { AmountInput, Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import { SearchableComboBox } from '../components/SearchableComboBox';
 import { CreatorIdentity } from '../components/CreatorIdentity';
@@ -340,7 +340,7 @@ export function ExternalInvoiceCollectionCreatePage({
             <p>付款账户由达人上传 Invoice 时选择，当前不预设账户。</p>
           </div>
           <div className="form-grid external-form-grid">
-            <label><span className="required-field-label">预期金额 <em className="required-mark">*</em></span><input type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} /></label>
+            <label><span className="required-field-label">预期金额 <em className="required-mark">*</em></span><AmountInput min={0.01} value={amount} onChange={(event) => setAmount(event.target.value)} /></label>
             <div className="form-control">
               <span className="required-field-label">币种 <em className="required-mark">*</em></span>
               <SelectField<InvoiceCurrency>

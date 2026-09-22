@@ -3,6 +3,7 @@ import { accountDisplayValue } from './accountPresentation';
 import { formatCreatorHandle } from './creatorSearchOptions';
 import {
   HISTORICAL_PAYMENT_BATCH_SEEDS,
+  simulatedHistoricalPaymentSubmittedAt,
   type HistoricalPaymentBatchSeed,
 } from './historicalPaymentBatchFixtures';
 import {
@@ -13,6 +14,7 @@ import {
 } from './paymentBatches';
 import type { InvoiceCurrency, Payout } from './types';
 import { prototypeRecipientReceivedAmountFor } from './prototypePaymentResults';
+import { paymentSingleAmountTotalsForValues, type PaymentAttemptAmountTotal } from './paymentAttempts';
 import {
   ALL_PAYMENT_STATUSES,
   aggregatePaymentStatus,
@@ -51,8 +53,7 @@ export type TransactionRecord = Readonly<{
   status: TransactionRecordStatus;
   occurredAt: string;
   provider: Payout['provider'];
-  paymentAmount: number;
-  paymentCurrency: InvoiceCurrency;
+  paymentAmountTotals: readonly PaymentAttemptAmountTotal[] | null;
   transferFeeAmount?: number;
   transferFeeCurrency?: InvoiceCurrency;
   recipientReceivedAmount?: number;
@@ -71,6 +72,8 @@ export type TransactionRecordDetails = Readonly<{
   source: 'batch' | 'historical' | 'incomplete';
   payer: string;
   paymentTime: string;
+  paymentTimeIsSimulated: boolean;
+  channelWritebackTime: string;
   paymentCode: string;
   paymentBatchCode: string;
   requestCode: string;
@@ -186,21 +189,27 @@ const transactionRecordFromBatchItem = (
   const resolvedItem: PaymentBatchItemSnapshot = attempt ? {
     ...item,
     paymentCode: attempt.paymentCode ?? item.paymentCode,
+    paymentSubmittedAt: attempt.submittedAt ?? batch.submittedAt
+      ?? (item.paymentBatchId === batch.paymentBatchId ? item.paymentSubmittedAt : undefined),
+    paymentSubmittedAtIsSimulated: !attempt.submittedAt
+      && batch.submittedAt === item.paymentSubmittedAt
+      && item.paymentSubmittedAtIsSimulated,
     paymentStatus: attempt.status,
-    paidAt: attempt.occurredAt ?? item.paidAt,
-    transferFeeAmount: attempt.transferFeeAmount ?? item.transferFeeAmount,
-    transferFeeCurrency: attempt.transferFeeCurrency ?? item.transferFeeCurrency,
+    paidAt: attempt.occurredAt ?? (item.paymentBatchId === batch.paymentBatchId ? item.paidAt : undefined),
+    transferFeeAmount: attempt.transferFeeAmount,
+    transferFeeCurrency: attempt.transferFeeCurrency,
     actualPaidAmount: attempt.actualPaidAmount ?? item.actualPaidAmount,
     actualPaidCurrency: attempt.actualPaidCurrency ?? item.actualPaidCurrency,
     recipientReceivedAmount: attempt.recipientReceivedAmount ?? item.recipientReceivedAmount,
     recipientReceivedCurrency: attempt.recipientReceivedCurrency ?? item.recipientReceivedCurrency,
-    failure: attempt.status === '付款失败' && (attempt.errorCode || attempt.providerResponse)
-      ? {
+    failure: attempt.status === '付款失败'
+      ? (attempt.errorCode || attempt.providerResponse) ? {
           code: attempt.errorCode || '未记录',
           response: attempt.providerResponse || '未记录',
           occurredAt: attempt.occurredAt || item.failure?.occurredAt || '未记录',
         }
-      : item.failure,
+        : item.paymentBatchId === batch.paymentBatchId && item.paymentStatus === '付款失败' ? item.failure : undefined
+      : undefined,
   } : item;
   const status = normalizedTransactionStatus(resolvedItem.paymentStatus);
   if (!status) return null;
@@ -238,10 +247,19 @@ const transactionRecordFromBatchItem = (
     payout,
     context: { batch, item: resolvedItem },
     status,
-    occurredAt: resolvedItem.failure?.occurredAt ?? resolvedItem.paidAt ?? batch.paidAt,
+    occurredAt: status === '付款失败'
+      ? resolvedItem.failure?.occurredAt ?? resolvedItem.paidAt ?? batch.paidAt
+      : status === '已付款'
+        ? resolvedItem.paidAt ?? batch.paidAt
+        : resolvedItem.paymentSubmittedAt ?? batch.submittedAt ?? batch.paidAt,
     provider: resolvedItem.provider,
-    paymentAmount: resolvedItem.amount,
-    paymentCurrency: resolvedItem.currency,
+    paymentAmountTotals: status === '付款处理中' ? null : paymentSingleAmountTotalsForValues({
+      principalAmount: resolvedItem.amount,
+      principalCurrency: resolvedItem.currency,
+      feeBearer: resolvedItem.feeBearer,
+      transferFeeAmount: resolvedItem.transferFeeAmount,
+      transferFeeCurrency: resolvedItem.transferFeeCurrency,
+    }),
     transferFeeAmount: resolvedItem.transferFeeAmount,
     transferFeeCurrency: resolvedItem.transferFeeCurrency,
     recipientReceivedAmount: status === '付款失败'
@@ -273,7 +291,8 @@ const historicalTransactionDetails = (
   seed: HistoricalPaymentBatchSeed,
 ): TransactionRecordDetails => {
   const failed = payout.status === '付款失败';
-  const paymentTime = transactionOccurredAt(payout);
+  const resultTime = transactionOccurredAt(payout);
+  const simulatedPaymentTime = simulatedHistoricalPaymentSubmittedAt(resultTime);
   const requestReason = `${payout.deliverable ?? '达人合作内容'}已验收，申请支付本期合作款。`;
   const contracts: readonly TransactionContractDetails[] = [{
     contractCode: payout.contract,
@@ -297,7 +316,9 @@ const historicalTransactionDetails = (
   return {
     source: 'historical',
     payer: seed.payer,
-    paymentTime,
+    paymentTime: simulatedPaymentTime ?? '付款时间待补全',
+    paymentTimeIsSimulated: Boolean(simulatedPaymentTime),
+    channelWritebackTime: resultTime || '渠道回写时间待补全',
     paymentCode: payout.paymentCode || '付款编号待补全',
     paymentBatchCode: seed.paymentBatchCode,
     requestCode: seed.requestCode,
@@ -329,13 +350,20 @@ export const transactionRecordDetails = (
   context: TransactionBatchContext | null,
 ): TransactionRecordDetails => {
   if (context) {
+    const status = normalizedTransactionStatus(context.item.paymentStatus) ?? payout.status;
+    const channelWritebackTime = status === '付款处理中'
+      ? '待渠道回写'
+      : status === '付款失败'
+        ? context.item.failure?.occurredAt || '渠道回写时间待补全'
+        : context.item.paidAt || '渠道回写时间待补全';
     return {
       source: 'batch',
       payer: context.batch.payer,
-      paymentTime: context.item.failure?.occurredAt
-        ?? context.item.paidAt
-        ?? context.batch.paidAt
-        ?? transactionOccurredAt(payout),
+      paymentTime: context.item.paymentSubmittedAt
+        || context.batch.submittedAt
+        || '付款时间待补全',
+      paymentTimeIsSimulated: Boolean(context.item.paymentSubmittedAtIsSimulated),
+      channelWritebackTime,
       paymentCode: context.item.paymentCode || '付款编号待补全',
       paymentBatchCode: context.batch.paymentBatchCode,
       requestCode: context.batch.request.requestCode,
@@ -364,7 +392,11 @@ export const transactionRecordDetails = (
   return {
     source: 'incomplete',
     payer: '历史数据待补全',
-    paymentTime: transactionOccurredAt(payout),
+    paymentTime: '付款时间待补全',
+    paymentTimeIsSimulated: false,
+    channelWritebackTime: payout.status === '付款处理中'
+      ? '待渠道回写'
+      : transactionOccurredAt(payout) || '渠道回写时间待补全',
     paymentCode: payout.paymentCode || '付款编号待补全',
     paymentBatchCode: '历史数据待补全',
     requestCode: '历史数据待补全',
@@ -428,7 +460,7 @@ const matchesTransactionSearch = (record: TransactionRecord, search: string) => 
     payout.contract,
     payout.paymentCode,
     record.provider,
-    record.paymentCurrency,
+    ...(record.paymentAmountTotals?.map(({ currency }) => currency) ?? []),
     record.status,
     details.paymentBatchCode,
     context?.batch.paymentOrderCode,

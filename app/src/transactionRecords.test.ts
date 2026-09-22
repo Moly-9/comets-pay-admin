@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { INITIAL_PAYOUTS } from './data';
+import { simulatedHistoricalPaymentSubmittedAt } from './historicalPaymentBatchFixtures';
 import { createInitialPaymentBatches, type PaymentBatchRecord } from './paymentBatches';
 import type { Payout } from './types';
 import {
@@ -126,6 +127,13 @@ const batchesForPayouts = (records: readonly Payout[]): PaymentBatchRecord[] => 
   });
 
 describe('transaction records', () => {
+  it('generates stable five-minute-earlier legacy times across midnight without inventing unparsable times', () => {
+    expect(simulatedHistoricalPaymentSubmittedAt('2026-08-08 00:03')).toBe('2026-08-07 23:58');
+    expect(simulatedHistoricalPaymentSubmittedAt('2026-08-08T00:03:00.000Z')).toBe('2026-08-07T23:58:00.000Z');
+    expect(simulatedHistoricalPaymentSubmittedAt('历史时间待补全')).toBeUndefined();
+    expect(simulatedHistoricalPaymentSubmittedAt('2026-02-30 10:00')).toBeUndefined();
+  });
+
   it('does not create an unlinked transaction row when no payment batch exists', () => {
     expect(createTransactionRecords([payout()], [])).toEqual([]);
   });
@@ -254,12 +262,14 @@ describe('transaction records', () => {
       ...batch,
       paymentBatchId: 'payment-batch-failed',
       paymentBatchCode: 'BAT-FAILED-001',
+      submittedAt: '2026-08-05T15:00:00.000Z',
       paidAt: '2026-08-05T15:00:00.000Z',
       status: '全部失败',
       items: [{
         ...batch.items[0],
         paymentCode: 'PMT-2608050001',
         paymentStatus: '付款失败',
+        paymentSubmittedAt: '2026-08-05T15:00:00.000Z',
         paidAt: '2026-08-05T15:05:00.000Z',
         transferFeeAmount: 6,
         transferFeeCurrency: 'USD',
@@ -276,10 +286,12 @@ describe('transaction records', () => {
       ...batch,
       paymentBatchId: 'payment-batch-retry',
       paymentBatchCode: 'BAT-RETRY-002',
+      submittedAt: '2026-08-06T10:00:00.000Z',
       paidAt: '2026-08-06T10:00:00.000Z',
       items: [{
         ...batch.items[0],
         paymentCode: 'PMT-2608060001',
+        paymentSubmittedAt: '2026-08-06T10:00:00.000Z',
         paidAt: '2026-08-06T10:05:00.000Z',
         transferFeeAmount: 6,
         transferFeeCurrency: 'USD',
@@ -303,7 +315,73 @@ describe('transaction records', () => {
       record.payout,
       record.context,
     ).paymentCode)).toEqual(['PMT-2608060001', 'PMT-2608050001']);
+    expect(records.map((record) => {
+      const details = transactionRecordDetails(record.payout, record.context);
+      return [details.paymentTime, details.channelWritebackTime];
+    })).toEqual([
+      ['2026-08-06T10:00:00.000Z', '2026-08-06T10:05:00.000Z'],
+      ['2026-08-05T15:00:00.000Z', '2026-08-05T15:05:00.000Z'],
+    ]);
+    expect(records.map((record) => record.occurredAt)).toEqual([
+      '2026-08-06T10:05:00.000Z', '2026-08-05T15:05:00.000Z',
+    ]);
     expect(new Set(records.map((record) => record.key)).size).toBe(2);
+  });
+
+  it('keeps the submitted time while waiting for a channel result', () => {
+    const processingBatch = {
+      ...batch,
+      submittedAt: '2026-08-05 15:55',
+      items: [{ ...batch.items[0], paymentStatus: '付款处理中', paymentSubmittedAt: '2026-08-05 15:54', paidAt: undefined }],
+    } as unknown as PaymentBatchRecord;
+    const [record] = createTransactionRecords([payout({ status: '付款处理中', paidAt: undefined })], [processingBatch]);
+    const details = transactionRecordDetails(record.payout, record.context);
+    expect(details.paymentTime).toBe('2026-08-05 15:54');
+    expect(details.channelWritebackTime).toBe('待渠道回写');
+    expect(record.occurredAt).toBe('2026-08-05 15:54');
+  });
+
+  it('uses the batch submission time when the item has no execution timestamp', () => {
+    const submissionBatch = {
+      ...batch,
+      submittedAt: '2026-08-05 15:55',
+      items: [{ ...batch.items[0], paymentSubmittedAt: undefined, paidAt: '2026-08-05 16:00' }],
+    } as unknown as PaymentBatchRecord;
+    const [record] = createTransactionRecords([payout()], [submissionBatch]);
+    expect(transactionRecordDetails(record.payout, record.context)).toMatchObject({
+      paymentTime: '2026-08-05 15:55',
+      paymentTimeIsSimulated: false,
+      channelWritebackTime: '2026-08-05 16:00',
+    });
+  });
+
+  it('resolves each attempt timestamps without leaking a later failed result', () => {
+    const attemptBatch = {
+      ...batch,
+      submittedAt: '2026-08-05 15:55',
+      items: [{
+        ...batch.items[0],
+        paymentStatus: '付款失败',
+        paymentSubmittedAt: '2026-08-06 10:00',
+        paidAt: '2026-08-06 10:05',
+        failure: { code: 'LATER_FAILURE', response: 'Later result', occurredAt: '2026-08-06 10:05' },
+        paymentAttempts: [{
+          paymentBatchId: batch.paymentBatchId,
+          attemptNumber: 1,
+          status: '已付款',
+          submittedAt: '2026-08-05 15:55',
+          occurredAt: '2026-08-05 16:00',
+          principalAmount: 1980,
+          principalCurrency: 'USD',
+        }],
+      }],
+    } as unknown as PaymentBatchRecord;
+    const [record] = createTransactionRecords([payout({ status: '付款失败' })], [attemptBatch]);
+    const details = transactionRecordDetails(record.payout, record.context);
+    expect(record.status).toBe('已付款');
+    expect(record.occurredAt).toBe('2026-08-05 16:00');
+    expect(details).toMatchObject({ paymentTime: '2026-08-05 15:55', channelWritebackTime: '2026-08-05 16:00' });
+    expect(details.failure).toBeUndefined();
   });
 
   it('uses the attempt payment code and marks missing historical codes for completion', () => {
@@ -360,6 +438,11 @@ describe('transaction records', () => {
 
     const records = createTransactionRecords(feePayouts, [feeBatch]);
     expect(records.slice(0, 3).map((record) => record.recipientReceivedAmount)).toEqual([100, 90, 95]);
+    expect(records.slice(0, 3).map((record) => record.paymentAmountTotals)).toEqual([
+      [{ currency: 'USD', amount: 110 }],
+      [{ currency: 'USD', amount: 100 }],
+      [{ currency: 'USD', amount: 105 }],
+    ]);
     const crossCurrency = records.find((record) => record.payout.id === 'cross-currency');
     expect(crossCurrency?.recipientReceivedAmount).toBe(121.62);
     expect(crossCurrency?.recipientReceivedCurrency).toBe('SGD');
@@ -398,6 +481,14 @@ describe('transaction records', () => {
       expect(requiredValues.every((value) => value && !/未记录|未关联|待补全/.test(value))).toBe(true);
       expect(details.contracts).toHaveLength(1);
       expect(details.invoice?.invoiceNumber).toBe(record.payout.invoice);
+      expect(details.paymentTimeIsSimulated).toBe(true);
+      expect(new Date(details.paymentTime).getTime()).toBeLessThan(new Date(details.channelWritebackTime).getTime());
+    });
+    const oldDemo = historicalTransactions.find((record) => record.payout.id === 'pay-030');
+    expect(transactionRecordDetails(oldDemo!.payout, oldDemo!.context)).toMatchObject({
+      paymentTime: '2026-08-08 16:45',
+      channelWritebackTime: '2026-08-08 16:50',
+      paymentTimeIsSimulated: true,
     });
   });
 });

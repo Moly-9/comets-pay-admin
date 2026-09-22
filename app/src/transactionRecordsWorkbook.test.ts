@@ -63,6 +63,8 @@ const workbookBatch = {
     accountSummary: records[0].account,
     transferMethod: 'Payer Max',
     feeBearer: '广告主承担',
+    transferFeeAmount: 0,
+    transferFeeCurrency: 'USD',
     transactionReference: 'TEST-WORKBOOK',
     paymentListCode: 'PAY-20260805-001',
     paymentListStatus: 'paid',
@@ -92,7 +94,7 @@ describe('transaction records workbook', () => {
       '关联项目',
       '付款日期',
       '付款渠道',
-      '支付金额',
+      '单笔支付金额',
       '手续费',
       '对方实际收到金额',
       '状态',
@@ -109,7 +111,7 @@ describe('transaction records workbook', () => {
     expect(worksheet?.getRow(2).getCell(5).value).toBe('Payer Max');
     expect(worksheet?.getRow(2).getCell(6).value).toBe(1980);
     expect(worksheet?.getRow(2).getCell(6).numFmt).toContain('USD');
-    expect(worksheet?.getRow(2).getCell(7).value).toBeNull();
+    expect(worksheet?.getRow(2).getCell(7).value).toBe(0);
     expect(worksheet?.getRow(2).getCell(8).value).toBe(2675.68);
     expect(worksheet?.getRow(2).getCell(8).numFmt).toContain('SGD');
     expect(worksheet?.getRow(2).getCell(9).value).toBe('已付款');
@@ -177,8 +179,7 @@ describe('transaction records workbook', () => {
       status: '付款失败',
       occurredAt: '2026-08-06T08:10:00.000Z',
       provider: 'PayMax',
-      paymentAmount: 1980,
-      paymentCurrency: 'USD',
+      paymentAmountTotals: [{ currency: 'USD', amount: 1980 }],
       transferFeeAmount: 6,
       transferFeeCurrency: 'USD',
       recipientReceivedAmount: 0,
@@ -196,5 +197,28 @@ describe('transaction records workbook', () => {
     expect(row?.getCell(8).value).toBe(0);
     expect(row?.getCell(9).value).toBe('付款失败');
     expect(row?.getCell(12).value).toBe('BAT-20260806-001');
+  });
+
+  it('keeps a single-currency payment numeric and a mixed-currency payment descriptive', async () => {
+    const template = await readFile(templatePath);
+    const [single] = createTransactionRecords(records, [workbookBatch]);
+    const mixed: TransactionRecord = {
+      ...single,
+      key: 'mixed-currency',
+      paymentAmountTotals: [{ currency: 'USD', amount: 1_980 }, { currency: 'EUR', amount: 4.25 }],
+    };
+    const pending: TransactionRecord = { ...single, key: 'pending', status: '付款处理中', paymentAmountTotals: null };
+    const blob = await createTransactionRecordsWorkbook(
+      template.buffer.slice(template.byteOffset, template.byteOffset + template.byteLength),
+      [single, mixed, pending],
+    );
+    const workbook = new Workbook();
+    await workbook.xlsx.load(await blob.arrayBuffer());
+    const sheet = workbook.getWorksheet(TRANSACTION_RECORDS_SHEET_NAME);
+    expect(sheet?.getCell('F2').value).toBe(1_980);
+    expect(sheet?.getCell('F3').value).toBe('USD 1,980 + EUR 4.25');
+    expect(sheet?.getCell('F4').value).toBe('待渠道回写');
+    expect(sheet?.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
+    expect(sheet?.autoFilter).toBe('A1:N4');
   });
 });

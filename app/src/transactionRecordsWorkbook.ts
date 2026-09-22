@@ -1,5 +1,6 @@
 import { accountDisplayValue } from './accountPresentation';
 import { paymentProviderDisplayName } from './paymentProviderPresentation';
+import { paymentSingleAmountLabel } from './paymentAttempts';
 import {
   transactionCreatorLabel,
   transactionRecordDetails,
@@ -26,7 +27,7 @@ const TRANSACTION_RECORD_HEADERS = [
   '关联项目',
   '付款日期',
   '付款渠道',
-  '支付金额',
+  '单笔支付金额',
   '手续费',
   '对方实际收到金额',
   '状态',
@@ -94,7 +95,9 @@ export const createTransactionRecordsWorkbook = async (
       `${details.cooperationProjectCode} · ${details.cooperationProjectName}`,
       excelDate(record.occurredAt),
       paymentProviderDisplayName(record.provider),
-      record.paymentAmount,
+      record.paymentAmountTotals?.length === 1
+        ? record.paymentAmountTotals[0].amount
+        : paymentSingleAmountLabel(record.paymentAmountTotals, record.status === '付款处理中' ? '待渠道回写' : '—'),
       record.transferFeeAmount ?? null,
       record.recipientReceivedAmount ?? null,
       record.status,
@@ -116,7 +119,7 @@ export const createTransactionRecordsWorkbook = async (
     row.getCell(4).numFmt = 'yyyy-mm-dd hh:mm';
     row.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
     [
-      { index: 6, currency: record.paymentCurrency },
+      { index: 6, currency: record.paymentAmountTotals?.length === 1 ? record.paymentAmountTotals[0].currency : undefined },
       { index: 7, currency: record.transferFeeCurrency },
       { index: 8, currency: record.recipientReceivedCurrency },
       { index: 10, currency: context?.item.postTransactionBalanceCurrency ?? payout.postTransactionBalanceCurrency },

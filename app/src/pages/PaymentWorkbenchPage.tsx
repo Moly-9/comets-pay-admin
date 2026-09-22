@@ -23,6 +23,8 @@ import {
   type PaymentBatchRecord,
 } from '../paymentBatches';
 import { paymentAttemptAmountTotals, paymentPayoutExpenditureTotals } from '../paymentAttempts';
+import type { OperationLogInput } from '../operationLog';
+import { useOperationSearch } from '../useOperationSearch';
 import {
   ALL_PAYMENT_STATUSES,
   PAYMENT_STATUS_FILTER_OPTIONS,
@@ -714,6 +716,7 @@ export function PaymentWorkbenchPage({
   canCreateBatch,
   initialTab = 'review',
   currentDate = new Date(),
+  onOperation,
 }: {
   payouts: Payout[];
   requests: RequestProjectSummary[];
@@ -734,6 +737,7 @@ export function PaymentWorkbenchPage({
   canCreateBatch: boolean;
   initialTab?: WorkbenchTab;
   currentDate?: Date;
+  onOperation?: (input: OperationLogInput) => void;
 }) {
   const [showNotice, setShowNotice] = useState(true);
   const [activeTab, setActiveTab] = useState<WorkbenchTab>(initialTab);
@@ -788,6 +792,7 @@ export function PaymentWorkbenchPage({
     ? requests.find((request) => request.id === paymentExecutionProject.requestId)
     : undefined;
   const activeSearch = searchByTab[activeTab];
+  useOperationSearch(activeSearch, 'payment-workbench', onOperation);
   const selectedIds = selectedIdsByTab[activeTab];
   const filteredProjects = useMemo(
     () => filterPaymentProjectRows(rowsByTab[activeTab], {
@@ -882,7 +887,7 @@ export function PaymentWorkbenchPage({
       <PageHeading
         title="付款工作台"
         subtitle="审核请款、组织付款批次，并追踪渠道回写状态。"
-        actions={canCreateBatch ? <Button icon={<Plus size={17} />} onClick={onNewBatch}>新建付款批次</Button> : undefined}
+        actions={canCreateBatch ? <Button icon={<Plus size={17} />} onClick={onNewBatch}>发起重新付款</Button> : undefined}
       />
 
       {showNotice ? (
@@ -1005,10 +1010,12 @@ export function PaymentWorkbenchPage({
             }
             if (activeTab === 'payment' && project.requestId) {
               setPaymentExecutionProjectId(project.id);
+              onOperation?.({ module: 'payment-workbench', action: '查看详情', targetId: project.requestId });
               return;
             }
             if (activeTab === 'returned' && project.requestId) {
               setPaymentExecutionProjectId(project.id);
+              onOperation?.({ module: 'payment-workbench', action: '查看详情', targetId: project.requestId });
               return;
             }
             if (activeTab === 'paid') {

@@ -162,6 +162,8 @@ describe('payment project documents', () => {
         recipientCountry: 'United States',
         actualPaidAmount: 1258.5,
         actualPaidCurrency: 'USD',
+        transferFeeAmount: 8.5,
+        transferFeeCurrency: 'USD',
         postTransactionBalance: 48_741.5,
         postTransactionBalanceCurrency: 'USD',
       }],
@@ -171,7 +173,7 @@ describe('payment project documents', () => {
     await workbook.xlsx.load(await workbookBlob.arrayBuffer());
     const sheet = workbook.getWorksheet('付款明细');
 
-    expect(sheet?.columnCount).toBe(10);
+    expect(sheet?.columnCount).toBe(11);
     expect(sheet?.getRow(1).values).toEqual([
       undefined,
       '付款渠道',
@@ -180,8 +182,9 @@ describe('payment project documents', () => {
       '账户名',
       '付款日期',
       '请款金额',
-      '支出金额',
+      '单笔支付金额',
       '手续费',
+      '退款金额',
       '付款状态',
       '余额',
     ]);
@@ -194,6 +197,7 @@ describe('payment project documents', () => {
       '2026-08-18',
       'USD 1,250',
       'USD 1,258.5',
+      'USD 8.5',
       '—',
       '已付款',
       'USD 48,741.5',
@@ -211,10 +215,13 @@ describe('payment project documents', () => {
     const workbook = new Workbook();
     await workbook.xlsx.load(await workbookBlob.arrayBuffer());
     const sheet = workbook.getWorksheet('付款明细');
-    expect(sheet?.getCell('G2').value).toBe('USD -1,250');
-    expect(sheet?.getCell('I2').value).toBe('已退回');
-    expect(sheet?.getCell('G3').value).toBe('待渠道回写');
-    expect(sheet?.getCell('I3').value).toBe('退回处理中');
+    expect(sheet?.getCell('G2').value).toBe('USD 0');
+    expect(sheet?.getCell('I2').value).toBe('USD 1,250');
+    expect(sheet?.getCell('J2').value).toBe('已退回');
+    expect(sheet?.getCell('G3').value).toBe('USD 0');
+    expect(sheet?.getCell('I3').value).toBe('待渠道回写');
+    expect(sheet?.getCell('J3').value).toBe('退回处理中');
+    expect(sheet?.autoFilter).toBe('A1:K1');
   });
 
   it('groups confirmation PDFs by YYYYMMDD and provider with safe, collision-proof names', async () => {

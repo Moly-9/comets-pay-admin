@@ -2,25 +2,32 @@ import type { InvoiceCurrency, Payout } from './types';
 
 const roundCurrency = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 
-export const PROTOTYPE_USD_VALUE_BY_CURRENCY: Readonly<Record<InvoiceCurrency, number>> = {
+export const PROTOTYPE_USD_VALUE_BY_CURRENCY: Readonly<Record<string, number>> = {
   USD: 1,
   EUR: 1.09,
   GBP: 1.27,
   HKD: 0.128,
   SGD: 0.74,
+  JPY: 0.0067,
+  CNY: 0.14,
+  AUD: 0.66,
+  KRW: 0.00074,
+  THB: 0.028,
+  BRL: 0.18,
+  MXN: 0.058,
 };
 
 export const prototypeConvertCurrency = (
   amount: number,
-  sourceCurrency: InvoiceCurrency,
-  targetCurrency: InvoiceCurrency,
-) => roundCurrency(
-  sourceCurrency === targetCurrency
-    ? amount
-    : amount
-      * PROTOTYPE_USD_VALUE_BY_CURRENCY[sourceCurrency]
-      / PROTOTYPE_USD_VALUE_BY_CURRENCY[targetCurrency],
-);
+  sourceCurrency: string,
+  targetCurrency: string,
+) => {
+  if (sourceCurrency === targetCurrency) return roundCurrency(amount);
+  const sourceValue = PROTOTYPE_USD_VALUE_BY_CURRENCY[sourceCurrency];
+  const targetValue = PROTOTYPE_USD_VALUE_BY_CURRENCY[targetCurrency];
+  if (!sourceValue || !targetValue) return roundCurrency(amount);
+  return roundCurrency(amount * sourceValue / targetValue);
+};
 
 const recipientFeeRatio = (feeBearer?: string) => {
   if (['PUBLISHER', '收款人承担', '收款方承担', '对方承担'].includes(feeBearer ?? '')) return 1;

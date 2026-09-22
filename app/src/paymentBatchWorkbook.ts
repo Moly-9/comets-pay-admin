@@ -2,6 +2,7 @@ import {
   paymentBatchFinancialSummary,
   paymentBatchMoneyTotalsLabel,
   paymentBatchPurposeLabel,
+  paymentBatchResultAmountLabel,
   type PaymentBatchRecord,
 } from './paymentBatches';
 import { paymentProviderDisplayName } from './paymentProviderPresentation';
@@ -20,7 +21,7 @@ export const PAYMENT_BATCH_WORKBOOK_HEADERS = [
   '成本类型明细①',
   '请款金额及币种',
   '转账手续费及币种',
-  '总支出金额及币种',
+  '批次支付金额及币种',
   '最后付款日期',
   '项目状态（固定）',
   '发起人',
@@ -44,7 +45,7 @@ export type PaymentBatchWorkbookRow = Readonly<{
   costTypeDetail: string;
   paymentAmount: string;
   transferFeeAmount: string;
-  actualPaidAmount: string;
+  singlePaymentAmount: string;
   actualPaymentDate: string;
   requestStatus: string;
   initiator: string;
@@ -71,13 +72,6 @@ const paymentResultDate = (
     ?? '—';
 };
 
-const paymentResultTotal = (
-  batch: PaymentBatchRecord,
-  totals: ReturnType<typeof paymentBatchFinancialSummary>['actualPaidAmounts'],
-) => batch.status === '付款处理中' || batch.status === '冲退处理中'
-  ? '待渠道回写'
-  : paymentBatchMoneyTotalsLabel(totals);
-
 export const buildPaymentBatchWorkbookRows = (
   entries: readonly PaymentBatchWorkbookEntry[],
 ): PaymentBatchWorkbookRow[] => entries.map(({ batch, currentRequestStatus }) => {
@@ -95,8 +89,10 @@ export const buildPaymentBatchWorkbookRows = (
       ? textOrFallback(batch.request.costTypeDetail)
       : '—',
     paymentAmount: paymentBatchMoneyTotalsLabel(summary.paymentAmounts),
-    transferFeeAmount: paymentResultTotal(batch, summary.transferFeeAmounts),
-    actualPaidAmount: paymentResultTotal(batch, summary.actualPaidAmounts),
+    transferFeeAmount: batch.purpose !== 'REVERSAL' && batch.status === '付款处理中'
+      ? '待渠道回写'
+      : paymentBatchMoneyTotalsLabel(summary.transferFeeResultsAvailable ? summary.transferFeeAmounts : []),
+    singlePaymentAmount: paymentBatchResultAmountLabel(batch, summary.singlePaymentAmounts),
     actualPaymentDate: paymentResultDate(batch, summary.items),
     requestStatus: textOrFallback(currentRequestStatus ?? batch.request.requestStatus, '待同步'),
     initiator: textOrFallback(batch.request.media),
@@ -128,7 +124,7 @@ export const createPaymentBatchWorkbook = async (
     { header: PAYMENT_BATCH_WORKBOOK_HEADERS[8], key: 'costTypeDetail', width: 22 },
     { header: PAYMENT_BATCH_WORKBOOK_HEADERS[9], key: 'paymentAmount', width: 24 },
     { header: PAYMENT_BATCH_WORKBOOK_HEADERS[10], key: 'transferFeeAmount', width: 24 },
-    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[11], key: 'actualPaidAmount', width: 26 },
+    { header: PAYMENT_BATCH_WORKBOOK_HEADERS[11], key: 'singlePaymentAmount', width: 26 },
     { header: PAYMENT_BATCH_WORKBOOK_HEADERS[12], key: 'actualPaymentDate', width: 18 },
     { header: PAYMENT_BATCH_WORKBOOK_HEADERS[13], key: 'requestStatus', width: 18 },
     { header: PAYMENT_BATCH_WORKBOOK_HEADERS[14], key: 'initiator', width: 18 },

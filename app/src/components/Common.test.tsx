@@ -1,9 +1,70 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { Button, ListActionButton, NoticeBanner, SelectField, Toast } from './Common';
+import {
+  AmountInput,
+  Button,
+  ListActionButton,
+  NoticeBanner,
+  SelectField,
+  Toast,
+  amountStepMinimum,
+} from './Common';
 
 const commonSource = readFileSync(new URL('./Common.tsx', import.meta.url), 'utf8');
+const amountInputSources = [
+  './CreatorPayoutAccounts.tsx',
+  './PaymentListEditor.tsx',
+  './ProjectResourceManager.tsx',
+  './RequestProjectResourceManager.tsx',
+  '../pages/ContractBuilderPage.tsx',
+  '../pages/ContractDetailPage.tsx',
+  '../pages/ExternalInvoiceCollectionPage.tsx',
+  '../pages/InvoiceBatchBuilderPage.tsx',
+  '../pages/InvoiceBuilderPage.tsx',
+  '../pages/OperationalPages.tsx',
+].map((path) => ({
+  path,
+  source: readFileSync(new URL(path, import.meta.url), 'utf8'),
+}));
+
+describe('AmountInput', () => {
+  it('aligns the native step grid to the current decimal fraction', () => {
+    expect(amountStepMinimum('100.50', 0.01)).toBe(0.5);
+    expect(amountStepMinimum('125.25', 0)).toBe(0.25);
+    expect(amountStepMinimum('100', 0.01)).toBe(1);
+    expect(amountStepMinimum('', 0.01)).toBe(1);
+  });
+
+  it('renders a native decimal input with a one-unit step and preserved lower bound', () => {
+    const markup = renderToStaticMarkup(
+      <AmountInput aria-label="合同金额" min={0.01} value="100.50" onChange={() => undefined} />,
+    );
+
+    expect(markup).toContain('type="number"');
+    expect(markup).toContain('inputMode="decimal"');
+    expect(markup).toContain('min="0.5"');
+    expect(markup).toContain('step="1"');
+    expect(markup).toContain('value="100.50"');
+  });
+
+  it('keeps disabled and read-only amount fields non-editable', () => {
+    const markup = renderToStaticMarkup(
+      <AmountInput aria-label="付款金额" value={88.25} disabled readOnly />,
+    );
+
+    expect(markup).toContain('disabled=""');
+    expect(markup).toContain('readonly=""');
+    expect(markup).toContain('step="1"');
+  });
+
+  it('keeps every current amount-entry surface on the shared one-unit stepper', () => {
+    amountInputSources.forEach(({ path, source }) => {
+      expect(source, path).toContain('<AmountInput');
+      expect(source, path).not.toContain('step="0.01"');
+    });
+  });
+});
 
 describe('Button', () => {
   it('keeps a reason-enabled blocked action focusable and exposes its explanation', () => {

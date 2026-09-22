@@ -24,8 +24,8 @@ import {
   paymentBatchItemForAttempt,
   paymentBatchItemAttemptLabel,
   paymentBatchItemOrderCode,
-  paymentBatchMoneyTotalsLabel,
   paymentBatchPurposeLabel,
+  paymentBatchResultAmountLabel,
   type PaymentBatchItemSnapshot,
   type PaymentBatchRecord,
 } from '../paymentBatches';
@@ -43,6 +43,7 @@ import type { CreatorProfile, PaymentFailureIssueType, Payout } from '../types';
 import { PaymentCreatorIdentity } from '../components/PaymentCreatorIdentity';
 import { paymentCreatorIdentityFromBatchItem } from '../paymentCreatorIdentity';
 import { paymentFeeBearerDisplayName } from '../paymentFeeBearerPresentation';
+import { paymentSingleAmountLabel, paymentSingleAmountTotalsForValues } from '../paymentAttempts';
 import './PaymentBatchDetailPage.css';
 
 const displayTime = (value?: string) => value ? value.replace('T', ' ') : '未记录';
@@ -77,7 +78,7 @@ const paymentDateLabel = (value?: string) => value
   : '—';
 
 const paymentFeeLabel = (item: PaymentBatchItemSnapshot) => (
-  item.paymentStatus === '付款处理中' || item.paymentStatus === '冲退处理中'
+  item.paymentStatus === '付款处理中'
     ? '待渠道回写'
     : item.transferFeeAmount !== undefined && item.transferFeeCurrency
       ? money(item.transferFeeCurrency, item.transferFeeAmount)
@@ -91,6 +92,18 @@ const paymentResultValue = (
 ) => {
   if (item.paymentStatus === '付款处理中' || item.paymentStatus === '冲退处理中') return '待渠道回写';
   return amount !== undefined && currency ? money(currency, amount) : '—';
+};
+
+const paymentSingleResultLabel = (item: PaymentBatchItemSnapshot, reversal: boolean) => {
+  if (reversal) return money(item.currency, 0);
+  if (item.paymentStatus === '付款处理中') return '待渠道回写';
+  return paymentSingleAmountLabel(paymentSingleAmountTotalsForValues({
+    principalAmount: item.amount,
+    principalCurrency: item.currency,
+    feeBearer: item.feeBearer,
+    transferFeeAmount: item.transferFeeAmount,
+    transferFeeCurrency: item.transferFeeCurrency,
+  }));
 };
 
 const channelWritebackTime = (item: PaymentBatchItemSnapshot) => (
@@ -449,9 +462,7 @@ export function PaymentBatchDetailPage({
   const titleRef = useRef<HTMLHeadingElement>(null);
   const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
   const financialSummary = useMemo(() => paymentBatchFinancialSummary(batch), [batch]);
-  const actualPaidTotal = batch.status === '付款处理中' || batch.status === '冲退处理中'
-    ? '待渠道回写'
-    : paymentBatchMoneyTotalsLabel(financialSummary.actualPaidAmounts);
+  const singlePaymentTotal = paymentBatchResultAmountLabel(batch, financialSummary.singlePaymentAmounts);
   const batchItems = financialSummary.items;
   const paymentTypeLabel = paymentBatchPurposeLabel(batch.purpose);
   const projectStatus = currentRequestStatus || batch.request.requestStatus || '待同步';
@@ -529,7 +540,7 @@ export function PaymentBatchDetailPage({
         </div>
         <div className="payment-batch-detail-total">
           <span className={`simple-status ${batchStatusTone(batch.status)}`}><i />{batch.status}</span>
-          <strong>{actualPaidTotal}</strong>
+          <strong>{singlePaymentTotal}</strong>
           <small>{batch.items.length} 笔付款</small>
         </div>
       </header>
@@ -549,7 +560,7 @@ export function PaymentBatchDetailPage({
           <div><span>付款渠道</span><strong>{paymentProviderDisplayName(batch.provider)}</strong><small>{fundingAccountLabel(batch.fundingAccountId)}</small></div>
         </div>
         <div className="payment-project-summary-card is-result">
-          <div><span>支付币种</span><strong>{batch.sourceCurrency}</strong><small>总支出金额 {actualPaidTotal}</small></div>
+          <div><span>支付币种</span><strong>{batch.sourceCurrency}</strong><small>批次支付金额 {singlePaymentTotal}</small></div>
         </div>
       </section>
 
@@ -624,7 +635,7 @@ export function PaymentBatchDetailPage({
                           <th className="payment-batch-col-date" scope="col">付款日期</th>
                           <th className="payment-batch-col-amount" scope="col">请款金额</th>
                           <th className="payment-batch-col-fee" scope="col">手续费</th>
-                          <th className="payment-batch-col-actual" scope="col">总支出金额</th>
+                          <th className="payment-batch-col-actual" scope="col">单笔支付金额</th>
                           <th className="payment-batch-col-attempt" scope="col">付款类型</th>
                           <th className="payment-batch-col-status" scope="col">付款状态</th>
                           <th className="action-cell payment-batch-col-actions" scope="col">操作</th>
@@ -657,7 +668,7 @@ export function PaymentBatchDetailPage({
                               <td className="payment-batch-col-date payment-batch-table-date-cell">{paymentDateLabel(item.paidAt)}</td>
                               <td className="payment-batch-col-amount payment-batch-table-money-cell"><strong>{money(item.currency, item.amount)}</strong></td>
                               <td className="payment-batch-col-fee payment-batch-table-money-cell">{paymentFeeLabel(item)}</td>
-                              <td className="payment-batch-col-actual payment-batch-table-money-cell"><strong>{paymentResultValue(item, item.actualPaidAmount, item.actualPaidCurrency)}</strong></td>
+                              <td className="payment-batch-col-actual payment-batch-table-money-cell"><strong>{paymentSingleResultLabel(item, batch.purpose === 'REVERSAL')}</strong></td>
                               <td className="payment-batch-col-attempt"><span className={`payment-batch-attempt-badge${batch.purpose !== 'NORMAL' ? ' is-retry' : ''}`}>{paymentBatchPurposeLabel(batch.purpose)}</span></td>
                               <td className="payment-batch-col-status"><span className={`simple-status ${paymentStatusTone(item.paymentStatus)}`}><i />{item.paymentStatus}</span></td>
                               <td className="action-cell payment-batch-col-actions payment-batch-table-action-cell">

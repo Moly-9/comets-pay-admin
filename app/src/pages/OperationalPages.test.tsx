@@ -139,6 +139,8 @@ const transactionBatches = (payouts: readonly Payout[]): PaymentBatchRecord[] =>
         accountSummary: payout.account,
         payoutAccountVersion: 'legacy-v1',
         feeBearer: '广告主承担',
+        transferFeeAmount: 0,
+        transferFeeCurrency: payout.currency,
         paymentReason: '达人合作款',
         transactionReference: `TEST-${payout.id}`,
         description: '测试交付物',
@@ -263,8 +265,9 @@ describe('TransactionsPage currency overview', () => {
     expect(html).toContain('>关联项目</th>');
     expect(html).not.toContain('>Invoice</th>');
     expect(html).toContain('>渠道</th>');
-    expect(html).toContain('>支付金额</th>');
-    expect(html).toContain('>手续费</th>');
+    expect(html).toContain('>单笔支付金额</th>');
+    expect(html).toContain('>渠道手续费</th>');
+    expect(html).not.toContain('>手续费</th>');
     expect(html).toContain('>对方实际收到金额</th>');
     expect(html).not.toContain('>时间</th>');
     expect(html).toContain('>付款人 / 付款时间</th>');
@@ -274,8 +277,8 @@ describe('TransactionsPage currency overview', () => {
       '>达人</th>',
       '>关联项目</th>',
       '>渠道</th>',
-      '>支付金额</th>',
-      '>手续费</th>',
+      '>单笔支付金额</th>',
+      '>渠道手续费</th>',
       '>对方实际收到金额</th>',
       '>付款人 / 付款时间</th>',
       '>付款状态</th>',
@@ -292,6 +295,22 @@ describe('TransactionsPage currency overview', () => {
     expect(html).not.toContain('transaction-invoice-cell');
     expect(html).not.toContain('INV-21');
     expect(html).toContain('USD 100');
+  });
+
+  it('keeps the list payment time on the channel result when the detail has a separate execution time', () => {
+    const payout = transactionPayout('USD', 100, 21);
+    const [sourceBatch] = transactionBatches([payout]);
+    const resultTime = sourceBatch.items[0].paidAt;
+    const html = renderToStaticMarkup(<TransactionsPage
+      payouts={[payout]}
+      paymentBatches={[{
+        ...sourceBatch,
+        submittedAt: '2026-08-05 15:55',
+        items: [{ ...sourceBatch.items[0], paymentSubmittedAt: '2026-08-05 15:55', paidAt: resultTime }],
+      }]}
+    />);
+    expect(html).toContain(`<small>${resultTime?.replace('T', ' ').replace(/\.000Z$/, '')}</small>`);
+    expect(html).not.toContain('<small>2026-08-05 15:55</small>');
   });
 });
 

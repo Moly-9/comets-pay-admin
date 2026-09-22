@@ -1,10 +1,16 @@
 import { createPrototypeCode, createPrototypeId } from './businessWorkflow';
+import { isPaymentFailureRetryCandidate } from './paymentFailureRecovery';
+import type { PaymentBatchRecord } from './paymentBatches';
+import { createDocumentPayoutSnapshot, getPayoutAccountIdentifier, isPayoutAccountUsableForDocuments } from './payoutAccounts';
 import type {
   AirwallexTransferMethod,
+  CreatorPayoutAccount,
+  DocumentPayoutSnapshot,
   InvoiceCurrency,
   Payout,
   PayoutAccountVersion,
 } from './types';
+import type { PaymentFeeBearer } from './paymentFeeBearerPresentation';
 
 export type ExecutableBatchProvider = 'Airwallex' | 'PayPal';
 export type AirwallexFeePaidBy = 'PAYER' | 'BENEFICIARY';
@@ -23,10 +29,36 @@ export type BatchTransferItem = {
   localClearingSystem?: string;
   transferAmount: number;
   transferCurrency: InvoiceCurrency;
+  feeBearer: PaymentFeeBearer;
   feePaidBy?: AirwallexFeePaidBy;
   swiftChargeOption?: AirwallexSwiftChargeOption;
   paypalEmail?: string;
   transferNote?: string;
+  executionAccount?: DocumentPayoutSnapshot;
+  accountSummary?: string;
+};
+
+export type RetryExecutionAccount = Readonly<{
+  snapshot: DocumentPayoutSnapshot;
+  summary: string;
+}>;
+
+export const retryExecutionAccountFor = (account: CreatorPayoutAccount, creatorId: string): RetryExecutionAccount => ({
+  snapshot: createDocumentPayoutSnapshot(account, creatorId),
+  summary: getPayoutAccountIdentifier(account),
+});
+
+export const validateRetryExecutionAccount = (
+  account: CreatorPayoutAccount | undefined,
+  creatorId: string | undefined,
+  provider: ExecutableBatchProvider,
+) => {
+  if (!account) return '请选择本次收款账户';
+  if (!creatorId || account.creatorId !== creatorId) return '收款账户不属于当前达人';
+  if (account.provider !== provider) return '收款账户与本次付款渠道不一致';
+  if (!isPayoutAccountUsableForDocuments(account)) return '收款账户尚未验证或付款资料不完整';
+  if (account.provider === 'Airwallex' && !account.beneficiaryId) return '缺少 Airwallex beneficiary_id';
+  return '';
 };
 
 export type MockBatchSubmission = {
@@ -35,6 +67,10 @@ export type MockBatchSubmission = {
   provider: ExecutableBatchProvider;
   fundingAccountId: string;
   sourceCurrency: InvoiceCurrency;
+  sourcePaymentBatchId: PaymentBatchRecord['paymentBatchId'];
+  sourcePaymentBatchCode: string;
+  sourcePaymentOrderCode: string;
+  paymentAttemptNumber: number;
   items: BatchTransferItem[];
 };
 
@@ -70,19 +106,21 @@ const payoutSnapshot = (payout: Payout) => payout.invoiceSnapshot?.payment;
 export const validatePayoutForBatch = (
   payout: Payout,
   provider: ExecutableBatchProvider,
+  feeBearer: Payout['feeBearer'] = payout.feeBearer,
+  executionAccount?: DocumentPayoutSnapshot,
 ) => {
-  const snapshot = payoutSnapshot(payout);
-  const payoutProvider = payout.invoiceSnapshot?.payoutProvider
+  const snapshot = executionAccount ?? payoutSnapshot(payout);
+  const payoutProvider = executionAccount?.payoutProvider ?? payout.invoiceSnapshot?.payoutProvider
     ?? snapshot?.payoutProvider
     ?? payout.provider;
-  const transferMethod = payout.transferMethod ?? snapshot?.transferMethod;
-  const payoutAccountId = payout.payoutAccountId
+  const transferMethod = executionAccount ? executionAccount.transferMethod : payout.transferMethod ?? snapshot?.transferMethod;
+  const payoutAccountId = executionAccount ? executionAccount.payoutAccountId : payout.payoutAccountId
     ?? payout.invoiceSnapshot?.payoutAccountId
     ?? snapshot?.payoutAccountId;
-  const accountFingerprint = payout.payoutAccountFingerprint
+  const accountFingerprint = executionAccount ? executionAccount.accountFingerprint : payout.payoutAccountFingerprint
     ?? payout.invoiceSnapshot?.payoutAccountFingerprint
     ?? snapshot?.accountFingerprint;
-  const externalBeneficiaryId = payout.externalBeneficiaryId
+  const externalBeneficiaryId = executionAccount ? executionAccount.externalBeneficiaryId : payout.externalBeneficiaryId
     ?? snapshot?.externalBeneficiaryId;
   return [
     payout.paymentListRequiresRevalidation
@@ -100,139 +138,76 @@ export const validatePayoutForBatch = (
     provider === 'Airwallex' && !externalBeneficiaryId ? '缺少 Airwallex beneficiary_id' : '',
     provider === 'Airwallex' && !transferMethod ? '缺少 Airwallex 转账方式' : '',
     provider === 'Airwallex' && transferMethod === 'LOCAL'
-      && !(payout.localClearingSystem ?? snapshot?.localClearingSystem)
+      && !(executionAccount ? executionAccount.localClearingSystem : payout.localClearingSystem ?? snapshot?.localClearingSystem)
       ? 'LOCAL 付款缺少本地清算方式'
       : '',
-    !payout.feeBearer ? '关联合同缺少手续费承担方' : '',
+    !feeBearer ? '关联合同缺少手续费承担方' : '',
     provider === 'PayPal' && !snapshot?.paypalEmail ? '缺少 PayPal 收款邮箱快照' : '',
   ].filter(Boolean);
 };
 
-export type BatchWizardDemoState = 'AWAITING_UPDATE' | 'CREATOR_UPDATED' | 'ACCOUNT_UNCHANGED' | 'STANDARD';
-
-export const batchWizardDemoStateFor = (payout: Payout): BatchWizardDemoState => {
-  const recovery = payout.paymentFailureRecovery;
-  if (!recovery) return 'STANDARD';
-  if (recovery.status === 'AWAITING_CREATOR_UPDATE') return 'AWAITING_UPDATE';
-  if (recovery.readyReason === 'ACCOUNT_UNCHANGED') return 'ACCOUNT_UNCHANGED';
-  return 'CREATOR_UPDATED';
+export const isBatchWizardRetryPayout = (payout: Payout) => {
+  const recoveryStatus = payout.paymentFailureRecovery?.status;
+  if (recoveryStatus === 'RETRY_SUBMITTED' || recoveryStatus === 'RETRY_SUCCEEDED') return false;
+  if (payout.status === '付款失败') return true;
+  if (payout.status === '已退回' && payout.paymentFailureReturn?.issueType === 'PAYMENT_LIST') return true;
+  return isPaymentFailureRetryCandidate(payout);
 };
 
-const paymentFailureDemoPayout = (
+/** Only real, unfinished payment failures belong on the retry-batch page. */
+export const selectBatchWizardPayouts = (payouts: readonly Payout[]) => (
+  payouts.filter(isBatchWizardRetryPayout)
+);
+
+export type PaymentFailureSourceResolution = Readonly<{
+  batch?: PaymentBatchRecord;
+  issue?: string;
+}>;
+
+const failedSourceBatchesFor = (
   payout: Payout,
-  state: Exclude<BatchWizardDemoState, 'STANDARD'>,
-  index: number,
-): Payout => {
-  const occurredAt = `2026-08-${String(10 + index).padStart(2, '0')}T10:00:00.000Z`;
-  const creatorUpdated = state === 'CREATOR_UPDATED';
-  const reportedPayoutAccountId = creatorUpdated
-    ? `demo-recovery-account-${index + 1}`
-    : payout.payoutAccountId;
-  const reportedPayoutAccountVersion = creatorUpdated
-    ? `recovery-v${index + 2}` as PayoutAccountVersion
-    : payout.payoutAccountVersion ?? 'legacy-v1';
-  const reportedAccountFingerprint = creatorUpdated
-    ? `demo-recovery-fingerprint-${payout.id}-${index + 1}`
-    : payout.payoutAccountFingerprint
-      ?? payout.invoiceSnapshot?.payoutAccountFingerprint
-      ?? `demo-recovery-${payout.id}`;
-  const reportedExternalBeneficiaryId = creatorUpdated
-    ? `demo-recovery-beneficiary-${index + 1}`
-    : payout.externalBeneficiaryId
-      ?? payout.invoiceSnapshot?.payment.externalBeneficiaryId;
-  const ready = state !== 'AWAITING_UPDATE';
-  return {
-    ...payout,
-    ...(creatorUpdated ? {
-      account: `900000${String(9200 + index).padStart(4, '0')}`,
-      payoutAccountId: reportedPayoutAccountId,
-      payoutAccountVersion: reportedPayoutAccountVersion,
-      payoutAccountFingerprint: reportedAccountFingerprint,
-      externalBeneficiaryId: reportedExternalBeneficiaryId,
-    } : {}),
-    status: '已退回',
-    issue: state === 'AWAITING_UPDATE' ? '等待达人确认收款账户' : undefined,
-    paymentFailure: payout.paymentFailure ?? {
-      provider: payout.provider,
-      errorCode: 'BENEFICIARY_UNAVAILABLE',
-      providerResponse: 'The beneficiary is temporarily unavailable.',
-      occurredAt,
-    },
-    paymentFailureReturn: payout.paymentFailureReturn ?? {
-      issueType: 'PAYMENT_LIST',
-      reason: '请达人确认或更新收款账户。',
-      actorAccount: 'prototype.finance',
-      actorName: '财务演示账号',
-      occurredAt,
-      restartStage: 'PAYMENT_LIST_RESUBMISSION',
-    },
-    paymentListRequiresRevalidation: false,
-    paymentListValidationIssues: [],
-    paymentFailureRecovery: {
-      status: ready ? 'READY_FOR_RETRY' : 'AWAITING_CREATOR_UPDATE',
-      notifications: ready ? [{
-        message: '已确认收款账户',
-        actorAccount: 'prototype.media',
-        actorName: '项目媒介',
-        occurredAt,
-        deliveries: [],
-      }] : [],
-      readyReason: state === 'ACCOUNT_UNCHANGED'
-        ? 'ACCOUNT_UNCHANGED'
-        : state === 'CREATOR_UPDATED'
-          ? 'REVALIDATED'
-          : undefined,
-      creatorUpdatedAt: creatorUpdated ? occurredAt : undefined,
-      reportedPayoutAccountId: creatorUpdated ? reportedPayoutAccountId : undefined,
-      reportedPayoutAccountVersion: creatorUpdated ? reportedPayoutAccountVersion : undefined,
-      reportedAccountFingerprint: creatorUpdated ? reportedAccountFingerprint : undefined,
-      reportedExternalBeneficiaryId: creatorUpdated ? reportedExternalBeneficiaryId : undefined,
-      revalidatedAt: creatorUpdated ? occurredAt : undefined,
-      revalidationIssues: [],
-    },
-  };
-};
+  paymentBatches: readonly PaymentBatchRecord[],
+) => paymentBatches.filter((batch) => (
+  batch.purpose !== 'REVERSAL'
+  && batch.items.some((item) => (
+    item.payoutId === payout.id
+    && item.paymentStatus === '付款失败'
+  ))
+));
 
-/** Keep the creation page concise while leaving the shared prototype resources untouched. */
-export const selectBatchWizardPayouts = (
-  payouts: Payout[],
-  sampleSizePerState = 2,
-) => {
-  const required = sampleSizePerState * 4;
-  const defaultProviderReady = payouts.filter((payout) => (
-    validatePayoutForBatch(payout, 'Airwallex').length === 0
+export const resolvePaymentFailureSourceBatch = (
+  payout: Payout,
+  paymentBatches: readonly PaymentBatchRecord[],
+): PaymentFailureSourceResolution => {
+  const failedBatches = failedSourceBatchesFor(payout, paymentBatches);
+  const explicitBatchId = payout.currentPaymentAttempt?.paymentBatchId;
+  if (explicitBatchId) {
+    const exact = failedBatches.filter((batch) => batch.paymentBatchId === explicitBatchId);
+    if (exact.length === 1) return { batch: exact[0] };
+    if (exact.length > 1) return { issue: '原付款批次无法唯一确认' };
+    return { issue: '当前失败尝试未找到对应原付款批次' };
+  }
+
+  const explicitAttemptNumber = payout.currentPaymentAttempt?.attemptNumber;
+  if (explicitAttemptNumber) {
+    const exactAttempt = failedBatches.filter((batch) => (
+      batch.paymentAttemptNumber === explicitAttemptNumber
+    ));
+    if (exactAttempt.length === 1) return { batch: exactAttempt[0] };
+    if (exactAttempt.length > 1) return { issue: '原付款批次无法唯一确认' };
+    return { issue: '当前失败尝试未找到对应原付款批次' };
+  }
+
+  if (failedBatches.length === 1) return { batch: failedBatches[0] };
+  if (!failedBatches.length) return { issue: '未找到原付款批次' };
+
+  const latestAttemptNumber = Math.max(...failedBatches.map((batch) => batch.paymentAttemptNumber));
+  const latestBatches = failedBatches.filter((batch) => (
+    batch.paymentAttemptNumber === latestAttemptNumber
   ));
-  const defaultProviderReadyByRequest = new Map<string, Payout[]>();
-  defaultProviderReady.forEach((payout) => {
-    const requestKey = String(payout.paymentRequestProjectId ?? payout.projectId);
-    defaultProviderReadyByRequest.set(requestKey, [
-      ...(defaultProviderReadyByRequest.get(requestKey) ?? []),
-      payout,
-    ]);
-  });
-  const diversifiedDefaultProviderReady = [...defaultProviderReadyByRequest.values()]
-    .flatMap((requestPayouts) => requestPayouts.slice(0, sampleSizePerState));
-  const diversifiedIds = new Set(diversifiedDefaultProviderReady.map((payout) => payout.id));
-  const defaultProviderReadyIds = new Set(defaultProviderReady.map((payout) => payout.id));
-  const samples = [
-    ...diversifiedDefaultProviderReady,
-    ...defaultProviderReady.filter((payout) => !diversifiedIds.has(payout.id)),
-    ...payouts.filter((payout) => !defaultProviderReadyIds.has(payout.id)),
-  ].slice(0, required);
-  if (samples.length < required) return samples;
-  const states: BatchWizardDemoState[] = [
-    'AWAITING_UPDATE',
-    'CREATOR_UPDATED',
-    'ACCOUNT_UNCHANGED',
-    'STANDARD',
-  ];
-  return states.flatMap((state, stateIndex) => (
-    samples
-      .slice(stateIndex * sampleSizePerState, (stateIndex + 1) * sampleSizePerState)
-      .map((payout, index) => state === 'STANDARD'
-        ? payout
-        : paymentFailureDemoPayout(payout, state, stateIndex * sampleSizePerState + index))
-  ));
+  return latestBatches.length === 1
+    ? { batch: latestBatches[0] }
+    : { issue: '原付款批次无法唯一确认' };
 };
 
 export const createMockBatchSubmission = ({
@@ -240,15 +215,30 @@ export const createMockBatchSubmission = ({
   provider,
   fundingAccountId,
   sourceCurrency,
+  sourcePaymentBatchId,
+  sourcePaymentBatchCode,
+  sourcePaymentOrderCode,
+  paymentAttemptNumber,
+  feeBearerByPayoutId = {},
+  executionAccountsByPayoutId = {},
 }: {
   payouts: Payout[];
   provider: ExecutableBatchProvider;
   fundingAccountId: string;
   sourceCurrency: InvoiceCurrency;
+  sourcePaymentBatchId: PaymentBatchRecord['paymentBatchId'];
+  sourcePaymentBatchCode: string;
+  sourcePaymentOrderCode: string;
+  paymentAttemptNumber: number;
+  feeBearerByPayoutId?: Readonly<Record<string, PaymentFeeBearer>>;
+  executionAccountsByPayoutId?: Readonly<Record<string, RetryExecutionAccount>>;
 }): MockBatchSubmission => {
   if (!payouts.length) throw new Error('至少选择一笔付款');
   if (!fundingAccountId) throw new Error('请选择资金账户');
-  if (!sourceCurrency) throw new Error('请选择 source_currency');
+  if (!sourcePaymentBatchId || !sourcePaymentBatchCode) throw new Error('重新付款必须关联原付款批次');
+  if (!sourcePaymentOrderCode) throw new Error('重新付款必须沿用原付款单号');
+  if (!(paymentAttemptNumber > 1)) throw new Error('重新付款尝试次数必须大于 1');
+  if (!sourceCurrency) throw new Error('原付款批次缺少支付币种');
   const requestKeys = new Set(payouts.map((payout) => (
     payout.paymentRequestProjectId
       ? `request:${payout.paymentRequestProjectId}`
@@ -256,51 +246,65 @@ export const createMockBatchSubmission = ({
   )));
   if (requestKeys.size !== 1) throw new Error('一个付款批次只能关联一个请款项目');
   const invalid = payouts
-    .map((payout) => ({ payout, issues: validatePayoutForBatch(payout, provider) }))
+    .map((payout) => ({
+      payout,
+      issues: validatePayoutForBatch(
+        payout,
+        provider,
+        feeBearerByPayoutId[payout.id] ?? payout.feeBearer,
+        executionAccountsByPayoutId[payout.id]?.snapshot,
+      ),
+    }))
     .find(({ issues }) => issues.length > 0);
   if (invalid) {
     throw new Error(`${invalid.payout.invoice}：${invalid.issues[0]}`);
   }
   const items = payouts.map((payout): BatchTransferItem => {
-    const snapshot = payoutSnapshot(payout);
+    const executionAccount = executionAccountsByPayoutId[payout.id];
+    const snapshot = executionAccount?.snapshot ?? payoutSnapshot(payout);
+    const feeBearer = feeBearerByPayoutId[payout.id] ?? payout.feeBearer;
+    if (!feeBearer) throw new Error(`${payout.invoice}：关联合同缺少手续费承担方`);
     const transferMethod = (
       provider === 'PayPal'
         ? 'PAYPAL'
-        : payout.transferMethod ?? snapshot?.transferMethod
+        : executionAccount ? executionAccount.snapshot.transferMethod : payout.transferMethod ?? snapshot?.transferMethod
     ) as BatchTransferItem['transferMethod'];
     const feeOptions = provider === 'Airwallex'
-      ? airwallexFeeOptions(transferMethod as AirwallexTransferMethod, payout.feeBearer)
+      ? airwallexFeeOptions(transferMethod as AirwallexTransferMethod, feeBearer)
       : {};
     return {
       payoutId: payout.id,
       invoiceNumber: payout.invoice,
       creatorId: String(payout.creatorId ?? payout.invoiceSnapshot?.creatorId),
       payoutAccountId: String(
-        payout.payoutAccountId
+        executionAccount?.snapshot.payoutAccountId ?? payout.payoutAccountId
         ?? payout.invoiceSnapshot?.payoutAccountId
         ?? snapshot?.payoutAccountId,
       ),
-      payoutAccountVersion: payout.payoutAccountVersion
+      payoutAccountVersion: executionAccount?.snapshot.payoutAccountVersion ?? payout.payoutAccountVersion
         ?? payout.invoiceSnapshot?.payoutAccountVersion
         ?? snapshot?.payoutAccountVersion
         ?? 'legacy-v1',
       accountFingerprint: String(
-        payout.payoutAccountFingerprint
+        executionAccount?.snapshot.accountFingerprint ?? payout.payoutAccountFingerprint
         ?? payout.invoiceSnapshot?.payoutAccountFingerprint
         ?? snapshot?.accountFingerprint,
       ),
       provider,
       externalBeneficiaryId: provider === 'Airwallex'
-        ? payout.externalBeneficiaryId ?? snapshot?.externalBeneficiaryId
+        ? executionAccount ? executionAccount.snapshot.externalBeneficiaryId : payout.externalBeneficiaryId ?? snapshot?.externalBeneficiaryId
         : undefined,
       transferMethod,
       localClearingSystem: transferMethod === 'LOCAL'
-        ? payout.localClearingSystem ?? snapshot?.localClearingSystem
+        ? executionAccount ? executionAccount.snapshot.localClearingSystem : payout.localClearingSystem ?? snapshot?.localClearingSystem
         : undefined,
       transferAmount: payout.amount,
       transferCurrency: payout.currency,
+      feeBearer,
       paypalEmail: provider === 'PayPal' ? snapshot?.paypalEmail : undefined,
       transferNote: provider === 'PayPal' ? snapshot?.transferRemarks : undefined,
+      executionAccount: executionAccount?.snapshot,
+      accountSummary: executionAccount?.summary,
       ...feeOptions,
     };
   });
@@ -310,6 +314,10 @@ export const createMockBatchSubmission = ({
     provider,
     fundingAccountId,
     sourceCurrency,
+    sourcePaymentBatchId,
+    sourcePaymentBatchCode,
+    sourcePaymentOrderCode,
+    paymentAttemptNumber,
     items,
   };
 };

@@ -26,6 +26,8 @@ import {
   Workflow,
 } from 'lucide-react';
 import { useState } from 'react';
+import type { OperationLogInput } from '../operationLog';
+import { useOperationSearch } from '../useOperationSearch';
 import type { LucideIcon } from 'lucide-react';
 import { Avatar, Button, ListActionButton, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { Pagination, usePagination } from '../components/Pagination';
@@ -98,7 +100,7 @@ const ROLE_DEFINITIONS: Record<RoleKey, RoleDefinition> = {
     icon: Megaphone,
     summary: '业务资料维护、项目发起',
     permissions: [
-      '新增、编辑达人档案并导入合作名单',
+      '新增、编辑达人档案并导出合作名单',
       '上传和管理合同，生成并维护 Invoice',
       '新建项目并维护达人、PM 与预算资料',
       '查看本人负责项目的执行进度',
@@ -476,7 +478,7 @@ function ApprovalFlowEditor({
   );
 }
 
-export function SystemSettingsPage({ notify }: { notify: Notify }) {
+export function SystemSettingsPage({ notify, onOperation }: { notify: Notify; onOperation?: (input: OperationLogInput) => void }) {
   const [view, setView] = useState<SettingsView>('accounts');
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | RoleKey>('all');
@@ -494,6 +496,7 @@ export function SystemSettingsPage({ notify }: { notify: Notify }) {
   const [approvalFlows, setApprovalFlows] = useState(INITIAL_APPROVAL_FLOWS);
   const [approvalDraft, setApprovalDraft] = useState<ApprovalFlow | null>(null);
   const [approvalEditorMode, setApprovalEditorMode] = useState<ApprovalEditorMode>('edit');
+  useOperationSearch(search, 'system-accounts', onOperation);
 
   const normalizedSearch = search.trim().toLowerCase();
   const visibleAccounts = accounts.filter((account) => {
@@ -530,6 +533,7 @@ export function SystemSettingsPage({ notify }: { notify: Notify }) {
     setAccounts((current) => current.map((item) => item.id === account.id ? updatedAccount : item));
     setSelectedAccount((current) => current?.id === account.id ? updatedAccount : current);
     notify(status === '已启用' ? '账号已启用' : '账号已停用', `${account.name}的系统账号已${status === '已启用' ? '恢复登录' : '停止登录'}。`);
+    onOperation?.({ module: 'system-accounts', action: '配置', targetId: account.id });
   };
 
   const toggleAccountStatus = (account: SystemAccount) => {
@@ -554,6 +558,7 @@ export function SystemSettingsPage({ notify }: { notify: Notify }) {
     setAccounts((current) => current.map((item) => item.id === editingAccount.id ? updatedAccount : item));
     setEditingAccount(null);
     notify('操作权限已更新', `${editingAccount.name}已配置 ${draftPermissions.length} 项系统操作权限。`);
+    onOperation?.({ module: 'system-accounts', action: '配置', targetId: editingAccount.id });
   };
 
   const openPasswordEditor = (account: SystemAccount) => {
@@ -572,6 +577,7 @@ export function SystemSettingsPage({ notify }: { notify: Notify }) {
     setNewPassword('');
     setConfirmPassword('');
     notify('登录密码已更新', `${passwordAccount.name}的密码已修改，下次登录时生效。`);
+    onOperation?.({ module: 'system-accounts', action: '配置', targetId: passwordAccount.id });
   };
 
   const createAccount = () => {
@@ -592,6 +598,7 @@ export function SystemSettingsPage({ notify }: { notify: Notify }) {
     }]);
     setCreateOpen(false);
     notify('系统账号已创建', `${name} 已分配为“${ROLE_DEFINITIONS[newRole].label}”。`);
+    onOperation?.({ module: 'system-accounts', action: '新增', targetId: nextId });
   };
 
   const openCreateApprovalFlow = () => {
@@ -614,6 +621,7 @@ export function SystemSettingsPage({ notify }: { notify: Notify }) {
     notify(nextEnabled ? '审批流程已启用' : '审批流程已停用', nextEnabled
       ? `新提交的请款项目将执行“${flow.name}”。`
       : `“${flow.name}”已停止接收新的请款项目。`);
+    onOperation?.({ module: 'system-accounts', action: '配置', targetId: flow.id });
   };
 
   const updateApprovalNode = (nodeId: string, update: Partial<Pick<ApprovalNode, 'name' | 'role'>>) => {
@@ -671,6 +679,7 @@ export function SystemSettingsPage({ notify }: { notify: Notify }) {
     });
     setApprovalDraft(null);
     notify(approvalEditorMode === 'create' ? '审批流程已创建' : '审批流程已更新', `“${savedFlow.name}”共配置 ${savedFlow.nodes.length} 个审批节点。`);
+    onOperation?.({ module: 'system-accounts', action: approvalEditorMode === 'create' ? '新增' : '编辑', targetId: savedFlow.id });
   };
 
   const approvalDraftIsValid = Boolean(
@@ -745,7 +754,7 @@ export function SystemSettingsPage({ notify }: { notify: Notify }) {
                           </button>
                         </td>
                         <td>{account.lastLogin}</td>
-                        <td className="action-cell"><ListActionButton kind="manage" onClick={() => setSelectedAccount(account)}>管理账号</ListActionButton></td>
+                        <td className="action-cell"><ListActionButton kind="manage" onClick={() => { setSelectedAccount(account); onOperation?.({ module: 'system-accounts', action: '查看详情', targetId: account.id }); }}>管理账号</ListActionButton></td>
                       </tr>
                     );
                   })}

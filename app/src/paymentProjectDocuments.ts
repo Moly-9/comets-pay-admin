@@ -3,6 +3,7 @@ import { accountDisplayValue } from './accountPresentation';
 import { contractDocumentFilename } from './documentFilenames';
 import { invoiceFilename } from './invoice/invoiceUtils';
 import { paymentProviderDisplayName } from './paymentProviderPresentation';
+import { paymentSingleAmountLabel, paymentSingleAmountTotalsForValues } from './paymentAttempts';
 import { formatCreatorHandle } from './creatorSearchOptions';
 import { createFlatProjectPdfArchive } from './projectResourcePdfArchive';
 import { createGenericPaymentConfirmationPdf } from './paymentProjectConfirmation';
@@ -224,12 +225,13 @@ export const createPaymentProjectDetailWorkbook = async ({
     { header: '账户名', key: 'accountName', width: 28 },
     { header: '付款日期', key: 'paidAt', width: 16 },
     { header: '请款金额', key: 'requestAmount', width: 18 },
-    { header: '支出金额', key: 'expenditureAmount', width: 18 },
+    { header: '单笔支付金额', key: 'singlePaymentAmount', width: 22 },
     { header: '手续费', key: 'feeAmount', width: 18 },
+    { header: '退款金额', key: 'refundAmount', width: 18 },
     { header: '付款状态', key: 'status', width: 16 },
     { header: '余额', key: 'balance', width: 22 },
   ];
-  sheet.autoFilter = { from: 'A1', to: 'J1' };
+  sheet.autoFilter = { from: 'A1', to: 'K1' };
   sheet.getRow(1).height = 34;
   sheet.getRow(1).font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
   sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4D5664' } };
@@ -249,10 +251,21 @@ export const createPaymentProjectDetailWorkbook = async ({
       accountName: item.accountName || '待补充',
       paidAt: isReturn ? workbookDateLabel(refundedAt) : workbookDateLabel(item.paymentSubmittedAt),
       requestAmount: isReturn ? '—' : workbookMoney(item.amount, item.currency),
-      expenditureAmount: isReturn
-        ? refundAmount !== undefined && refundCurrency ? workbookMoney(-Math.abs(refundAmount), refundCurrency) : '待渠道回写'
-        : workbookMoney(item.actualPaidAmount, item.actualPaidCurrency),
+      singlePaymentAmount: isReturn
+        ? workbookMoney(0, refundCurrency || item.currency)
+        : item.paymentStatus === '付款处理中'
+          ? '待渠道回写'
+          : paymentSingleAmountLabel(paymentSingleAmountTotalsForValues({
+              principalAmount: item.amount,
+              principalCurrency: item.currency,
+              feeBearer: item.feeBearer,
+              transferFeeAmount: item.transferFeeAmount,
+              transferFeeCurrency: item.transferFeeCurrency,
+            })),
       feeAmount: isReturn ? '—' : workbookMoney(item.transferFeeAmount, item.transferFeeCurrency),
+      refundAmount: isReturn
+        ? refundAmount !== undefined && refundCurrency ? workbookMoney(Math.abs(refundAmount), refundCurrency) : '待渠道回写'
+        : '—',
       status: isReturn ? refundAmount !== undefined && refundCurrency ? '已退回' : '退回处理中' : item.paymentStatus,
       balance: paid && !isReturn
         ? workbookMoney(item.postTransactionBalance, item.postTransactionBalanceCurrency)

@@ -30,6 +30,8 @@ import type { ContractId } from '../businessWorkflow';
 import type { CreatorProfile } from '../types';
 import type { PaymentRequestProjectLike } from '../paymentRequestProjects';
 import { downloadBlob } from '../invoice/invoiceUtils';
+import type { OperationLogInput } from '../operationLog';
+import { useOperationSearch } from '../useOperationSearch';
 import { ContractDetailPage } from './ContractDetailPage';
 import type { ProjectSummary } from './ProjectDetailPage';
 
@@ -345,6 +347,7 @@ export function ContractsPage({
   onUpdateContract,
   onDeleteContracts,
   notify,
+  onOperation,
 }: {
   contracts: ContractRecord[];
   projects: ProjectSummary[];
@@ -367,6 +370,7 @@ export function ContractsPage({
   onUpdateContract: (contract: ContractRecord) => void;
   onDeleteContracts: (contractIds: string[]) => number;
   notify: Notify;
+  onOperation?: (input: OperationLogInput) => void;
 }) {
   const handleUploadContracts = (inputs: ContractUploadInput[]) => (
     onUploadContracts
@@ -374,6 +378,7 @@ export function ContractsPage({
       : inputs.map((input) => onUploadContract?.(input)).filter((record): record is ContractRecord => Boolean(record))
   );
   const [search, setSearch] = useState('');
+  useOperationSearch(search, 'contracts', onOperation);
   const [filter, setFilter] = useState<ContractFilter>('all');
   const [projectFilter, setProjectFilter] = useState('');
   const [validityFilter, setValidityFilter] = useState<ContractValidityFilter>('all');
@@ -540,8 +545,10 @@ export function ContractsPage({
           ? `已导出 ${selected.length} 份合同清单和 ${archive.documentCount} 个文件，${archive.failures.length} 个源文件暂不可读取。`
           : `已导出 ${selected.length} 份合同及 ${archive.documentCount} 个源文件。`,
       );
+      onOperation?.({ module: 'contracts', action: '导出' });
     } catch {
       notify('合同导出失败', '浏览器未能生成批量合同压缩包，请稍后重试。');
+      onOperation?.({ module: 'contracts', action: '导出', result: '失败', failure: '导出失败' });
     } finally {
       setExporting(false);
     }
@@ -564,6 +571,7 @@ export function ContractsPage({
       return;
     }
     setSelectedContractId(contractId);
+    onOperation?.({ module: 'contracts', action: '查看详情', targetId: contract?.contractId ?? contractId });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   if (selectedContract) {

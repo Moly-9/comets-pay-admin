@@ -21,6 +21,7 @@ import {
   paymentBatchAmountLabel,
   paymentBatchFinancialSummary,
   paymentBatchMoneyTotalsLabel,
+  paymentBatchResultAmountLabel,
   paymentBatchStatusCounts,
   paymentExecutionDatesForPayouts,
   upsertPaymentReversalBatch,
@@ -247,6 +248,51 @@ const buildInput = () => {
 };
 
 describe('payment batch snapshots', () => {
+  it('freezes a cross-channel retry account without changing the original batch or approved documents', () => {
+    const input = buildInput();
+    const original = createPaymentBatchRecord(input);
+    const approvedPaymentList = JSON.stringify(input.paymentLists[0]);
+    const originalPayout = input.payouts[0];
+    const paypalSnapshot: DocumentPayoutSnapshot = {
+      ...paymentSnapshot(''),
+      payoutAccountId: 'paypal-retry-account',
+      payoutAccountVersion: 'v3',
+      accountFingerprint: 'fp_paypal_retry',
+      payoutProvider: 'PayPal',
+      validationStatus: 'VERIFIED',
+      transferMethod: 'PAYPAL',
+      paypalUsername: 'retry.creator',
+      paypalEmail: 'retry@example.test',
+      accountCurrency: 'USD',
+    };
+    const retry = createPaymentBatchRecord({
+      ...input,
+      payouts: [{ ...originalPayout, provider: 'PayPal', payoutAccountId: 'paypal-retry-account', account: 'retry@example.test' }],
+      paymentBatchId: 'payment_batch_paypal_retry' as PaymentBatchId,
+      paymentBatchCode: 'BAT-PAYPAL-RETRY',
+      provider: 'PayPal',
+      fundingAccountId: 'mock-paypal-balance',
+      purpose: 'RETRY',
+      sourcePaymentBatchId: original.paymentBatchId,
+      sourcePaymentBatchCode: original.paymentBatchCode,
+      paymentOrderCode: original.paymentOrderCode,
+      paymentAttemptNumber: 2,
+      executionAccountsByPayoutId: {
+        [originalPayout.id]: { snapshot: paypalSnapshot, summary: 'retry@example.test' },
+      },
+    });
+
+    expect(retry.items[0]).toMatchObject({
+      provider: 'PayPal', payoutAccountId: 'paypal-retry-account', payoutAccountVersion: 'v3',
+      accountIdentifier: 'retry@example.test', accountIdentifierLabel: 'PayPal 邮箱',
+      paymentAttemptNumber: 2, paymentOrderCode: original.paymentOrderCode,
+    });
+    expect(original.items[0].provider).toBe('Airwallex');
+    expect(original.items[0].payoutAccountId).not.toBe('paypal-retry-account');
+    expect(input.generatedInvoices[0].snapshot.payoutProvider).toBe('Airwallex');
+    expect(JSON.stringify(input.paymentLists[0])).toBe(approvedPaymentList);
+  });
+
   it('matches legacy attempt execution dates by attempt number instead of the latest batch', () => {
     const input = buildInput();
     const template = createPaymentBatchRecord(input);
@@ -604,6 +650,21 @@ describe('payment batch snapshots', () => {
     expect(record.items[0].paidAt).toBeUndefined();
   });
 
+  it('freezes the batch fee-bearer override without rewriting upstream payment data', () => {
+    const input = buildInput();
+    const sourcePayoutFeeBearer = input.payouts[0].feeBearer;
+    const sourcePaymentListFeeBearer = input.paymentLists[0].items[0].snapshot.feeBearer;
+
+    const record = createPaymentBatchRecord({
+      ...input,
+      feeBearerByPayoutId: { [input.payouts[0].id]: 'PUBLISHER' },
+    });
+
+    expect(record.items[0].feeBearer).toBe('收款人承担');
+    expect(input.payouts[0].feeBearer).toBe(sourcePayoutFeeBearer);
+    expect(input.paymentLists[0].items[0].snapshot.feeBearer).toBe(sourcePaymentListFeeBearer);
+  });
+
   it('normalizes successful batch and attempt snapshots into the recipient currency', () => {
     const input = buildInput();
     input.payouts[0].status = '已付款';
@@ -686,7 +747,54 @@ describe('payment batch snapshots', () => {
     expect(paymentBatchMoneyTotalsLabel(summary.paymentAmounts)).toBe('USD 1,250');
     expect(paymentBatchMoneyTotalsLabel(summary.transferFeeAmounts)).toBe('USD 8.5');
     expect(paymentBatchMoneyTotalsLabel(summary.actualPaidAmounts)).toBe('USD 1,258.5');
+    expect(paymentBatchMoneyTotalsLabel(summary.singlePaymentAmounts ?? [])).toBe('USD 1,258.5');
     expect(summary.items[0].paymentStatus).toBe('已付款');
+  });
+
+  it('sums only confirmed reversal refunds by currency without counting them twice', () => {
+    const record = createPaymentBatchRecord({ ...buildInput(), status: '全部失败', itemStatus: '付款失败' });
+    const source = record.items[0];
+    const reversal = {
+      ...record,
+      purpose: 'REVERSAL' as const,
+      status: '已冲退' as const,
+      items: [
+        { ...source, amount: 0, paymentStatus: '已冲退' as const, transferFeeAmount: 0, transferFeeCurrency: 'USD' as const,
+          actualPaidAmount: -1_250, actualPaidCurrency: 'USD' as const, refundAmount: 1_250, refundCurrency: 'USD' as const },
+        { ...source, payoutId: 'payout_reversal_second', amount: 0, currency: 'EUR' as const,
+          paymentStatus: '已冲退' as const, transferFeeAmount: 0, transferFeeCurrency: 'USD' as const,
+          actualPaidAmount: -30.5, actualPaidCurrency: 'EUR' as const, refundAmount: 30.5, refundCurrency: 'EUR' as const },
+        { ...source, payoutId: 'payout_reversal_third', amount: 0, paymentStatus: '已冲退' as const,
+          transferFeeAmount: 0, transferFeeCurrency: 'USD' as const, actualPaidAmount: -50, actualPaidCurrency: 'USD' as const,
+          refundAmount: 50, refundCurrency: 'USD' as const },
+      ],
+    };
+    const summary = paymentBatchFinancialSummary(reversal);
+
+    expect(paymentBatchMoneyTotalsLabel(summary.paymentAmounts)).toBe('USD 0 + EUR 0');
+    expect(paymentBatchMoneyTotalsLabel(summary.transferFeeAmounts)).toBe('USD 0');
+    expect(summary.singlePaymentAmounts).toEqual([
+      { currency: 'USD', amount: -1_300 }, { currency: 'EUR', amount: -30.5 },
+    ]);
+    expect(summary.actualPaidAmounts).toEqual([
+      { currency: 'USD', amount: -1_300 }, { currency: 'EUR', amount: -30.5 },
+    ]);
+    expect(paymentBatchResultAmountLabel(reversal, summary.singlePaymentAmounts)).toBe('USD -1,300 + EUR -30.5');
+    expect(record.items[0].amount).toBe(1_250);
+
+    const legacy = { ...reversal, items: [{
+      ...reversal.items[0], actualPaidAmount: undefined, actualPaidCurrency: undefined,
+    }] };
+    expect(paymentBatchFinancialSummary(legacy).singlePaymentAmounts).toEqual([{ currency: 'USD', amount: -1_250 }]);
+    expect(paymentBatchFinancialSummary(legacy).actualPaidAmounts).toEqual([{ currency: 'USD', amount: -1_250 }]);
+
+    const missing = { ...reversal, items: [reversal.items[0], {
+      ...reversal.items[1], actualPaidAmount: undefined, actualPaidCurrency: undefined,
+      refundAmount: undefined, refundCurrency: undefined,
+    }] };
+    expect(paymentBatchFinancialSummary(missing).singlePaymentAmounts).toBeNull();
+    expect(paymentBatchResultAmountLabel(missing, null)).toBe('—');
+    expect(paymentBatchResultAmountLabel({ ...missing, status: '冲退处理中' }, null)).toBe('冲退处理中');
   });
 
   it.each([

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   paymentAttemptAmountTotals,
   paymentExpenditureTotalsForValues,
+  paymentSingleAmountTotalsForValues,
   paymentPayoutExpenditureTotals,
   paymentAttemptSnapshotFor,
   withLatestFailedAttemptReturnReason,
@@ -35,6 +36,18 @@ const payout = (): Payout => ({
 });
 
 describe('payment attempt snapshots', () => {
+  it('calculates gross single-payment amounts from principal and only the payer fee share', () => {
+    const base = { principalAmount: 1_000, principalCurrency: 'USD' as const, transferFeeAmount: 20, transferFeeCurrency: 'USD' as const, actualPaidAmount: 2, refundAmount: 1_000 };
+    expect(paymentSingleAmountTotalsForValues({ ...base, feeBearer: 'ADVERTISER' })).toEqual([{ currency: 'USD', amount: 1_020 }]);
+    expect(paymentSingleAmountTotalsForValues({ ...base, feeBearer: 'SHARED' })).toEqual([{ currency: 'USD', amount: 1_010 }]);
+    expect(paymentSingleAmountTotalsForValues({ ...base, feeBearer: 'PUBLISHER' })).toEqual([{ currency: 'USD', amount: 1_000 }]);
+    expect(paymentSingleAmountTotalsForValues({ ...base, transferFeeCurrency: 'EUR' })).toEqual([
+      { currency: 'USD', amount: 1_000 }, { currency: 'EUR', amount: 20 },
+    ]);
+    expect(paymentSingleAmountTotalsForValues({ ...base, transferFeeAmount: undefined })).toBeNull();
+    expect(paymentSingleAmountTotalsForValues({ ...base, transferFeeAmount: undefined, feeBearer: 'PUBLISHER' }))
+      .toEqual([{ currency: 'USD', amount: 1_000 }]);
+  });
   it('falls back to principal plus the payer fee share for all three fee policies', () => {
     const base = {
       principalAmount: 1_000,

@@ -64,12 +64,13 @@ describe('ContractBuilderPage advertiser controls', () => {
     expect(contractBuilderSource).toContain("setProjectSelectionId('')");
   });
 
-  it('offers every configured entity and preselects the contract default in SYSTEM mode', () => {
+  it('uses the configured default Advertiser without rendering a system selector', () => {
     const html = renderBuilder('SYSTEM');
 
-    expect(html).toContain('aria-label="合同 Advertiser 主体"');
-    expect(html).toContain('COMETS INTERNATIONAL LIMITED');
-    expect(html).toContain(INITIAL_CONTRACT_ADVERTISER_SETTINGS.entities[0].address);
+    expect(html).not.toContain('aria-label="合同 Advertiser 主体"');
+    expect(html).not.toContain('<span>Advertiser *</span>');
+    expect(contractBuilderSource).toContain('systemAdvertiser?.name');
+    expect(contractBuilderSource).toContain('systemAdvertiser?.address');
   });
 
   it('shows independent name and address inputs in MANUAL mode', () => {

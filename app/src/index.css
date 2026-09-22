@@ -12689,7 +12689,7 @@ button:disabled {
 }
 
 .batch-wizard-table {
-  min-width: 1160px;
+  min-width: 1260px;
   table-layout: auto;
 }
 
@@ -12719,8 +12719,20 @@ button:disabled {
 }
 
 .batch-wizard-table .batch-wizard-col-account {
-  width: 210px;
-  min-width: 210px;
+  width: 220px;
+  min-width: 220px;
+}
+
+.batch-retry-account-select.custom-select-compact {
+  width: 200px;
+  max-width: 100%;
+}
+
+.batch-retry-account-error {
+  display: block;
+  margin-top: 5px;
+  color: #b42318;
+  font-size: 11px;
 }
 
 .batch-wizard-table .batch-wizard-col-validation {
@@ -12731,6 +12743,20 @@ button:disabled {
 .batch-wizard-table .batch-wizard-col-amount {
   width: 126px;
   min-width: 126px;
+}
+
+.batch-wizard-table .batch-wizard-col-fee-bearer {
+  width: 154px;
+  min-width: 154px;
+}
+
+.batch-fee-bearer-select.custom-select-compact {
+  width: 132px;
+}
+
+.batch-fee-bearer-select.custom-select-compact .custom-select-trigger {
+  min-height: 38px;
+  color: #20242c;
 }
 
 .batch-wizard-request-code {
@@ -12972,6 +12998,45 @@ button:disabled {
   display: grid;
   gap: 10px;
   margin-top: 16px;
+}
+
+.batch-inherited-fields {
+  display: grid;
+  margin: 15px 0 0;
+  gap: 8px;
+}
+
+.batch-inherited-fields > div {
+  display: grid;
+  min-height: 58px;
+  align-content: center;
+  gap: 5px;
+  border: 1px solid #e5e8ed;
+  border-radius: 10px;
+  background: #f7f8fa;
+  padding: 10px 12px;
+}
+
+.batch-inherited-fields dt {
+  color: #7f8692;
+  font-size: 11px;
+}
+
+.batch-inherited-fields dd {
+  min-width: 0;
+  margin: 0;
+  color: #20242c;
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.batch-inherited-fields dd.mono-cell {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.batch-inherited-fields .custom-select-form {
+  width: 100%;
 }
 
 .validation-summary {
@@ -16458,6 +16523,7 @@ button:disabled {
 }
 
 .creator-collaboration-project-code {
+  min-width: 0;
   overflow: hidden;
   color: #777e8a;
   font-size: 9.5px;
@@ -16466,7 +16532,16 @@ button:disabled {
   white-space: nowrap;
 }
 
+.creator-collaboration-project-badges {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .creator-collaboration-relation,
+.creator-collaboration-contract-status,
 .creator-collaboration-project-title > span {
   display: inline-flex;
   min-height: 22px;
@@ -16476,8 +16551,8 @@ button:disabled {
   border-radius: 999px;
   background: #f5f6f8;
   padding: 2px 7px;
-  color: #747b88;
-  font-size: 8.5px;
+  color: #596170;
+  font-size: 10px;
   font-weight: 650;
   white-space: nowrap;
 }
@@ -16486,6 +16561,19 @@ button:disabled {
   border-color: #bce3cc;
   background: #eef9f2;
   color: #287c4d;
+}
+
+.creator-collaboration-contract-status.is-active {
+  border-color: #bce3cc;
+  background: #eef9f2;
+  color: #287c4d;
+}
+
+.creator-collaboration-contract-status.is-pending,
+.creator-collaboration-contract-status.is-unset {
+  border-color: #f0d39c;
+  background: #fff8e9;
+  color: #805719;
 }
 
 .creator-collaboration-project-title h4 {
@@ -18486,6 +18574,7 @@ button:disabled {
   }
 
   .channel-panel .panel-title-row,
+  .channel-panel .batch-inherited-fields,
   .channel-panel .batch-funding-controls,
   .channel-panel .validation-summary,
   .channel-panel .inline-alert {
@@ -18664,7 +18753,8 @@ button:disabled {
   }
 
   .channel-panel .segmented-control,
-  .channel-panel .provider-list {
+  .channel-panel .provider-list,
+  .channel-panel .batch-inherited-fields {
     margin-top: 14px;
   }
 
@@ -23993,8 +24083,7 @@ button:disabled {
   white-space: nowrap;
 }
 
-.contract-document-panel > header > a,
-.contract-channel-link {
+.contract-document-panel > header > a {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -24785,8 +24874,20 @@ button:disabled {
   font-weight: 500;
 }
 
-.contract-channel-link {
-  margin-top: 16px;
+.contract-definition-link {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px;
+  color: #69519e;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+  white-space: normal;
+}
+
+.contract-definition-link svg {
+  flex: 0 0 auto;
 }
 
 .contract-deliverable-list {
@@ -28115,6 +28216,151 @@ button:disabled {
   background: #fff;
 }
 
+.contract-recognition-platform-channel-detail {
+  grid-template-columns: minmax(0, 1fr) 48px;
+}
+
+.contract-recognition-money-detail {
+  grid-template-columns: minmax(0, 1fr) 48px;
+}
+
+.contract-recognition-money-fields {
+  display: grid;
+  grid-template-columns: minmax(112px, 0.72fr) minmax(148px, 1.28fr);
+  min-width: 0;
+  gap: 8px 10px;
+}
+
+.contract-recognition-money-fields > label {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.contract-recognition-money-fields input,
+.contract-recognition-money-fields .custom-select-trigger,
+.contract-recognition-value .custom-select-trigger {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  border: 1px solid #d9dde5;
+  border-radius: 7px;
+  background: #fff;
+  color: #252933;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.contract-recognition-money-fields input {
+  padding: 0 9px;
+}
+
+.contract-recognition-money-fields .custom-select-trigger,
+.contract-recognition-value .custom-select-trigger {
+  padding: 0 8px;
+}
+
+.contract-recognition-money-fields input:hover,
+.contract-recognition-money-fields .custom-select-trigger:hover,
+.contract-recognition-value .custom-select-trigger:hover {
+  border-color: #b9bfca;
+}
+
+.contract-recognition-money-fields input:focus,
+.contract-recognition-money-fields .custom-select-open .custom-select-trigger,
+.contract-recognition-money-fields .custom-select-trigger:focus-visible,
+.contract-recognition-value .custom-select-open .custom-select-trigger,
+.contract-recognition-value .custom-select-trigger:focus-visible {
+  border-color: #8f78a7;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(121, 96, 146, 0.12);
+}
+
+.contract-recognition-money-fields input[aria-invalid="true"] {
+  border-color: #d79a92;
+  background: #fff9f8;
+}
+
+.contract-recognition-money-error {
+  grid-column: 1 / -1;
+  color: #a4493e;
+  font-size: 9.5px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.contract-recognition-money-meta {
+  display: grid;
+  grid-column: 1 / -1;
+  min-width: 0;
+  gap: 3px;
+}
+
+.contract-recognition-platform-channel-fields {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.contract-recognition-platform-channel-fields > label {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.contract-recognition-platform-channel-fields input {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid #d9dde5;
+  border-radius: 7px;
+  background: #fff;
+  color: #252933;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.contract-recognition-platform-channel-fields input::placeholder {
+  color: #a0a4ae;
+  font-weight: 500;
+  opacity: 1;
+}
+
+.contract-recognition-platform-channel-fields input:hover {
+  border-color: #b9bfca;
+}
+
+.contract-recognition-platform-channel-fields input:focus {
+  border-color: #8f78a7;
+  outline: 3px solid rgba(121, 96, 146, 0.12);
+}
+
+.contract-recognition-platform-channel-fields .custom-select-trigger {
+  height: 30px;
+  border-radius: 7px;
+  padding: 0 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.contract-recognition-platform-channel-fields .custom-select-open .custom-select-trigger,
+.contract-recognition-platform-channel-fields .custom-select-trigger:focus-visible {
+  border-color: #8f78a7;
+  box-shadow: 0 0 0 3px rgba(121, 96, 146, 0.12);
+}
+
+.contract-recognition-platform-channel-meta {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  margin-left: 122px;
+}
+
 .contract-expiry-editor {
   display: grid;
   grid-template-columns: minmax(116px, 1fr) auto minmax(116px, 1fr);
@@ -28213,6 +28459,53 @@ button:disabled {
   border-bottom-color: transparent;
   outline: 0;
   background: transparent;
+}
+
+.contract-recognition-detail-readonly .contract-recognition-platform-channel-fields input,
+.contract-recognition-detail-readonly .contract-recognition-platform-channel-fields input:hover,
+.contract-recognition-detail-readonly .contract-recognition-platform-channel-fields input:focus,
+.contract-recognition-detail-readonly .contract-recognition-platform-channel-fields .custom-select-trigger,
+.contract-recognition-detail-readonly .contract-recognition-platform-channel-fields .custom-select-trigger:hover,
+.contract-recognition-detail-readonly .contract-recognition-platform-channel-fields .custom-select-trigger:focus-visible {
+  border-color: transparent;
+  outline: 0;
+  background: transparent;
+  cursor: text;
+}
+
+.contract-recognition-detail-readonly .contract-recognition-money-fields input,
+.contract-recognition-detail-readonly .contract-recognition-money-fields input:hover,
+.contract-recognition-detail-readonly .contract-recognition-money-fields input:focus,
+.contract-recognition-detail-readonly .contract-recognition-money-fields .custom-select-trigger,
+.contract-recognition-detail-readonly .contract-recognition-money-fields .custom-select-trigger:hover,
+.contract-recognition-detail-readonly .contract-recognition-money-fields .custom-select-trigger:focus-visible,
+.contract-recognition-detail-readonly .contract-recognition-value .custom-select-trigger,
+.contract-recognition-detail-readonly .contract-recognition-value .custom-select-trigger:hover,
+.contract-recognition-detail-readonly .contract-recognition-value .custom-select-trigger:focus-visible {
+  border-color: transparent;
+  outline: 0;
+  box-shadow: none;
+  background: transparent;
+  cursor: text;
+}
+
+@media (max-width: 640px) {
+  .contract-recognition-money-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .contract-recognition-platform-channel-detail {
+    grid-template-columns: minmax(0, 1fr) 48px;
+  }
+
+  .contract-recognition-platform-channel-fields > label {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  .contract-recognition-platform-channel-meta {
+    margin-left: 0;
+  }
 }
 
 .contract-recognition-source {

@@ -146,10 +146,10 @@ describe('PaymentBatchDetailPage', () => {
     expect(html).toContain('下载确认函');
     expect(html).toContain('查看详情');
     expect(html).toContain('payment-project-payment-detail-page payment-batch-payment-detail-page');
-    expect(html).toMatch(/payment-batch-detail-total[\s\S]*?<strong>USD 2.5<\/strong>/);
-    expect(html).toContain('<small>总支出金额 USD 2.5</small>');
+    expect(html).toMatch(/payment-batch-detail-total[\s\S]*?<strong>USD 1,252.5<\/strong>/);
+    expect(html).toContain('<small>批次支付金额 USD 1,252.5</small>');
     expect(html).toContain('<th class="payment-batch-col-amount" scope="col">请款金额</th>');
-    expect(html).toContain('<th class="payment-batch-col-actual" scope="col">总支出金额</th>');
+    expect(html).toContain('<th class="payment-batch-col-actual" scope="col">单笔支付金额</th>');
     expect(html).not.toContain('payment-batch-order-result');
     expect(html).not.toContain('payment_batch_detail_test');
     expect(html).not.toContain('请款项目 / 所属项目');
@@ -175,8 +175,39 @@ describe('PaymentBatchDetailPage', () => {
 
     expect(html).toMatch(/payment-batch-detail-total[\s\S]*?<span class="simple-status is-processing"><i><\/i>付款处理中<\/span>/);
     expect(html).toMatch(/payment-batch-detail-total[\s\S]*?<strong>待渠道回写<\/strong>/);
-    expect(html).toContain('<small>总支出金额 待渠道回写</small>');
+    expect(html).toContain('<small>批次支付金额 待渠道回写</small>');
     expect(html).not.toContain('payment-batch-order-result');
+  });
+
+  it('shows the negative refund in reversal batch totals but zero for the single payment row', () => {
+    const reversal: PaymentBatchRecord = {
+      ...DETAIL_BATCH,
+      purpose: 'REVERSAL',
+      status: '已冲退',
+      items: DETAIL_BATCH.items.map((item) => ({
+        ...item,
+        amount: 0,
+        paymentStatus: '已冲退',
+        transferFeeAmount: 0,
+        actualPaidAmount: -1_250,
+        actualPaidCurrency: 'USD',
+        refundAmount: 1_250,
+        refundCurrency: 'USD',
+      })),
+    };
+    const html = renderToStaticMarkup(<PaymentBatchDetailPage batch={reversal} onBack={vi.fn()} />);
+    expect(html).toMatch(/payment-batch-detail-total[\s\S]*?<strong>USD -1,250<\/strong>/);
+    expect(html).toContain('<small>批次支付金额 USD -1,250</small>');
+    expect(html).toContain('<th class="payment-batch-col-actual" scope="col">单笔支付金额</th>');
+    expect(html).toContain('payment-batch-col-actual payment-batch-table-money-cell"><strong>USD 0</strong>');
+
+    const pendingHtml = renderToStaticMarkup(<PaymentBatchDetailPage batch={{
+      ...reversal,
+      status: '冲退处理中',
+      items: reversal.items.map((item) => ({ ...item, paymentStatus: '冲退处理中',
+        actualPaidAmount: undefined, refundAmount: undefined })),
+    }} onBack={vi.fn()} />);
+    expect(pendingHtml).toContain('<small>批次支付金额 冲退处理中</small>');
   });
 
   it('highlights every supported payment provider in payment detail rows', () => {

@@ -14,7 +14,14 @@ import {
   X,
 } from 'lucide-react';
 import { forwardRef, useEffect, useId, useRef, useState } from 'react';
-import type { ButtonHTMLAttributes, CSSProperties, KeyboardEvent, PropsWithChildren, ReactNode } from 'react';
+import type {
+  ButtonHTMLAttributes,
+  CSSProperties,
+  InputHTMLAttributes,
+  KeyboardEvent,
+  PropsWithChildren,
+  ReactNode,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { INVOICE_REVIEW_STATUS_META } from '../invoice/invoiceReviewWorkflow';
 import type { InvoiceReviewStatus, PayoutStatus, ToastState } from '../types';
@@ -24,6 +31,68 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   icon?: ReactNode;
   disabledReason?: string;
 };
+
+type AmountInputProps = Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  'type' | 'step' | 'min' | 'value'
+> & {
+  value: string | number;
+  min?: string | number;
+};
+
+const numericMinimum = (minimum: string | number | undefined) => {
+  const parsed = Number(minimum ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+/**
+ * Native number inputs align their step grid to `min`. A fixed minimum such as
+ * 0.01 would therefore turn 100.50 into 101.01. Keep the original lower bound
+ * while moving the step base to the current fractional part, so every native
+ * spinner or ArrowUp/ArrowDown action changes the controlled value by exactly 1.
+ */
+export const amountStepMinimum = (
+  value: string | number,
+  minimum?: string | number,
+) => {
+  const lowerBound = numericMinimum(minimum);
+  const rawValue = String(value).trim();
+  if (!rawValue) return lowerBound > 0 ? Math.ceil(lowerBound) : lowerBound;
+
+  const numericValue = Number(rawValue);
+  if (!Number.isFinite(numericValue)) return lowerBound;
+
+  const decimalMatch = rawValue.match(/^[+-]?\d*\.(\d+)$/);
+  const fractionDigits = decimalMatch?.[1].length ?? 0;
+  const fraction = decimalMatch ? Number(`0.${decimalMatch[1]}`) : 0;
+  if (!(fraction > 0)) return lowerBound > 0 ? Math.ceil(lowerBound) : lowerBound;
+
+  const alignedMinimum = fraction >= lowerBound
+    ? fraction
+    : fraction + Math.ceil(lowerBound - fraction);
+  return fractionDigits > 0
+    ? Number(alignedMinimum.toFixed(fractionDigits))
+    : alignedMinimum;
+};
+
+export const AmountInput = forwardRef<HTMLInputElement, AmountInputProps>(function AmountInput({
+  inputMode = 'decimal',
+  min = 0,
+  value,
+  ...props
+}, ref) {
+  return (
+    <input
+      ref={ref}
+      {...props}
+      type="number"
+      inputMode={inputMode}
+      min={amountStepMinimum(value, min)}
+      step="1"
+      value={value}
+    />
+  );
+});
 
 export const BLOCKED_ACTION_EVENT = 'comets-pay:blocked-action';
 

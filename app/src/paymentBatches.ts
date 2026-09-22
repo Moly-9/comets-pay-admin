@@ -24,6 +24,7 @@ import type {
 import { accountDisplayValue } from './accountPresentation';
 import {
   HISTORICAL_PAYMENT_BATCH_SEEDS,
+  simulatedHistoricalPaymentSubmittedAt,
   type HistoricalPaymentBatchSeed,
 } from './historicalPaymentBatchFixtures';
 import {
@@ -36,7 +37,7 @@ import {
 import { aggregatePaymentStatus } from './paymentStatusFilters';
 import { prototypeRecipientReceivedAmountFor } from './prototypePaymentResults';
 import { nextPaymentBusinessCode } from './paymentNumbering';
-import { paymentExpenditureTotalsForValues } from './paymentAttempts';
+import { paymentExpenditureTotalsForValues, paymentSingleAmountTotalsForValues } from './paymentAttempts';
 
 export type PaymentBatchPurpose = 'NORMAL' | 'REVERSAL' | 'RETRY';
 
@@ -86,6 +87,8 @@ export type PaymentBatchItemSnapshot = Readonly<{
   paymentBatchCode?: string;
   /** 财务执行打款并提交付款渠道的时间。 */
   paymentSubmittedAt?: string;
+  /** True only for the generated execution timestamp of a legacy demo payout. */
+  paymentSubmittedAtIsSimulated?: boolean;
   creatorId?: string;
   creatorName: string;
   creatorHandle: string;
@@ -302,6 +305,8 @@ type CreatePaymentBatchRecordInput = PaymentBatchSourceData & Readonly<{
   paymentOrderCode?: string;
   sourcePaymentOrderCode?: string;
   paymentAttemptNumber?: number;
+  feeBearerByPayoutId?: Readonly<Record<string, NonNullable<Payout['feeBearer']>>>;
+  executionAccountsByPayoutId?: Readonly<Record<string, { snapshot: DocumentPayoutSnapshot; summary: string }>>;
 }>;
 
 type CreatePaymentExecutionBatchRecordInput = PaymentBatchSourceData & Readonly<{
@@ -329,6 +334,7 @@ const historicalPaymentBatchRecord = (
   seed: HistoricalPaymentBatchSeed,
 ): PaymentBatchRecord => {
   const paidAt = historicalPaymentBatchTime(payout);
+  const simulatedSubmittedAt = simulatedHistoricalPaymentSubmittedAt(paidAt);
   const failed = payout.status === '付款失败' || payout.status === '已退回';
   const status = aggregatePaymentStatus([payout.status]);
   const accountSummary = accountDisplayValue(payout.account);
@@ -379,6 +385,7 @@ const historicalPaymentBatchRecord = (
     fundingAccountId: PAYMENT_EXECUTION_FUNDING_ACCOUNTS[payout.provider],
     sourceCurrency: payout.currency,
     payer: seed.payer,
+    submittedAt: simulatedSubmittedAt,
     paidAt,
     status,
     lifecycle: failed
@@ -400,6 +407,8 @@ const historicalPaymentBatchRecord = (
       paymentOrderCode: seed.paymentListCode,
       sourcePaymentOrderCode: seed.paymentListCode,
       paymentAttemptNumber: 1,
+      paymentSubmittedAt: simulatedSubmittedAt,
+      paymentSubmittedAtIsSimulated: Boolean(simulatedSubmittedAt),
       paymentAttempts: payout.paymentAttempts
         ?.map((attempt) => normalizePaymentAttemptRecipient(attempt, receiveCurrency, feeBearer)),
       contracts: [{
@@ -681,6 +690,8 @@ const snapshotItem = ({
   paymentBatchCode,
   paymentOrderCode,
   paymentAttemptNumber,
+  feeBearerOverride,
+  executionAccountOverride,
 }: {
   payout: Payout;
   request: RequestProjectSummary;
@@ -693,6 +704,8 @@ const snapshotItem = ({
   paymentBatchCode?: string;
   paymentOrderCode?: string;
   paymentAttemptNumber?: number;
+  feeBearerOverride?: NonNullable<Payout['feeBearer']>;
+  executionAccountOverride?: { snapshot: DocumentPayoutSnapshot; summary: string };
 }): PaymentBatchItemSnapshot => {
   const invoice = generatedInvoices.find((candidate) => candidate.sourcePayoutId === payout.id);
   const invoiceId = invoice?.invoiceId;
@@ -722,18 +735,20 @@ const snapshotItem = ({
       .map((contractId) => `合同 ${contractId} 关联记录缺失`),
   ].filter(Boolean);
   const documentPayment = invoice?.snapshot.payment;
-  const rawAccountSummary = effectiveAccount?.accountSummary
+  const rawAccountSummary = executionAccountOverride?.summary || effectiveAccount?.accountSummary
     || documentPayment?.accountName
     || payout.account;
   const receiveCurrency = invoiceCurrency(
-    paymentListItem ? paymentListItemValue(paymentListItem, 'receiveCurrency') : documentPayment?.accountCurrency,
+    executionAccountOverride
+      ? executionAccountOverride.snapshot.accountCurrency || payout.currency
+      : paymentListItem ? paymentListItemValue(paymentListItem, 'receiveCurrency') : documentPayment?.accountCurrency,
     payout.currency,
   );
-  const feeBearer = paymentListItem
+  const feeBearer = feeBearerOverride ?? (paymentListItem
     ? paymentListItemValue(paymentListItem, 'feeBearer')
-    : payout.feeBearer;
+    : payout.feeBearer);
   const feeBearerSnapshot = feeBearerLabel(feeBearer);
-  const effectivePaymentDetails = effectiveAccount?.paymentDetails ?? documentPayment;
+  const effectivePaymentDetails = executionAccountOverride?.snapshot ?? effectiveAccount?.paymentDetails ?? documentPayment;
   const accountRecipient = paymentRecipientSnapshot({
     provider: payout.provider,
     payment: effectivePaymentDetails,
@@ -802,21 +817,21 @@ const snapshotItem = ({
     currency: payout.currency,
     receiveCurrency,
     transferMethod: transferMethodLabel(
-      effectiveAccount?.transferMethod ?? payout.transferMethod ?? documentPayment?.transferMethod,
+      executionAccountOverride?.snapshot.transferMethod ?? effectiveAccount?.transferMethod ?? payout.transferMethod ?? documentPayment?.transferMethod,
       payout.provider,
     ),
-    localClearingSystem: effectivePaymentDetails?.localClearingSystem
-      || payout.localClearingSystem
-      || undefined,
-    recipientCountry: effectivePaymentDetails?.bankCountry
-      || payout.recipientCountry
-      || undefined,
+    localClearingSystem: executionAccountOverride
+      ? executionAccountOverride.snapshot.localClearingSystem || undefined
+      : effectivePaymentDetails?.localClearingSystem || payout.localClearingSystem || undefined,
+    recipientCountry: executionAccountOverride
+      ? executionAccountOverride.snapshot.bankCountry || undefined
+      : effectivePaymentDetails?.bankCountry || payout.recipientCountry || undefined,
     accountSummary: accountDisplayValue(rawAccountSummary),
     ...accountRecipient,
-    payoutAccountId: effectiveAccount?.payoutAccountId
+    payoutAccountId: executionAccountOverride?.snapshot.payoutAccountId ?? effectiveAccount?.payoutAccountId
       ?? payout.payoutAccountId
       ?? invoice?.snapshot.payoutAccountId,
-    payoutAccountVersion: effectiveAccount?.payoutAccountVersion
+    payoutAccountVersion: executionAccountOverride?.snapshot.payoutAccountVersion ?? effectiveAccount?.payoutAccountVersion
       ?? payout.payoutAccountVersion
       ?? invoice?.snapshot.payoutAccountVersion
       ?? 'legacy-v1',
@@ -856,6 +871,8 @@ export const createPaymentBatchRecord = ({
   paymentOrderCode,
   sourcePaymentOrderCode,
   paymentAttemptNumber,
+  feeBearerByPayoutId = {},
+  executionAccountsByPayoutId = {},
   ...batch
 }: CreatePaymentBatchRecordInput): PaymentBatchRecord => {
   if (!payouts.length) throw new Error('付款批次至少需要一笔付款明细');
@@ -886,6 +903,8 @@ export const createPaymentBatchRecord = ({
     paymentBatchCode: batch.paymentBatchCode,
     paymentOrderCode: '',
     paymentAttemptNumber: 1,
+    feeBearerOverride: feeBearerByPayoutId[payout.id],
+    executionAccountOverride: executionAccountsByPayoutId[payout.id],
   }));
   const sourceOrderCodes = new Set(sourceItems.map((item) => item.sourcePaymentOrderCode));
   if (sourceOrderCodes.size !== 1) {
@@ -928,6 +947,8 @@ export const createPaymentBatchRecord = ({
       paymentBatchCode: batch.paymentBatchCode,
       paymentOrderCode: resolvedPaymentOrderCode,
       paymentAttemptNumber: resolvedPaymentAttemptNumber,
+      feeBearerOverride: feeBearerByPayoutId[payout.id],
+      executionAccountOverride: executionAccountsByPayoutId[payout.id],
     })),
   };
 };
@@ -1067,8 +1088,23 @@ export const createPaymentProjectPaymentRecord = ({
       paymentBatchId: currentAttempt?.paymentBatchId ?? payout.currentPaymentAttempt?.paymentBatchId,
       attemptNumber: currentAttemptNumber,
     });
+    const currentBatchItem = currentBatch?.items.find((batchItem) => batchItem.payoutId === payout.id);
     return {
       ...item,
+      ...(currentBatchItem ? {
+        provider: currentBatchItem.provider,
+        accountSummary: currentBatchItem.accountSummary,
+        accountName: currentBatchItem.accountName,
+        accountIdentifier: currentBatchItem.accountIdentifier,
+        accountIdentifierLabel: currentBatchItem.accountIdentifierLabel,
+        payoutAccountId: currentBatchItem.payoutAccountId,
+        payoutAccountVersion: currentBatchItem.payoutAccountVersion,
+        receiveCurrency: currentBatchItem.receiveCurrency,
+        transferMethod: currentBatchItem.transferMethod,
+        localClearingSystem: currentBatchItem.localClearingSystem,
+        recipientCountry: currentBatchItem.recipientCountry,
+        feeBearer: currentBatchItem.feeBearer,
+      } : {}),
       paymentBatchId: currentAttempt?.paymentBatchId
         ?? payout.currentPaymentAttempt?.paymentBatchId
         ?? currentBatch?.paymentBatchId,
@@ -1097,7 +1133,10 @@ export const createPaymentProjectPaymentRecord = ({
       ...requestLists.map((list) => list.paymentListCode),
       ...items.map((item) => item.paymentListCode).filter((code) => code !== '关联资料缺失'),
     ])],
-    providers: [...new Set(linkedPayouts.map((payout) => payout.provider))],
+    providers: [...new Set([
+      ...linkedPayouts.map((payout) => payout.provider),
+      ...paymentBatches.flatMap((batch) => batch.items.some((item) => sourcePayoutIds.has(item.payoutId)) ? [batch.provider] : []),
+    ])],
     status,
     lastActivityAt,
     items,
@@ -1113,7 +1152,9 @@ export type PaymentBatchFinancialSummary = Readonly<{
   items: readonly PaymentBatchItemSnapshot[];
   paymentAmounts: readonly PaymentBatchMoneyTotal[];
   transferFeeAmounts: readonly PaymentBatchMoneyTotal[];
+  transferFeeResultsAvailable: boolean;
   actualPaidAmounts: readonly PaymentBatchMoneyTotal[];
+  singlePaymentAmounts: readonly PaymentBatchMoneyTotal[] | null;
 }>;
 
 const paymentAttemptForBatchItem = (
@@ -1139,6 +1180,9 @@ export const paymentBatchItemForAttempt = (
     paymentBatchId: batch.paymentBatchId,
     paymentBatchCode: batch.paymentBatchCode,
     paymentSubmittedAt: attempt.submittedAt ?? batch.submittedAt,
+    paymentSubmittedAtIsSimulated: !attempt.submittedAt
+      && item.paymentSubmittedAtIsSimulated
+      && batch.submittedAt === item.paymentSubmittedAt,
     paymentCode: attempt.paymentCode ?? item.paymentCode,
     paymentOrderCode: batch.paymentOrderCode,
     sourcePaymentOrderCode: batch.sourcePaymentOrderCode ?? item.sourcePaymentOrderCode,
@@ -1187,10 +1231,52 @@ export const paymentBatchMoneyTotalsLabel = (
   ? totals.map(({ currency, amount }) => `${currency} ${amount.toLocaleString('en-US')}`).join(' + ')
   : fallback;
 
+const reversalAmountForItem = (
+  item: PaymentBatchItemSnapshot,
+): readonly PaymentBatchMoneyTotal[] | null => {
+  if (item.actualPaidAmount !== undefined && Number.isFinite(item.actualPaidAmount) && item.actualPaidCurrency) {
+    return [{ currency: item.actualPaidCurrency, amount: -Math.abs(item.actualPaidAmount) }];
+  }
+  if (item.refundAmount !== undefined && Number.isFinite(item.refundAmount) && item.refundCurrency) {
+    return [{ currency: item.refundCurrency, amount: -Math.abs(item.refundAmount) }];
+  }
+  return null;
+};
+
+export const paymentBatchResultAmountLabel = (
+  batch: PaymentBatchRecord,
+  totals: PaymentBatchFinancialSummary['singlePaymentAmounts'],
+) => {
+  if (batch.purpose === 'REVERSAL' && batch.status === '冲退处理中') return '冲退处理中';
+  if (batch.status === '付款处理中') return '待渠道回写';
+  return paymentBatchMoneyTotalsLabel(totals ?? []);
+};
+
 export const paymentBatchFinancialSummary = (
   batch: PaymentBatchRecord,
 ): PaymentBatchFinancialSummary => {
   const items = batch.items.map((item) => paymentBatchItemForAttempt(batch, item));
+  const paymentTotals = new Map<InvoiceCurrency, number>();
+  let paymentResultsAvailable = items.length > 0;
+  items.forEach((item) => {
+    const amounts = batch.purpose === 'REVERSAL'
+      ? reversalAmountForItem(item)
+      : paymentSingleAmountTotalsForValues({
+          principalAmount: item.amount,
+          principalCurrency: item.currency,
+          feeBearer: item.feeBearer,
+          transferFeeAmount: item.transferFeeAmount,
+          transferFeeCurrency: item.transferFeeCurrency,
+        });
+    if (!amounts) {
+      paymentResultsAvailable = false;
+      return;
+    }
+    amounts.forEach(({ currency, amount }) => {
+      const key = currency as InvoiceCurrency;
+      paymentTotals.set(key, Math.round(((paymentTotals.get(key) ?? 0) + amount + Number.EPSILON) * 100) / 100);
+    });
+  });
   const expenditureTotals = items.reduce<Map<InvoiceCurrency, number>>((result, item) => {
     if (
       item.paymentStatus !== '已付款'
@@ -1198,7 +1284,7 @@ export const paymentBatchFinancialSummary = (
       && item.paymentStatus !== '已退回'
       && item.paymentStatus !== '已冲退'
     ) return result;
-    paymentExpenditureTotalsForValues({
+    const amounts = batch.purpose === 'REVERSAL' ? reversalAmountForItem(item) ?? [] : paymentExpenditureTotalsForValues({
       principalAmount: item.amount,
       principalCurrency: item.currency,
       feeBearer: item.feeBearer,
@@ -1206,7 +1292,8 @@ export const paymentBatchFinancialSummary = (
       transferFeeCurrency: item.transferFeeCurrency,
       actualPaidAmount: item.actualPaidAmount,
       actualPaidCurrency: item.actualPaidCurrency,
-    }).forEach(({ currency, amount }) => {
+    });
+    amounts.forEach(({ currency, amount }) => {
       const invoiceCurrency = currency as InvoiceCurrency;
       result.set(invoiceCurrency, Math.round(((result.get(invoiceCurrency) ?? 0) + amount + Number.EPSILON) * 100) / 100);
     });
@@ -1220,7 +1307,13 @@ export const paymentBatchFinancialSummary = (
       (item) => item.transferFeeAmount,
       (item) => item.transferFeeCurrency,
     ),
+    transferFeeResultsAvailable: items.length > 0 && items.every((item) => (
+      item.transferFeeAmount !== undefined && Boolean(item.transferFeeCurrency)
+    )),
     actualPaidAmounts: [...expenditureTotals.entries()].map(([currency, amount]) => ({ currency, amount })),
+    singlePaymentAmounts: paymentResultsAvailable
+      ? [...paymentTotals.entries()].map(([currency, amount]) => ({ currency, amount }))
+      : null,
   };
 };
 

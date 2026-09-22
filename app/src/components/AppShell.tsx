@@ -79,6 +79,7 @@ const NAV_ENTRIES: NavEntry[] = [
     items: [
       { label: '系统账号', page: 'system-accounts' },
       { label: '系统配置', page: 'system-config' },
+      { label: '操作日志', page: 'operation-log' },
     ],
   },
   { type: 'item', label: '通知', page: 'notifications', icon: Bell },

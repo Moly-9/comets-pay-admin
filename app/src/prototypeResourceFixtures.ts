@@ -604,7 +604,7 @@ const contractManagementGenerationModel = (
     licensePeriod: '90 天',
     licensePrice: '',
     currency: 'USD',
-    totalFee: String(spec.amount),
+    totalFee: spec.bucket === 'attention' ? '' : String(spec.amount),
     invoiceIssueWorkingDays: 5,
     paymentWorkingDays: 45,
     paymentMethod: contractPaymentMethodForAccount(payoutAccount),

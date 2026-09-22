@@ -97,6 +97,7 @@ describe('CreatorsPage profile cards', () => {
       brand: 'COMETS',
       projectStatus: '执行中',
       relationStatus: 'CURRENT',
+      contractStatus: 'ACTIVE',
       directoryResolved: true,
       socialAccounts: [{
         socialAccountId: creator.socialAccounts[1].id,
@@ -132,6 +133,17 @@ describe('CreatorsPage profile cards', () => {
     expect(projects).not.toContain('项目关联资料数量');
     expect(projects).not.toContain('>2</strong> 合同');
     expect(projects).toContain('当前关联');
+    expect(projects).toContain('合同有效');
+    expect(projects).toContain('creator-collaboration-project-badges');
+    const withoutContract = renderToStaticMarkup(
+      <CreatorCollaborationProjectDetails projects={[{
+        ...collaborationProjects[0],
+        contractStatus: 'NONE',
+        relationStatus: 'HISTORICAL',
+      }]} />,
+    );
+    expect(withoutContract).toContain('历史关联');
+    expect(withoutContract).toContain('未关联合同');
   });
 
   it('顶部摘要移除社媒图标，列表提供账号级展示、渠道筛选、多选和更新时间', () => {
@@ -145,6 +157,7 @@ describe('CreatorsPage profile cards', () => {
       brand: 'COMETS',
       projectStatus: '执行中',
       relationStatus: 'CURRENT',
+      contractStatus: 'ACTIVE',
       directoryResolved: true,
       socialAccounts: [],
       contractCount: 2,

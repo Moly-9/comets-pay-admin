@@ -108,7 +108,7 @@ describe('payment batch workbook', () => {
         costTypeDetail: '网红采买成本',
         paymentAmount: 'USD 1,000 + EUR 500',
         transferFeeAmount: 'USD 2.5 + EUR 1',
-        actualPaidAmount: 'USD 1,002.5 + EUR 501',
+        singlePaymentAmount: 'USD 1,002.5 + EUR 501',
         actualPaymentDate: '2026-08-20',
         requestStatus: '已付款',
         initiator: '张晓晓',
@@ -150,8 +150,8 @@ describe('payment batch workbook', () => {
       { batch: retryBatch, currentRequestStatus: '已付款' },
     ]);
 
-    expect(rows.map((row) => [row.paymentBatchCode, row.actualPaidAmount, row.requestStatus])).toEqual([
-      ['BAT-20260805-008', 'HKD 30.58', '已付款'],
+    expect(rows.map((row) => [row.paymentBatchCode, row.singlePaymentAmount, row.requestStatus])).toEqual([
+      ['BAT-20260805-008', 'HKD 15,318.58', '已付款'],
       ['BAT-20260806-001', 'HKD 15,318.58', '已付款'],
     ]);
   });
@@ -182,9 +182,15 @@ describe('payment batch workbook', () => {
     expect(row.projectCostAttribution).toBe('待补充');
     expect(row.costTypeDetail).toBe('—');
     expect(row.transferFeeAmount).toBe('待渠道回写');
-    expect(row.actualPaidAmount).toBe('待渠道回写');
+    expect(row.singlePaymentAmount).toBe('待渠道回写');
     expect(row.actualPaymentDate).toBe('2026-08-19');
     expect(row.requestStatus).toBe('待同步');
+
+    const [missingTerminal] = buildPaymentBatchWorkbookRows([{ batch: batch({
+      items: [item({ transferFeeAmount: undefined, transferFeeCurrency: undefined, actualPaidAmount: 1_000 })],
+    }) }]);
+    expect(missingTerminal.singlePaymentAmount).toBe('—');
+    expect(missingTerminal.transferFeeAmount).toBe('—');
   });
 
   it('writes the exact sixteen-column worksheet with purpose and a frozen filtered header', async () => {
@@ -200,6 +206,7 @@ describe('payment batch workbook', () => {
     expect(sheet?.columnCount).toBe(16);
     expect(sheet?.rowCount).toBe(2);
     expect(sheet?.getRow(1).values).toEqual([undefined, ...PAYMENT_BATCH_WORKBOOK_HEADERS]);
+    expect(sheet?.getRow(1).getCell(12).value).toBe('批次支付金额及币种');
     expect(sheet?.getRow(2).values).toEqual([
       undefined,
       'BAT-20260819-001',
@@ -223,7 +230,7 @@ describe('payment batch workbook', () => {
     expect(sheet?.autoFilter).toBe('A1:P1');
   });
 
-  it('exports reversal batches as zero principal, zero fee and a negative refund', () => {
+  it('exports reversal batches using the negative refund while retaining zero principal and fees', async () => {
     const reversal = batch({
       purpose: 'REVERSAL',
       status: '已冲退',
@@ -242,8 +249,27 @@ describe('payment batch workbook', () => {
       purpose: '冲退付款',
       paymentAmount: 'USD 0',
       transferFeeAmount: 'USD 0',
-      actualPaidAmount: 'USD -1,000',
+      singlePaymentAmount: 'USD -1,000',
     });
+    expect(reversal.items[0].actualPaidAmount).toBe(-1_000);
+    const workbookBlob = await createPaymentBatchWorkbook([{ batch: reversal }]);
+    const { Workbook } = await import('exceljs');
+    const workbook = new Workbook();
+    await workbook.xlsx.load(await workbookBlob.arrayBuffer());
+    const sheet = workbook.getWorksheet('付款明细');
+    expect(sheet?.getRow(1).values).toEqual([undefined, ...PAYMENT_BATCH_WORKBOOK_HEADERS]);
+    expect(sheet?.getRow(2).getCell(12).value).toBe('USD -1,000');
+    expect(sheet?.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
+    expect(sheet?.autoFilter).toBe('A1:P1');
+    expect(buildPaymentBatchWorkbookRows([{ batch: {
+      ...reversal,
+      status: '冲退处理中',
+      items: reversal.items.map((source) => ({ ...source, paymentStatus: '冲退处理中', actualPaidAmount: undefined })),
+    } }])[0]).toMatchObject({ singlePaymentAmount: '冲退处理中', transferFeeAmount: 'USD 0' });
+    expect(buildPaymentBatchWorkbookRows([{ batch: {
+      ...reversal,
+      items: reversal.items.map((source) => ({ ...source, actualPaidAmount: undefined, refundAmount: undefined })),
+    } }])[0].singlePaymentAmount).toBe('—');
   });
 
   it('uses Shanghai dates in list filenames and the batch code in detail filenames', () => {

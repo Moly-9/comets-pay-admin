@@ -47,7 +47,7 @@ import {
 } from '../payoutAccounts';
 import { PAYMENT_CURRENCY_OPTIONS } from '../paymentCurrencies';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
-import { Button, ListActionButton, Modal, NoticeBanner, SelectField } from './Common';
+import { AmountInput, Button, ListActionButton, Modal, NoticeBanner, SelectField } from './Common';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
 import { findCreatorSocialAccount } from '../creatorSearchOptions';
 import { CreatorIdentity } from './CreatorIdentity';
@@ -901,7 +901,7 @@ export function ProjectResourceManager({
                           </label>
                           <label>
                             {requiredPaymentLabel('金额')}
-                            <input required aria-required="true" disabled type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} />
+                            <AmountInput required aria-required="true" disabled min={0} value={paymentListItemValue(item, 'amount')} />
                           </label>
                           <label>
                             {requiredPaymentLabel('手续费承担方')}

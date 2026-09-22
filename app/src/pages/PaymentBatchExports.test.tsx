@@ -107,6 +107,16 @@ describe('payment batch filters and selection', () => {
       provider: 'Airwallex',
     })).toEqual([]);
 
+    expect(filterPaymentBatchRows(TEST_BATCH_ROWS, {
+      search: '  测试项目  ', start: '', end: '', provider: 'Airwallex', status: '已付款',
+    }).map((row) => row.id)).toEqual(['BAT-20260716-007']);
+    expect(filterPaymentBatchRows(TEST_BATCH_ROWS, {
+      search: '测试项目', start: '', end: '', provider: 'PayPal', purpose: 'RETRY',
+    })).toEqual([]);
+    expect(filterPaymentBatchRows([{ ...TEST_BATCH_ROWS[0], projectName: 'Launch Project' }], {
+      search: '  lAuNcH  ', start: '', end: '', provider: 'all',
+    })).toHaveLength(1);
+
     const purposeRows = TEST_BATCH_ROWS.map((row, index) => ({
       ...row,
       purpose: index === 0 ? 'RETRY' as const : row.purpose,
@@ -167,6 +177,8 @@ describe('payment batch filters and selection', () => {
     expect(html).toContain('aria-label="付款状态筛选"');
     expect(html).toContain('>全部付款状态</span>');
     expect(html).toContain('付款人 / 时间');
+    expect(html).toContain('发起重新付款');
+    expect(html).toContain('<th>批次支付金额及币种</th>');
     expect(html).not.toContain('创建人 / 时间');
     expect(html).toContain('<th>批次号</th><th>批次用途</th><th>请款项目编号</th><th>付款渠道</th><th>付款主体</th><th>项目名称</th><th>请款金额及币种</th>');
     expect(html).toContain('<td class="payment-batch-project-cell" title="测试项目"><strong>测试项目</strong></td>');
@@ -245,7 +257,7 @@ describe('payment batch filters and selection', () => {
       projectName: '测试项目',
       paymentAmount: 'USD 1,000',
       transferFeeAmount: 'USD 2.5',
-      actualPaidAmount: 'USD 1,002.5',
+      singlePaymentAmount: 'USD 1,002.5',
     });
     const processingBatch = createTestBatch('BAT-PROCESSING', 'Airwallex', '2026-08-12T10:00');
     const processingRow = paymentBatchRows([{
@@ -261,7 +273,37 @@ describe('payment batch filters and selection', () => {
       })),
     }])[0];
     expect(processingRow.transferFeeAmount).toBe('待渠道回写');
-    expect(processingRow.actualPaidAmount).toBe('待渠道回写');
+    expect(processingRow.singlePaymentAmount).toBe('待渠道回写');
+
+    const reversal = paymentBatchRows([{
+      ...processingBatch,
+      purpose: 'REVERSAL',
+      status: '冲退处理中',
+      items: processingBatch.items.map((item) => ({
+        ...item,
+        amount: 0,
+        paymentStatus: '冲退处理中',
+        transferFeeAmount: 0,
+        transferFeeCurrency: 'USD',
+        actualPaidAmount: undefined,
+      })),
+    }])[0];
+    expect(reversal).toMatchObject({ paymentAmount: 'USD 0', transferFeeAmount: 'USD 0', singlePaymentAmount: '冲退处理中' });
+
+    const confirmed = paymentBatchRows([{
+      ...processingBatch,
+      purpose: 'REVERSAL',
+      status: '已冲退',
+      items: processingBatch.items.map((item) => ({
+        ...item,
+        amount: 0,
+        paymentStatus: '已冲退',
+        transferFeeAmount: 0,
+        actualPaidAmount: -1_000,
+        actualPaidCurrency: 'USD',
+      })),
+    }])[0];
+    expect(confirmed).toMatchObject({ paymentAmount: 'USD 0', transferFeeAmount: 'USD 0', singlePaymentAmount: 'USD -1,000' });
   });
 });
 

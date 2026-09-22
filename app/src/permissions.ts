@@ -36,7 +36,7 @@ export type PermissionOption = {
 
 export const PERMISSION_OPTIONS: PermissionOption[] = [
   { id: 'creator_records_view', group: '业务资料', label: '查看网红档案库', description: '访问达人档案、账户与合作资料。' },
-  { id: 'creator_records_manage', group: '业务资料', label: '管理网红档案与合作名单', description: '新增、编辑达人档案并导入合作名单。' },
+  { id: 'creator_records_manage', group: '业务资料', label: '管理网红档案与合作名单', description: '新增、编辑达人档案并导出合作名单。' },
   { id: 'contract_view', group: '业务资料', label: '查看合同模块', description: '查看项目合同及其关联状态。' },
   { id: 'contract_manage', group: '业务资料', label: '上传与管理合同', description: '上传合同并维护合同与项目的关联资料。' },
   { id: 'contract_template_manage', group: '业务资料', label: '编辑合同模板', description: '维护合同模板内容，仅媒介负责人、老板和管理员可操作。' },
@@ -156,6 +156,7 @@ export const canDeleteContractSelection = (
 );
 
 export const canAccessPage = (user: SystemUser, page: NavPage) => {
+  if (page === 'operation-log') return user.roleKey === 'admin' || user.roleKey === 'owner';
   if (ROLE_BLOCKED_PAGES[user.roleKey]?.includes(page)) return false;
   const requiredPermissions = PAGE_PERMISSION_RULES[page];
   return !requiredPermissions || requiredPermissions.some((permission) => hasPermission(user, permission));

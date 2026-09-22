@@ -27,7 +27,7 @@ import type { ContractRecord } from '../contracts';
 import { PAYMENT_CURRENCY_OPTIONS } from '../paymentCurrencies';
 import { eligibleInvoicePayoutAccounts, getPayoutAccountId, getPayoutAccountSelectPresentation } from '../payoutAccounts';
 import type { CreatorProfile, GeneratedInvoiceRecord } from '../types';
-import { Button, SelectField } from './Common';
+import { AmountInput, Button, SelectField } from './Common';
 import { InvoiceDocumentView } from './InvoiceDocumentView';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
 import './PaymentListEditor.css';
@@ -287,7 +287,7 @@ export function PaymentListEditor({
             <label className="is-wide">{accountEditable ? '本次执行账户' : 'Invoice 签署账户'}<SelectField ariaLabel="付款收款账户" variant="form" value={account.payoutAccountId ?? ''} options={accountOptions} placeholder="选择收款账户" disabled={!accountEditable || !accountOptions.length} onChange={(value) => onChangePaymentAccount(list.paymentListId, item.invoiceId, value)} /></label>
             <label>支付币种<SelectField ariaLabel="付款支付币种" variant="form" value={String(paymentListItemValue(item, 'currency'))} options={PAYMENT_CURRENCY_OPTIONS} disabled onChange={(value) => update('currency', value)} /></label>
             <label>收款币种<SelectField ariaLabel="付款收款币种" variant="form" value={String(paymentListItemValue(item, 'receiveCurrency'))} options={PAYMENT_CURRENCY_OPTIONS} disabled onChange={(value) => update('receiveCurrency', value)} /></label>
-            <label>付款金额<input aria-label="付款金额" type="number" min="0" step="0.01" value={paymentListItemValue(item, 'amount')} disabled /></label>
+            <label>付款金额<AmountInput aria-label="付款金额" min={0} value={paymentListItemValue(item, 'amount')} disabled /></label>
             <label>转账方式<SelectField ariaLabel="付款转账方式" variant="form" value={transferMethod} options={transferMethodOptions} disabled onChange={(value) => update('transferMethod', value)} /></label>
             <label>手续费承担方{contractFeeBearer.locked ? <input readOnly value={display(feeBearer)} /> : <SelectField ariaLabel="编辑付款手续费承担方" variant="form" value={feeBearer} options={feeBearerOptions} placeholder={contractFeeBearer.conflicting ? '合同约定不一致，请确认' : '合同未约定，请填写'} disabled={!paymentFieldsEditable} onChange={(value) => update('feeBearer', value)} />}</label>
             <label>付款原因<input aria-label="编辑付款原因" value={paymentListItemValue(item, 'paymentReason')} disabled={!paymentFieldsEditable} onChange={(event) => update('paymentReason', event.target.value)} /></label>

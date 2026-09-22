@@ -25,6 +25,8 @@ import { ContractDocumentView } from '../components/ContractDocumentView';
 import { DraftExitDialog } from '../components/DraftExitDialog';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import { Pagination, usePagination } from '../components/Pagination';
+import type { OperationLogInput } from '../operationLog';
+import { useOperationSearch } from '../useOperationSearch';
 import { PaymentRequestCostCascader } from '../components/PaymentRequestCostCascader';
 import {
   PaymentRequestCreatorAddModal,
@@ -920,6 +922,7 @@ export function MediaPaymentProjectsPage({
   onSimulatePaymentListReturnAccountUpdate = () => false,
   onSimulatePaymentFailureAccountUpdate = () => false,
   onRevalidatePaymentFailureAccount = () => false,
+  onOperation,
 }: {
   notify: Notify;
   currentUser: SystemUser;
@@ -947,6 +950,7 @@ export function MediaPaymentProjectsPage({
   onSimulatePaymentListReturnAccountUpdate?: (requestId: string, invoiceId: InvoiceId) => boolean;
   onSimulatePaymentFailureAccountUpdate?: (payoutId: string) => boolean;
   onRevalidatePaymentFailureAccount?: (payoutId: string) => boolean;
+  onOperation?: (input: OperationLogInput) => void;
 }) {
   const [creating, setCreating] = useState(false);
   const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
@@ -976,6 +980,7 @@ export function MediaPaymentProjectsPage({
   const [resourceDocumentDialog, setResourceDocumentDialog] = useState<RequestResourceDocument | null>(null);
   const [formSubmitAttempted, setFormSubmitAttempted] = useState(false);
   const [search, setSearch] = useState('');
+  useOperationSearch(search, 'projects', onOperation);
   const [filters, setFilters] = useState<ProjectListFilters>(createEmptyPaymentRequestListFilters);
   const [exportingRequestId, setExportingRequestId] = useState<string | null>(null);
   const [focusedFailurePayoutId, setFocusedFailurePayoutId] = useState<string | null>(null);
@@ -1362,6 +1367,7 @@ export function MediaPaymentProjectsPage({
 
   const openRequestDetail = (request: RequestProjectSummary) => {
     setSelectedRequestId(request.id);
+    onOperation?.({ module: 'projects', action: '查看详情', targetId: request.paymentRequestProjectId ?? request.id });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 

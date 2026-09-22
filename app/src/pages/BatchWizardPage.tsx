@@ -1,23 +1,31 @@
-import { AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronRight, Search, ShieldCheck } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { AlertTriangle, ArrowLeft, Check, CheckCircle2, Search, ShieldCheck } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { accountDisplayValue } from '../accountPresentation';
 import {
   paymentListEffectiveAccount,
+  paymentListItemValue,
   type PaymentListItem,
   type PaymentListRecord,
 } from '../businessWorkflow';
 import {
   createMockBatchSubmission,
+  retryExecutionAccountFor,
+  resolvePaymentFailureSourceBatch,
+  validateRetryExecutionAccount,
   validatePayoutForBatch,
   type ExecutableBatchProvider,
   type MockBatchSubmission,
 } from '../batchTransfers';
 import { Button, PageHeading, SelectField, StatusMark, type SelectOption } from '../components/Common';
+import {
+  PaymentConfirmationDialog,
+  type PaymentConfirmationRow,
+} from '../components/PaymentConfirmationDialog';
 import { PaymentCreatorIdentity } from '../components/PaymentCreatorIdentity';
-import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
+import { PaymentProviderBadge, paymentProviderDisplayName } from '../components/PaymentProviderBadge';
+import { getPayoutAccountId, getPayoutAccountIdentifier, isPayoutAccountUsableForDocuments } from '../payoutAccounts';
 import { formatAmount } from '../data';
 import {
-  isPaymentFailureRetryCandidate,
   isPaymentFailureRetryReady,
   paymentFailureRecoveryLabel,
 } from '../paymentFailureRecovery';
@@ -26,27 +34,22 @@ import {
   paymentCreatorIdentityFromPayout,
   type PaymentCreatorIdentityData,
 } from '../paymentCreatorIdentity';
+import type { PaymentFeeBearer } from '../paymentFeeBearerPresentation';
+import type { PaymentBatchRecord } from '../paymentBatches';
+import {
+  DEFAULT_BATCH_FEE_BEARER,
+  PAYMENT_FEE_BEARER_OPTIONS,
+  paymentPreviewFor,
+} from '../paymentPreview';
 import type { CreatorProfile, GeneratedInvoiceRecord, InvoiceCurrency, Payout } from '../types';
 import type { RequestProjectSummary } from './RequestProjectDetailPage';
 
-const STEPS = ['选择付款', '校验资料', '选择渠道', '确认提交'];
-const ALL_PROJECTS = 'all';
-const PROVIDERS: Array<{
-  id: ExecutableBatchProvider | 'PayMax';
-  title: string;
-  description: string;
-  disabled?: boolean;
-}> = [
-  { id: 'Airwallex', title: 'Airwallex', description: 'LOCAL 与 SWIFT 按冻结快照执行' },
-  { id: 'PayPal', title: 'PayPal', description: 'PayPal 独立成批，不进入 Airwallex' },
-  { id: 'PayMax', title: 'Payer Max', description: '渠道保留，当前阶段不可执行', disabled: true },
+const STEPS = ['选择失败明细', '校验资料', '确认配置', '提交重付'];
+const CHANNEL_OPTIONS: readonly SelectOption<ExecutableBatchProvider>[] = [
+  { value: 'Airwallex', label: 'Airwallex' },
+  { value: 'PayPal', label: 'PayPal' },
 ];
-
-const SOURCE_CURRENCY_OPTIONS = ['USD', 'EUR', 'GBP', 'HKD', 'SGD'].map((currency) => ({
-  value: currency,
-  label: currency,
-}));
-
+const ALL_PROJECTS = 'all';
 const FUNDING_ACCOUNTS: Record<ExecutableBatchProvider, Array<{ value: string; label: string; description: string }>> = {
   Airwallex: [
     { value: 'mock-awx-operating', label: 'Airwallex 运营资金账户', description: '模拟资金账户，不连接真实余额' },
@@ -83,6 +86,13 @@ export type BatchWizardRow = {
   accountVersion: string;
   accountProvider: string;
   sourcePaymentOrderKey: string;
+  sourcePaymentBatchId?: PaymentBatchRecord['paymentBatchId'];
+  sourcePaymentBatchCode: string;
+  sourceProvider?: ExecutableBatchProvider;
+  sourceCurrency?: InvoiceCurrency;
+  sourceAttemptNumber?: number;
+  sourcePayoutAccountId?: string;
+  sourceIssue?: string;
 };
 
 const normalized = (value: unknown) => String(value ?? '').trim();
@@ -109,12 +119,14 @@ export const buildBatchWizardRows = ({
   generatedInvoices,
   paymentLists,
   creators,
+  paymentBatches = [],
 }: {
   payouts: readonly Payout[];
   requests: readonly BatchWizardRequestProject[];
   generatedInvoices: readonly GeneratedInvoiceRecord[];
   paymentLists: readonly PaymentListRecord[];
   creators: readonly CreatorProfile[];
+  paymentBatches?: readonly PaymentBatchRecord[];
 }): BatchWizardRow[] => payouts.map((payout) => {
   const request = batchWizardRequestForPayout(payout, requests);
   const paymentItem = findPaymentListItemForPayout(payout, generatedInvoices, paymentLists);
@@ -137,6 +149,11 @@ export const buildBatchWizardRows = ({
     ?? request?.cooperationProjectCode
     ?? payout.projectId,
   );
+  const sourceResolution = resolvePaymentFailureSourceBatch(payout, paymentBatches);
+  const sourceBatch = sourceResolution.batch;
+  const executableSourceProvider = sourceBatch?.provider === 'Airwallex' || sourceBatch?.provider === 'PayPal'
+    ? sourceBatch.provider
+    : undefined;
   return {
     payout,
     request,
@@ -154,11 +171,15 @@ export const buildBatchWizardRows = ({
     accountProvider: paymentProviderDisplayName(
       ((usesProjectedCreatorUpdate ? payout.provider : effectiveAccount?.provider) || payout.provider) as Payout['provider'],
     ),
-    sourcePaymentOrderKey: normalized(
-      payout.currentPaymentAttempt?.sourcePaymentOrderCode
-      ?? payout.currentPaymentAttempt?.paymentOrderCode
-      ?? paymentList?.paymentListCode,
-    ),
+    sourcePaymentOrderKey: normalized(sourceBatch?.paymentOrderCode),
+    sourcePaymentBatchId: sourceBatch?.paymentBatchId,
+    sourcePaymentBatchCode: normalized(sourceBatch?.paymentBatchCode),
+    sourceProvider: executableSourceProvider,
+    sourceCurrency: sourceBatch?.sourceCurrency,
+    sourceAttemptNumber: sourceBatch?.paymentAttemptNumber,
+    sourcePayoutAccountId: sourceBatch?.items.find((item) => item.payoutId === payout.id)?.payoutAccountId,
+    sourceIssue: sourceResolution.issue
+      ?? (sourceBatch && !executableSourceProvider ? '原付款渠道当前不支持重新付款' : undefined),
   };
 });
 
@@ -187,30 +208,22 @@ export const batchWizardSelectionScopeIssue = (
   selectedRow: BatchWizardRow | undefined,
 ) => {
   if (!selectedRow) return '';
-  if (row.requestKey !== selectedRow.requestKey) return '一个付款批次只能关联一个请款项目';
-  if (row.payout.provider !== selectedRow.payout.provider) return '一个付款批次只能使用同一付款渠道';
-  const selectedIsRetry = isPaymentFailureRetryCandidate(selectedRow.payout);
-  if (isPaymentFailureRetryCandidate(row.payout) !== selectedIsRetry) {
-    return '首次付款和重新付款需要分别创建付款批次';
-  }
-  if (
-    selectedIsRetry
-    && selectedRow.sourcePaymentOrderKey
-    && row.sourcePaymentOrderKey !== selectedRow.sourcePaymentOrderKey
-  ) return '重新付款只能选择同一张原付款单的失败明细';
+  if (!row.sourcePaymentBatchId || !selectedRow.sourcePaymentBatchId) return '原付款批次无法唯一确认';
+  if (row.sourcePaymentBatchId !== selectedRow.sourcePaymentBatchId) return '重新付款只能选择同一原付款批次的失败明细';
   return '';
 };
 
 const retryResultLabel = (payout: Payout) => {
   const recovery = payout.paymentFailureRecovery;
-  if (!recovery) return null;
+  if (!recovery) return payout.status === '付款失败' ? '待财务处理' : '失败恢复流程待补全';
+  if (recovery.revalidationIssues?.length) return recovery.revalidationIssues[0];
   if (recovery.status === 'AWAITING_CREATOR_UPDATE') return '尚未更新';
   if (recovery.readyReason === 'ACCOUNT_UNCHANGED') return '原账户未变 · 可重试';
   if (
     recovery.readyReason === 'REVALIDATED'
     || ['CREATOR_UPDATED', 'PENDING_FINANCE_CONFIRMATION'].includes(recovery.status)
   ) return '达人已更新 · 可重试';
-  return null;
+  return paymentFailureRecoveryLabel(payout);
 };
 
 export function BatchWizardPage({
@@ -219,6 +232,7 @@ export function BatchWizardPage({
   generatedInvoices = [],
   paymentLists = [],
   creators = [],
+  paymentBatches = [],
   onCancel,
   onSubmit,
   onDraft,
@@ -228,18 +242,21 @@ export function BatchWizardPage({
   generatedInvoices?: GeneratedInvoiceRecord[];
   paymentLists?: PaymentListRecord[];
   creators?: CreatorProfile[];
+  paymentBatches?: PaymentBatchRecord[];
   onCancel: () => void;
-  onSubmit: (submission: MockBatchSubmission) => void;
+  onSubmit: (submission: MockBatchSubmission) => boolean;
   onDraft: () => void;
 }) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
-  const [provider, setProvider] = useState<ExecutableBatchProvider>('Airwallex');
   const [mode, setMode] = useState<'batch' | 'single'>('batch');
   const [search, setSearch] = useState('');
   const [cooperationProjectFilter, setCooperationProjectFilter] = useState(ALL_PROJECTS);
-  const [sourceCurrency, setSourceCurrency] = useState<InvoiceCurrency>('USD');
-  const [fundingAccountId, setFundingAccountId] = useState(FUNDING_ACCOUNTS.Airwallex[0].value);
+  const [fundingAccountId, setFundingAccountId] = useState('');
+  const [channelChoice, setChannelChoice] = useState<ExecutableBatchProvider | ''>('');
+  const [accountChoices, setAccountChoices] = useState<Record<string, string>>({});
   const [submissionError, setSubmissionError] = useState('');
+  const [feeBearerByPayoutId, setFeeBearerByPayoutId] = useState<Record<string, PaymentFeeBearer>>({});
+  const [pendingSubmission, setPendingSubmission] = useState<MockBatchSubmission | null>(null);
 
   const rows = useMemo(() => buildBatchWizardRows({
     payouts,
@@ -247,7 +264,8 @@ export function BatchWizardPage({
     generatedInvoices,
     paymentLists,
     creators,
-  }), [creators, generatedInvoices, paymentLists, payouts, requests]);
+    paymentBatches,
+  }), [creators, generatedInvoices, paymentBatches, paymentLists, payouts, requests]);
   const rowByPayoutId = useMemo(() => new Map(rows.map((row) => [row.payout.id, row])), [rows]);
   const projectOptions = useMemo<readonly SelectOption<string>[]>(() => {
     const projects = new Map<string, SelectOption<string>>();
@@ -271,24 +289,75 @@ export function BatchWizardPage({
   const selectedRows = rows.filter((row) => selected.has(row.payout.id));
   const selectedPayouts = selectedRows.map((row) => row.payout);
   const selectedScopeRow = selectedRows[0];
-  const selectedRequestKey = selectedRows[0]?.requestKey ?? '';
+  const selectedSourceBatchId = selectedScopeRow?.sourcePaymentBatchId;
+  const inheritedProvider = selectedScopeRow?.sourceProvider;
+  const provider = channelChoice || inheritedProvider;
+  const inheritedCurrency = selectedScopeRow?.sourceCurrency;
+  const inheritedFundingAccounts = provider ? FUNDING_ACCOUNTS[provider] : [];
+  const feeBearerFor = (payoutId: string) => (
+    feeBearerByPayoutId[payoutId] ?? DEFAULT_BATCH_FEE_BEARER
+  );
+
+  useEffect(() => {
+    setFundingAccountId(inheritedProvider ? FUNDING_ACCOUNTS[inheritedProvider][0]?.value ?? '' : '');
+    setSubmissionError('');
+  }, [selectedSourceBatchId, inheritedProvider]);
+
+  useEffect(() => {
+    setChannelChoice('');
+    setAccountChoices({});
+  }, [selectedSourceBatchId]);
+
+  const accountsFor = (row: BatchWizardRow, channel: ExecutableBatchProvider | undefined = provider) => (
+    creators.find((creator) => creator.id === row.payout.creatorId)?.payoutAccounts.filter((account) => (
+      account.provider === channel && isPayoutAccountUsableForDocuments(account)
+      && (account.provider !== 'Airwallex' || Boolean(account.beneficiaryId))
+    )) ?? []
+  );
+  const accountFor = (row: BatchWizardRow) => {
+    const available = accountsFor(row);
+    const chosen = accountChoices[row.payout.id];
+    if (chosen) return available.find((account) => getPayoutAccountId(account) === chosen);
+    if (provider !== row.sourceProvider) return undefined;
+    const originalIds = [
+      row.sourcePayoutAccountId,
+      row.paymentItem ? paymentListEffectiveAccount(row.paymentItem).payoutAccountId : undefined,
+      row.payout.payoutAccountId,
+    ];
+    return originalIds.flatMap((id) => available.filter((account) => getPayoutAccountId(account) === id))[0];
+  };
 
   const getAccountCheck = (row: BatchWizardRow) => {
     const { payout } = row;
-    const retryCandidate = isPaymentFailureRetryCandidate(payout);
-    if (retryCandidate && !isPaymentFailureRetryReady(payout)) {
+    if (row.sourceIssue || !row.sourcePaymentBatchId) {
+      const issue = row.sourceIssue || '原付款批次无法唯一确认';
+      return { eligible: false, label: issue, issue };
+    }
+    if (!isPaymentFailureRetryReady(payout)) {
+      const issue = retryResultLabel(payout);
       return {
         eligible: false,
-        label: retryResultLabel(payout) ?? paymentFailureRecoveryLabel(payout),
-        issue: retryResultLabel(payout) ?? paymentFailureRecoveryLabel(payout),
+        label: issue,
+        issue,
       };
     }
-    const issues = validatePayoutForBatch(payout, provider);
-    const retryLabel = retryCandidate ? retryResultLabel(payout) : null;
+    const account = accountFor(row);
+    const accountIssue = provider
+      ? validateRetryExecutionAccount(account, String(payout.creatorId ?? ''), provider)
+      : '';
+    const issues = provider && account && !accountIssue
+      ? validatePayoutForBatch(payout, provider, feeBearerFor(payout.id), retryExecutionAccountFor(account, String(payout.creatorId)).snapshot)
+      : [];
+    const retryLabel = retryResultLabel(payout);
+    const accountLabel = selected.has(payout.id) && account && provider !== row.sourceProvider
+      ? `${provider} 收款账户校验通过`
+      : retryLabel;
     return {
-      eligible: issues.length === 0,
-      label: retryLabel ?? issues[0] ?? '冻结快照校验通过',
-      issue: issues[0],
+      eligible: !accountIssue && issues.length === 0,
+      label: selected.has(payout.id)
+        ? accountIssue || issues[0] || accountLabel || '冻结快照校验通过'
+        : retryLabel || accountIssue || issues[0] || '冻结快照校验通过',
+      issue: accountIssue || issues[0],
     };
   };
   const selectedChecks = selectedRows.map((row) => getAccountCheck(row));
@@ -296,21 +365,49 @@ export function BatchWizardPage({
   const hasIssue = issueCount > 0;
   const firstSelectedIssue = selectedChecks.find((check) => !check.eligible)?.issue;
   const passedCount = selectedPayouts.length - issueCount;
-  const canSubmit = selectedPayouts.length > 0 && !hasIssue && Boolean(fundingAccountId);
+  const canSubmit = selectedPayouts.length > 0
+    && !hasIssue
+    && Boolean(fundingAccountId)
+    && Boolean(provider)
+    && Boolean(inheritedCurrency)
+    && Boolean(selectedSourceBatchId);
   const totals = useMemo(() => selectedPayouts.reduce<Record<string, number>>((result, payout) => ({
     ...result,
     [payout.currency]: (result[payout.currency] ?? 0) + payout.amount,
   }), {}), [selectedPayouts]);
+  const confirmationRows: PaymentConfirmationRow[] = selectedRows.map((row) => {
+    const selectedAccount = accountFor(row);
+    const receiveCurrency = String(
+      row.paymentItem
+        ? paymentListItemValue(row.paymentItem, 'receiveCurrency') || row.payout.currency
+        : row.payout.currency,
+    );
+    return {
+      id: row.payout.id,
+      creatorName: row.payout.creator,
+      invoiceNumber: row.payout.invoice,
+      account: selectedAccount ? getPayoutAccountIdentifier(selectedAccount) : row.accountSummary,
+      preview: paymentPreviewFor({
+        payout: { ...row.payout, provider: provider ?? row.payout.provider },
+        receiveCurrency: selectedAccount?.provider === 'Airwallex'
+          ? selectedAccount.bankDetails.accountCurrency || row.payout.currency
+          : provider === 'PayPal' ? row.payout.currency : receiveCurrency,
+        feeBearer: feeBearerFor(row.payout.id),
+      }),
+    };
+  });
 
   const selectionScopeIssue = (row: BatchWizardRow) => {
-    if (mode !== 'batch' || !selectedRequestKey) return '';
+    if (mode !== 'batch' || !selectedSourceBatchId) return '';
     return batchWizardSelectionScopeIssue(row, selectedScopeRow);
   };
 
-  const selectableVisibleRows = mode === 'batch' && selectedRequestKey
+  const selectableVisibleRows = mode === 'batch' && selectedSourceBatchId
     ? visibleRows.filter((row) => (
         !selectionScopeIssue(row)
-        && (!isPaymentFailureRetryCandidate(row.payout) || isPaymentFailureRetryReady(row.payout))
+        && isPaymentFailureRetryReady(row.payout)
+        && !row.sourceIssue
+        && Boolean(row.sourcePaymentBatchId)
       ))
     : [];
   const selectableVisibleIds = selectableVisibleRows.map((row) => row.payout.id);
@@ -321,7 +418,7 @@ export function BatchWizardPage({
 
   const toggleOne = (id: string) => {
     const row = rowByPayoutId.get(id);
-    if (!row || (isPaymentFailureRetryCandidate(row.payout) && !isPaymentFailureRetryReady(row.payout))) return;
+    if (!row || !isPaymentFailureRetryReady(row.payout) || row.sourceIssue || !row.sourcePaymentBatchId) return;
     if (selectionScopeIssue(row)) return;
     setSelected((current) => {
       if (mode === 'single') {
@@ -335,7 +432,7 @@ export function BatchWizardPage({
   };
 
   const toggleAll = () => {
-    if (mode === 'single' || !selectedRequestKey || !selectableVisibleIds.length) return;
+    if (mode === 'single' || !selectedSourceBatchId || !selectableVisibleIds.length) return;
     setSelected((current) => {
       const next = new Set(current);
       if (selectableVisibleIds.every((id) => current.has(id))) {
@@ -357,31 +454,50 @@ export function BatchWizardPage({
     }
   };
 
-  const changeProvider = (nextProvider: ExecutableBatchProvider) => {
-    setProvider(nextProvider);
-    setFundingAccountId(FUNDING_ACCOUNTS[nextProvider][0].value);
-    setSubmissionError('');
-  };
-
   const submit = () => {
     try {
+      if (!selectedScopeRow?.sourcePaymentBatchId
+        || !selectedScopeRow.sourcePaymentBatchCode
+        || !selectedScopeRow.sourceProvider
+        || !selectedScopeRow.sourceCurrency
+        || !selectedScopeRow.sourcePaymentOrderKey
+        || !selectedScopeRow.sourceAttemptNumber) {
+        throw new Error('原付款批次信息不完整，无法重新付款');
+      }
       const submission = createMockBatchSubmission({
         payouts: selectedPayouts,
-        provider,
+        provider: provider ?? selectedScopeRow.sourceProvider,
         fundingAccountId,
-        sourceCurrency,
+        sourceCurrency: selectedScopeRow.sourceCurrency,
+        sourcePaymentBatchId: selectedScopeRow.sourcePaymentBatchId,
+        sourcePaymentBatchCode: selectedScopeRow.sourcePaymentBatchCode,
+        sourcePaymentOrderCode: selectedScopeRow.sourcePaymentOrderKey,
+        paymentAttemptNumber: selectedScopeRow.sourceAttemptNumber + 1,
+        feeBearerByPayoutId: Object.fromEntries(
+          selectedPayouts.map((payout) => [payout.id, feeBearerFor(payout.id)]),
+        ),
+        executionAccountsByPayoutId: Object.fromEntries(selectedRows.map((row) => {
+          const account = accountFor(row);
+          if (!account) throw new Error(`${row.payout.creator}：请选择已验证的本次收款账户`);
+          return [row.payout.id, retryExecutionAccountFor(account, String(row.payout.creatorId))];
+        })),
       });
       setSubmissionError('');
-      onSubmit(submission);
+      setPendingSubmission(submission);
     } catch (error) {
       setSubmissionError(error instanceof Error ? error.message : '批次校验失败');
     }
   };
 
+  const confirmSubmission = () => {
+    if (pendingSubmission && onSubmit(pendingSubmission)) setPendingSubmission(null);
+  };
+
   return (
+    <>
     <div className="page-stack batch-page">
       <button className="back-link" type="button" onClick={onCancel}><ArrowLeft size={17} />返回付款批次</button>
-      <PageHeading title="新建付款批次" subtitle="先校验达人资料，再选择渠道并提交财务执行。" />
+      <PageHeading title="新建重新付款批次" subtitle="选择真实失败明细，核对继承的原批次配置后重新提交。" />
 
       <ol className="wizard-steps" aria-label="创建付款批次进度">
         {STEPS.map((step, index) => (
@@ -414,19 +530,20 @@ export function BatchWizardPage({
               <thead><tr>
                 <th className="batch-wizard-col-select"><input
                   ref={(node) => { if (node) node.indeterminate = someVisibleSelected; }}
-                  aria-label="全选当前请款项目付款"
+                  aria-label="全选当前原付款批次中的可重试明细"
                   type="checkbox"
                   checked={mode === 'batch' && allVisibleSelected}
-                  disabled={mode === 'single' || !selectedRequestKey || !selectableVisibleIds.length}
-                  title={!selectedRequestKey ? '请先选择一笔付款以锁定请款项目' : undefined}
+                  disabled={mode === 'single' || !selectedSourceBatchId || !selectableVisibleIds.length}
+                  title={!selectedSourceBatchId ? '请先选择一笔失败明细以锁定原付款批次' : undefined}
                   onChange={toggleAll}
                 /></th>
                 <th className="batch-wizard-col-creator">达人</th>
                 <th className="batch-wizard-col-request">请款编号</th>
+                <th className="batch-wizard-col-amount">请款金额</th>
+                <th className="batch-wizard-col-fee-bearer">手续费承担方</th>
                 <th className="batch-wizard-col-project">合作项目</th>
-                <th className="batch-wizard-col-account">银行账号</th>
+                <th className="batch-wizard-col-account">本次收款账户</th>
                 <th className="batch-wizard-col-validation">账户校验</th>
-                <th className="batch-wizard-col-amount">金额</th>
               </tr></thead>
               <tbody>
                 {visibleRows.map((row) => {
@@ -434,64 +551,104 @@ export function BatchWizardPage({
                   const accountCheck = getAccountCheck(row);
                   const accountIssue = !accountCheck.eligible;
                   const rowIssue = selected.has(payout.id) && accountIssue;
-                  const retryCandidate = isPaymentFailureRetryCandidate(payout);
-                  const retryBlocked = retryCandidate && !isPaymentFailureRetryReady(payout);
+                  const retryBlocked = !isPaymentFailureRetryReady(payout) || Boolean(row.sourceIssue);
                   const scopeIssue = selectionScopeIssue(row);
-                  const selectionBlocked = retryBlocked || Boolean(scopeIssue);
-                  const blockedReason = scopeIssue || (retryBlocked ? accountCheck.label : undefined);
+                  const selectionBlocked = retryBlocked || !row.sourcePaymentBatchId || Boolean(scopeIssue);
+                  const blockedReason = scopeIssue || (selectionBlocked ? accountCheck.label : undefined);
                   return (
-                    <tr className={`${rowIssue ? 'row-error ' : ''}${retryCandidate ? 'batch-retry-row ' : ''}${scopeIssue ? 'batch-request-locked-row' : ''}`.trim()} key={payout.id} title={scopeIssue ? blockedReason : undefined}>
+                    <tr className={`${rowIssue ? 'row-error ' : ''}batch-retry-row ${scopeIssue ? 'batch-request-locked-row' : ''}`.trim()} key={payout.id} title={blockedReason}>
                       <td className="batch-wizard-col-select"><input aria-label={`选择 ${payout.creator}`} type="checkbox" checked={selected.has(payout.id)} disabled={selectionBlocked} title={blockedReason} onChange={() => toggleOne(payout.id)} /></td>
                       <td className="batch-wizard-col-creator">
                         <div className="batch-wizard-creator-cell">
                           <PaymentCreatorIdentity {...row.creatorIdentity} />
-                          {retryCandidate ? <em className="batch-retry-badge">失败重试</em> : null}
+                          <em className="batch-retry-badge" title={row.sourcePaymentBatchCode || row.sourceIssue}>失败重试</em>
                         </div>
                       </td>
                       <td className="batch-wizard-col-request"><strong className="batch-wizard-request-code" title={row.requestCode}>{row.requestCode}</strong></td>
+                      <td className="batch-wizard-col-amount amount-cell">{formatAmount(payout)}</td>
+                      <td className="batch-wizard-col-fee-bearer">
+                        <SelectField
+                          ariaLabel={`${payout.creator} 手续费承担方`}
+                          className="batch-fee-bearer-select"
+                          variant="compact"
+                          value={feeBearerFor(payout.id)}
+                          options={PAYMENT_FEE_BEARER_OPTIONS}
+                          disabled={selectionBlocked}
+                          onChange={(value) => setFeeBearerByPayoutId((current) => ({
+                            ...current,
+                            [payout.id]: value,
+                          }))}
+                        />
+                      </td>
                       <td className="batch-wizard-col-project"><span className="batch-wizard-project-cell"><strong title={row.cooperationProjectName}>{row.cooperationProjectName}</strong><small title={row.cooperationProjectCode}>{row.cooperationProjectCode}</small></span></td>
                       <td className="batch-wizard-col-account">
-                        <span className="batch-account-cell">
-                          <strong title={row.accountSummary}>{row.accountSummary}</strong>
-                          <small title={`${row.accountProvider} · ${row.accountVersion}`}>{row.accountProvider} · {row.accountVersion}</small>
-                        </span>
+                        <SelectField
+                          ariaLabel={`${payout.creator} 本次收款账户`}
+                          className="batch-retry-account-select"
+                          variant="compact"
+                          value={accountFor(row) ? getPayoutAccountId(accountFor(row)!) : ''}
+                          placeholder={accountsFor(row).length ? '请选择已验证账户' : '当前渠道无可用账户'}
+                          options={accountsFor(row).map((account) => ({
+                            value: getPayoutAccountId(account),
+                            label: account.nickname,
+                            description: getPayoutAccountIdentifier(account),
+                          }))}
+                          disabled={selectionBlocked || !provider || !accountsFor(row).length}
+                          onChange={(value) => setAccountChoices((current) => ({ ...current, [payout.id]: value }))}
+                        />
+                        {selected.has(payout.id) && accountIssue ? <small className="batch-retry-account-error">{accountCheck.label}</small> : null}
                       </td>
                       <td className="batch-wizard-col-validation">
-                        {accountIssue && !isPaymentFailureRetryReady(payout) ? (
+                        {accountIssue ? (
                           <span className="warning-text" title={accountCheck.label}><AlertTriangle size={15} />{accountCheck.label}</span>
                         ) : <span className="validation-ok" title={accountCheck.label}><CheckCircle2 size={16} />{accountCheck.label}</span>}
                       </td>
-                      <td className="batch-wizard-col-amount amount-cell">{formatAmount(payout)}</td>
                     </tr>
                   );
                 })}
-                {!visibleRows.length ? <tr><td className="batch-wizard-empty" colSpan={7}>没有符合当前条件的付款</td></tr> : null}
+                {!visibleRows.length ? <tr><td className="batch-wizard-empty" colSpan={8}>没有符合当前条件的付款</td></tr> : null}
               </tbody>
             </table>
           </div>
         </section>
 
         <aside className="batch-panel channel-panel">
-          <div className="panel-title-row"><div><h2>付款方式</h2><p>选择本批次的执行方式与渠道</p></div></div>
+          <div className="panel-title-row"><div><h2>重新付款配置</h2><p>可切换付款渠道；支付币种沿用原付款批次</p></div></div>
           <div className="segmented-control" aria-label="付款模式">
             <button className={mode === 'batch' ? 'selected' : ''} type="button" onClick={() => changeMode('batch')}>批量打款</button>
             <button className={mode === 'single' ? 'selected' : ''} type="button" onClick={() => changeMode('single')}>单笔打款</button>
           </div>
-          <div className="provider-list">
-            {PROVIDERS.map((option) => (
-              <button
-                className={`provider-option ${provider === option.id ? 'provider-selected' : ''}`}
-                key={option.id}
-                type="button"
-                disabled={option.disabled}
-                onClick={() => !option.disabled && changeProvider(option.id as ExecutableBatchProvider)}
-              >
-                <span className="provider-radio"><i /></span>
-                <span><strong>{option.title}</strong><small>{option.description}</small></span>
-                <ChevronRight size={17} />
-              </button>
-            ))}
-          </div>
+          <dl className="batch-inherited-fields">
+            <div>
+              <dt>原付款批次</dt>
+              <dd className={selectedScopeRow?.sourcePaymentBatchCode ? 'mono-cell' : ''}>{selectedScopeRow?.sourcePaymentBatchCode || '请选择失败明细'}</dd>
+            </div>
+            <div>
+              <dt>付款渠道</dt>
+              <dd><SelectField
+                ariaLabel="本次付款渠道"
+                variant="form"
+                value={provider ?? ''}
+                options={CHANNEL_OPTIONS}
+                placeholder="请选择失败明细"
+                disabled={!selectedSourceBatchId}
+                onChange={(value) => {
+                  setChannelChoice(value);
+                  setAccountChoices({});
+                  setFundingAccountId('');
+                  setPendingSubmission(null);
+                }}
+              /></dd>
+            </div>
+            <div>
+              <dt>付款单号</dt>
+              <dd className={selectedScopeRow?.sourcePaymentOrderKey ? 'mono-cell' : ''}>{selectedScopeRow?.sourcePaymentOrderKey || '请选择失败明细'}</dd>
+            </div>
+            <div>
+              <dt>支付币种</dt>
+              <dd>{inheritedCurrency || '请选择失败明细'}</dd>
+            </div>
+          </dl>
           <div className="batch-funding-controls">
             <div className="invoice-form-control">
               <span>资金账户 *</span>
@@ -499,18 +656,10 @@ export function BatchWizardPage({
                 ariaLabel="批次资金账户"
                 variant="form"
                 value={fundingAccountId}
-                options={FUNDING_ACCOUNTS[provider]}
+                options={inheritedFundingAccounts}
+                placeholder={provider ? '请选择资金账户' : '请先选择失败明细'}
+                disabled={!provider}
                 onChange={setFundingAccountId}
-              />
-            </div>
-            <div className="invoice-form-control">
-              <span>source_currency *</span>
-              <SelectField
-                ariaLabel="批次资金源币种"
-                variant="form"
-                value={sourceCurrency}
-                options={SOURCE_CURRENCY_OPTIONS}
-                onChange={(value) => setSourceCurrency(value as InvoiceCurrency)}
               />
             </div>
           </div>
@@ -525,9 +674,18 @@ export function BatchWizardPage({
 
       <footer className="batch-summary-bar">
         <div><span>已选 {selectedPayouts.length} 笔</span><strong>{Object.entries(totals).map(([currency, amount]) => `${currency} ${amount.toLocaleString('en-US')}`).join(' + ') || '—'}</strong></div>
-        <div className="batch-actions"><Button variant="ghost" onClick={onCancel}>取消</Button><Button variant="secondary" onClick={onDraft}>保存草稿</Button><Button disabled={!canSubmit} disabledReason={!selectedPayouts.length ? '请先选择付款记录。' : hasIssue ? '请先处理付款资料校验异常。' : '请先选择执行账户。'} onClick={submit}>创建并提交</Button></div>
+        <div className="batch-actions"><Button variant="ghost" onClick={onCancel}>取消</Button><Button variant="secondary" onClick={onDraft}>保存草稿</Button><Button disabled={!canSubmit} disabledReason={!selectedPayouts.length ? '请先选择失败明细。' : hasIssue ? '请先处理付款资料校验异常。' : '请先选择执行账户。'} onClick={submit}>创建并提交</Button></div>
       </footer>
 
     </div>
+    {pendingSubmission ? (
+      <PaymentConfirmationDialog
+        rows={confirmationRows}
+        provider={provider}
+        onClose={() => setPendingSubmission(null)}
+        onConfirm={confirmSubmission}
+      />
+    ) : null}
+    </>
   );
 }

@@ -7,6 +7,25 @@ export type HistoricalPaymentBatchSeed = Readonly<{
   transferMethod: string;
 }>;
 
+/** Only for legacy demo payouts that have a result time but no execution timestamp. */
+export const simulatedHistoricalPaymentSubmittedAt = (resultTime: string): string | undefined => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})([ T])(\d{2}):(\d{2})(?::(\d{2})(\.\d{3})?)?(Z)?$/.exec(resultTime);
+  if (!match) return undefined;
+  const [, year, month, day, separator, hour, minute, second, milliseconds, utcSuffix] = match;
+  const timestamp = Date.UTC(
+    Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute),
+    Number(second ?? 0), Number(milliseconds?.slice(1) ?? 0),
+  );
+  const normalized = new Date(timestamp).toISOString();
+  if (normalized.slice(0, 10) !== `${year}-${month}-${day}`
+    || normalized.slice(11, 16) !== `${hour}:${minute}`) return undefined;
+  const earlier = new Date(timestamp - 5 * 60_000).toISOString();
+  return `${earlier.slice(0, 10)}${separator}${earlier.slice(11, 16)}`
+    + (second === undefined ? '' : earlier.slice(16, 19))
+    + (milliseconds ? earlier.slice(19, 23) : '')
+    + (utcSuffix ?? '');
+};
+
 export const HISTORICAL_PAYMENT_BATCH_SEEDS: Readonly<Record<string, HistoricalPaymentBatchSeed>> = {
   'pay-005': {
     payer: '奚文慧',

@@ -29,7 +29,7 @@ import {
   type EngagementId,
   type ProjectId,
 } from '../businessWorkflow';
-import { Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
+import { AmountInput, Button, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { ContractTemplatePreview } from '../components/ContractTemplatePreview';
 import { paymentProviderDisplayName } from '../components/PaymentProviderBadge';
 import { SearchableComboBox } from '../components/SearchableComboBox';
@@ -303,11 +303,9 @@ export function ContractBuilderPage({
   const [contractType, setContractType] = useState<NonNullable<ContractGenerationModel['contractType']>>(draftModel?.contractType ?? existingDraft?.contractType ?? 'INDEPENDENT');
   const [contractNumber] = useState(() => existingDraft?.id ?? createPrototypeCode('CON'));
   const [contractName, setContractName] = useState(draftModel?.contractName ?? existingDraft?.name ?? '');
-  const [selectedAdvertiserEntityId, setSelectedAdvertiserEntityId] = useState<string>(() => (
-    draftModel
-      ? matchedDraftAdvertiserEntity?.id ?? historicalAdvertiserEntityValue
-      : defaultAdvertiserEntity.id
-  ));
+  const selectedAdvertiserEntityId = draftModel
+    ? matchedDraftAdvertiserEntity?.id ?? historicalAdvertiserEntityValue
+    : defaultAdvertiserEntity.id;
   const [projectName, setProjectName] = useState(draftModel?.projectName ?? initialProject?.name ?? '');
   const [effectiveDate, setEffectiveDate] = useState(draftModel?.effectiveDate ?? '');
   const [campaignStart] = useState('');
@@ -379,22 +377,6 @@ export function ContractBuilderPage({
   const systemAdvertiser = selectedAdvertiserEntityId === historicalAdvertiserEntityValue
     ? historicalAdvertiserSnapshot
     : selectedAdvertiserEntity ?? defaultAdvertiserEntity;
-  const advertiserOptions = [
-    ...(selectedAdvertiserEntityId === historicalAdvertiserEntityValue && historicalAdvertiserSnapshot ? [{
-      value: historicalAdvertiserEntityValue,
-      label: `${historicalAdvertiserSnapshot.name} · 历史快照`,
-      description: historicalAdvertiserSnapshot.address,
-      badges: [{ label: '历史', tone: 'neutral' as const }],
-    }] : []),
-    ...contractAdvertiserSettings.entities.map((entity) => ({
-      value: entity.id,
-      label: entity.name,
-      description: entity.address,
-      badges: entity.id === contractAdvertiserSettings.defaultEntityId
-        ? [{ label: '默认', tone: 'success' as const }]
-        : undefined,
-    })),
-  ];
   const selectedSocialAccount = resolveCreatorSocialAccount(
     selectedCreator,
     creatorSocialAccountId,
@@ -1022,31 +1004,7 @@ export function ContractBuilderPage({
                 />
                 <small>{errors.contractName || '用于合同列表、详情和后续签署文件匹配'}</small>
               </label>
-              {advertiserMode === 'SYSTEM' ? (
-                <div
-                  className={`invoice-form-control full-width ${errors.advertiser || errors.advertiserAddress ? 'has-error' : ''}`}
-                  data-contract-field="signature"
-                  onFocus={() => setActiveField('signature')}
-                >
-                  <span>Advertiser *</span>
-                  <SelectField
-                    ariaLabel="合同 Advertiser 主体"
-                    variant="form"
-                    menuStrategy="fixed"
-                    value={selectedAdvertiserEntityId}
-                    options={advertiserOptions}
-                    onChange={(value) => {
-                      setSelectedAdvertiserEntityId(value);
-                      setErrors((current) => {
-                        const { advertiser: _advertiser, advertiserAddress: _advertiserAddress, ...rest } = current;
-                        return rest;
-                      });
-                      resetOutput();
-                    }}
-                  />
-                  <small>{errors.advertiser || errors.advertiserAddress || systemAdvertiser?.address}</small>
-                </div>
-              ) : advertiserMode === 'MANUAL' ? (
+              {advertiserMode === 'MANUAL' ? (
                 <>
                   <label className={errors.advertiser ? 'has-error' : ''} data-contract-field="signature" {...fieldProps('signature')}>
                     <span>Advertiser *</span>
@@ -1193,7 +1151,7 @@ export function ContractBuilderPage({
               <label className={errors.releaseEnd ? 'has-error' : ''} data-contract-field="releaseEnd" {...fieldProps('releasePeriod')}><span>发布结束日期</span><input type="date" value={releaseEnd} onChange={(event) => { setReleaseEnd(event.target.value); resetOutput(); }} /><small>{errors.releaseEnd}</small></label>
               <label className={`full-width ${errors.contentLength ? 'has-error' : ''}`} data-contract-field="contentLength" {...fieldProps('contentLength')}><span>内容时长要求</span><textarea maxLength={320} value={contentLength} placeholder="例如：Dedicated video at least 10 minutes" onChange={(event) => { setContentLength(event.target.value); resetOutput(); }} /><small>{errors.contentLength}</small></label>
               <label data-contract-field="licensePeriod" {...fieldProps('licensePeriod')}><span>License Period</span><input value={licensePeriod} onChange={(event) => { setLicensePeriod(event.target.value); resetOutput(); }} /></label>
-              <label className={errors.licensePrice ? 'has-error' : ''} data-contract-field="licensePrice" {...fieldProps('licensePrice')}><span>License Price</span><input type="number" min="0" step="0.01" value={licensePrice} onChange={(event) => { setLicensePrice(event.target.value); resetOutput(); }} /><small>{errors.licensePrice}</small></label>
+              <label className={errors.licensePrice ? 'has-error' : ''} data-contract-field="licensePrice" {...fieldProps('licensePrice')}><span>License Price</span><AmountInput min={0} value={licensePrice} onChange={(event) => { setLicensePrice(event.target.value); resetOutput(); }} /><small>{errors.licensePrice}</small></label>
             </div>
           </div>
 
@@ -1201,7 +1159,7 @@ export function ContractBuilderPage({
             <header><span><FileSignature size={19} /></span><div><h2>3. 商务条款</h2><p>以下字段均为非必填；保留默认值或填写后将写入合同模板。</p></div></header>
             <div className="invoice-form-grid">
               <div className={`invoice-form-control ${errors.currency ? 'has-error' : ''}`} data-contract-field="currency" onFocus={() => setActiveField('totalFee')}><span>币种</span><SelectField ariaLabel="合同币种" variant="form" value={currency} options={CURRENCY_OPTIONS} onChange={(value) => { setCurrency(value); resetOutput(); }} /><small>{errors.currency}</small></div>
-              <label className={errors.totalFee ? 'has-error' : ''} data-contract-field="totalFee" {...fieldProps('totalFee')}><span>Project Total Fees</span><input type="number" min="0" step="0.01" value={totalFee} onChange={(event) => { setTotalFee(event.target.value); resetOutput(); }} /><small>{errors.totalFee}</small></label>
+              <label className={errors.totalFee ? 'has-error' : ''} data-contract-field="totalFee" {...fieldProps('totalFee')}><span>Project Total Fees</span><AmountInput min={0} value={totalFee} onChange={(event) => { setTotalFee(event.target.value); resetOutput(); }} /><small>{errors.totalFee}</small></label>
               <label className={errors.invoiceIssueWorkingDays ? 'has-error' : ''} data-contract-field="invoiceIssueWorkingDays" {...fieldProps('invoiceIssueWorkingDays')}><span>Invoice 开具期限</span><input type="number" min="1" max="30" value={invoiceIssueWorkingDays} onChange={(event) => { setInvoiceIssueWorkingDays(Number(event.target.value)); resetOutput(); }} /><small>{errors.invoiceIssueWorkingDays}</small></label>
               <div className="invoice-form-control" data-contract-field="paymentWorkingDays" onFocus={() => setActiveField('paymentWorkingDays')}><span>付款期限</span><SelectField ariaLabel="合同付款期限" variant="form" value={String(paymentWorkingDays)} options={PAYMENT_DAYS_OPTIONS} onChange={(value) => { setPaymentWorkingDays(Number(value) as 45 | 60); resetOutput(); }} /></div>
               <div className={`invoice-form-control full-width ${errors.feeBearer ? 'has-error' : ''}`} data-contract-field="feeBearer" onFocus={() => setActiveField('feeBearer')}><span>转账手续费承担方</span><SelectField ariaLabel="合同手续费承担方" variant="form" value={feeBearer} options={FEE_BEARER_OPTIONS} onChange={(value) => { setFeeBearer(value as ContractGenerationModel['feeBearer']); resetOutput(); }} /><small>{errors.feeBearer}</small></div>

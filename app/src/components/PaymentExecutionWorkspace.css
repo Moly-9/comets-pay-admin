@@ -1515,6 +1515,10 @@ body:has(.payment-execution-workspace) {
   vertical-align: middle;
 }
 
+.payment-execution-table .payment-execution-amount-cell {
+  white-space: nowrap;
+}
+
 .payment-execution-table tr:hover td {
   background: #faf9fc;
 }

@@ -34,7 +34,7 @@ import {
   type EngagementId,
   type ProjectId,
 } from '../businessWorkflow';
-import { Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
+import { AmountInput, Button, Modal, NoticeBanner, PageHeading, SelectField } from '../components/Common';
 import { ContractDocumentView } from '../components/ContractDocumentView';
 import { InvoiceDocumentView } from '../components/InvoiceDocumentView';
 import { InvoiceContractMatchPanel } from '../components/InvoiceContractMatchPanel';
@@ -802,12 +802,10 @@ function BatchRowTable({
                 <td data-label="Price">
                   <div className="invoice-batch-line-stack">
                     {row.items.map((item, itemIndex) => (
-                      <input
+                      <AmountInput
                         key={item.id}
                         aria-label={`${row.creatorName} 第 ${itemIndex + 1} 条 Price`}
-                        type="number"
-                        min="0.01"
-                        step="0.01"
+                        min={0.01}
                         value={item.unitPrice || ''}
                         disabled={rowLocked}
                         onChange={(event) => onChange(row.engagementId, {
@@ -825,11 +823,9 @@ function BatchRowTable({
                       const creatorLineItem = invoiceBatchLineItemScope(item) === 'CREATOR';
                       return (
                         <div className={`invoice-batch-amount-item${creatorLineItem ? ' is-creator-line' : ''}`} key={item.id}>
-                          <input
+                          <AmountInput
                             aria-label={`${row.creatorName} 第 ${itemIndex + 1} 条 Amount`}
-                            type="number"
-                            min="0.01"
-                            step="0.01"
+                            min={0.01}
                             value={item.quantity || ''}
                             disabled={rowLocked}
                             onChange={(event) => onChange(row.engagementId, {
