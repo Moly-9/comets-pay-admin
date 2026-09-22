@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { accountDisplayValue } from '../accountPresentation';
-import { Button, Modal, PageHeading, SelectField } from '../components/Common';
+import { AmountInput, Button, Modal, PageHeading, SelectField } from '../components/Common';
 import { ContractUploadWizard } from '../components/ContractUploadWizard';
 import { ContractDocumentView } from '../components/ContractDocumentView';
 import { ContractTemplateFieldEditor } from '../components/ContractTemplateFieldEditor';
@@ -669,12 +669,9 @@ function RecognitionFieldList({
                   </label>
                   <label>
                     <span className="contract-recognition-label">金额</span>
-                    <input
+                    <AmountInput
                       aria-label="合同金额"
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      inputMode="decimal"
+                      min={0.01}
                       value={moneyAmount}
                       placeholder="待补充"
                       readOnly={fieldLocked}

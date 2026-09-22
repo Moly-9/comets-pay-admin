@@ -59,7 +59,7 @@ import type {
   PayMaxPayoutAccount,
   PayPalPayoutAccount,
 } from '../types';
-import { Button, Modal, SelectField } from './Common';
+import { AmountInput, Button, Modal, SelectField } from './Common';
 import { paymentProviderDisplayName } from './PaymentProviderBadge';
 
 type CreatorPayoutAccountsProps = {
@@ -322,14 +322,25 @@ function TextField({
       data-airwallex-field-path={fieldPath}
     >
       <FieldLabel label={label} alias={alias} required={required} />
-      <input
-        aria-label={label}
-        type={type}
-        value={value}
-        aria-invalid={issue ? true : undefined}
-        placeholder={placeholder}
-        onChange={(event) => onChange(event.target.value)}
-      />
+      {type === 'number' ? (
+        <AmountInput
+          aria-label={label}
+          min={0}
+          value={value}
+          aria-invalid={issue ? true : undefined}
+          placeholder={placeholder}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      ) : (
+        <input
+          aria-label={label}
+          type={type}
+          value={value}
+          aria-invalid={issue ? true : undefined}
+          placeholder={placeholder}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      )}
       {issue ? <small className="creator-payment-field-error">{issue}</small> : null}
       {example ? <small className="creator-payment-field-example">示例：{example}</small> : null}
     </label>

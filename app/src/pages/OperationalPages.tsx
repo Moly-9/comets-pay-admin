@@ -44,7 +44,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
-import { Avatar, Button, ListActionButton, Modal, NoticeBanner, PageHeading, SelectField, StatusMark, type SelectOption } from '../components/Common';
+import { AmountInput, Avatar, Button, ListActionButton, Modal, NoticeBanner, PageHeading, SelectField, StatusMark, type SelectOption } from '../components/Common';
 import { CreatorDraftExitDialog } from '../components/CreatorDraftExitDialog';
 import {
   CreatorInvitationRecordsDialog,
@@ -624,12 +624,10 @@ export function ProjectInlineFilterPanel({
             </div>
             <label className="project-filter-field">
               <span className="project-filter-field-label">最低金额</span>
-              <input
+              <AmountInput
                 className="project-budget-input"
                 aria-label="最低预算"
-                inputMode="decimal"
-                min="0"
-                type="number"
+                min={0}
                 placeholder="不限"
                 value={filters.minBudget}
                 onChange={(event) => onFiltersChange((current) => ({ ...current, minBudget: event.target.value }))}
@@ -637,12 +635,10 @@ export function ProjectInlineFilterPanel({
             </label>
             <label className="project-filter-field">
               <span className="project-filter-field-label">最高金额</span>
-              <input
+              <AmountInput
                 className="project-budget-input"
                 aria-label="最高预算"
-                inputMode="decimal"
-                min="0"
-                type="number"
+                min={0}
                 placeholder="不限"
                 value={filters.maxBudget}
                 onChange={(event) => onFiltersChange((current) => ({ ...current, maxBudget: event.target.value }))}
