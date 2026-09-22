@@ -4,7 +4,9 @@ import {
   confirmRecognitionField,
   confirmRecognitionFields,
   contractExpiryRangeValidationMessage,
+  contractRecognitionMoneyValidationMessage,
   editContractExpiryRange,
+  editContractRecognitionMoney,
   editPlatformChannelRecognitionField,
   editRecognitionField,
   normalizeCampaignPeriod,
@@ -116,6 +118,48 @@ describe('contract field recognition', () => {
       channelUrl: 'https://chzzk.naver.com/example',
     });
     expect(changedLink.rawValue).toBe('CHZZK · https://chzzk.naver.com/example');
+  });
+
+  it('edits recognized contract currency and amount as one validated field', () => {
+    const recognized = field([], 'projectTotalFees');
+    const withCurrency = editContractRecognitionMoney(recognized, { currency: 'USD' });
+    const complete = editContractRecognitionMoney(withCurrency, { amount: 1250.5 });
+    const invalid = editContractRecognitionMoney(complete, { amount: 0 });
+
+    expect(withCurrency).toMatchObject({
+      rawValue: 'USD',
+      normalizedValue: { amount: null, currency: 'USD' },
+      status: 'missing',
+    });
+    expect(contractRecognitionMoneyValidationMessage(withCurrency.normalizedValue)).toBe('请输入大于 0 的金额');
+    expect(complete).toMatchObject({
+      rawValue: 'USD 1250.5',
+      normalizedValue: { amount: 1250.5, currency: 'USD' },
+      status: 'detected',
+    });
+    expect(canConfirmRecognitionFields([complete], ['projectTotalFees'])).toBe(true);
+    expect(invalid.status).toBe('missing');
+    expect(canConfirmRecognitionFields([invalid], ['projectTotalFees'])).toBe(false);
+  });
+
+  it('maps the transfer-fee selector values to the existing contract enums', () => {
+    const recognized = field([], 'transferFee');
+
+    expect(editRecognitionField(recognized, 'ADVERTISER')).toMatchObject({
+      rawValue: '我方承担',
+      normalizedValue: 'ADVERTISER',
+      status: 'detected',
+    });
+    expect(editRecognitionField(recognized, 'PUBLISHER')).toMatchObject({
+      rawValue: '对方承担',
+      normalizedValue: 'PUBLISHER',
+      status: 'detected',
+    });
+    expect(editRecognitionField(recognized, 'SHARED')).toMatchObject({
+      rawValue: '双方各自承担',
+      normalizedValue: 'SHARED',
+      status: 'detected',
+    });
   });
 
   it('keeps a channel-link-only recognition result visible and optional', () => {

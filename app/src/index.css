@@ -28220,6 +28220,83 @@ button:disabled {
   grid-template-columns: minmax(0, 1fr) 48px;
 }
 
+.contract-recognition-money-detail {
+  grid-template-columns: minmax(0, 1fr) 48px;
+}
+
+.contract-recognition-money-fields {
+  display: grid;
+  grid-template-columns: minmax(112px, 0.72fr) minmax(148px, 1.28fr);
+  min-width: 0;
+  gap: 8px 10px;
+}
+
+.contract-recognition-money-fields > label {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.contract-recognition-money-fields input,
+.contract-recognition-money-fields .custom-select-trigger,
+.contract-recognition-value .custom-select-trigger {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  border: 1px solid #d9dde5;
+  border-radius: 7px;
+  background: #fff;
+  color: #252933;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.contract-recognition-money-fields input {
+  padding: 0 9px;
+}
+
+.contract-recognition-money-fields .custom-select-trigger,
+.contract-recognition-value .custom-select-trigger {
+  padding: 0 8px;
+}
+
+.contract-recognition-money-fields input:hover,
+.contract-recognition-money-fields .custom-select-trigger:hover,
+.contract-recognition-value .custom-select-trigger:hover {
+  border-color: #b9bfca;
+}
+
+.contract-recognition-money-fields input:focus,
+.contract-recognition-money-fields .custom-select-open .custom-select-trigger,
+.contract-recognition-money-fields .custom-select-trigger:focus-visible,
+.contract-recognition-value .custom-select-open .custom-select-trigger,
+.contract-recognition-value .custom-select-trigger:focus-visible {
+  border-color: #8f78a7;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(121, 96, 146, 0.12);
+}
+
+.contract-recognition-money-fields input[aria-invalid="true"] {
+  border-color: #d79a92;
+  background: #fff9f8;
+}
+
+.contract-recognition-money-error {
+  grid-column: 1 / -1;
+  color: #a4493e;
+  font-size: 9.5px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.contract-recognition-money-meta {
+  display: grid;
+  grid-column: 1 / -1;
+  min-width: 0;
+  gap: 3px;
+}
+
 .contract-recognition-platform-channel-fields {
   display: grid;
   min-width: 0;
@@ -28396,7 +28473,27 @@ button:disabled {
   cursor: text;
 }
 
+.contract-recognition-detail-readonly .contract-recognition-money-fields input,
+.contract-recognition-detail-readonly .contract-recognition-money-fields input:hover,
+.contract-recognition-detail-readonly .contract-recognition-money-fields input:focus,
+.contract-recognition-detail-readonly .contract-recognition-money-fields .custom-select-trigger,
+.contract-recognition-detail-readonly .contract-recognition-money-fields .custom-select-trigger:hover,
+.contract-recognition-detail-readonly .contract-recognition-money-fields .custom-select-trigger:focus-visible,
+.contract-recognition-detail-readonly .contract-recognition-value .custom-select-trigger,
+.contract-recognition-detail-readonly .contract-recognition-value .custom-select-trigger:hover,
+.contract-recognition-detail-readonly .contract-recognition-value .custom-select-trigger:focus-visible {
+  border-color: transparent;
+  outline: 0;
+  box-shadow: none;
+  background: transparent;
+  cursor: text;
+}
+
 @media (max-width: 640px) {
+  .contract-recognition-money-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .contract-recognition-platform-channel-detail {
     grid-template-columns: minmax(0, 1fr) 48px;
   }

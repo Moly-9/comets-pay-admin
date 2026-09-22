@@ -400,6 +400,59 @@ export const normalizeMoney = (raw: string) => {
   };
 };
 
+type ContractRecognitionMoneyValue = {
+  amount: number | null;
+  currency: string;
+};
+
+const contractRecognitionMoneyValue = (value: unknown): ContractRecognitionMoneyValue => {
+  if (!value || typeof value !== 'object') return { amount: null, currency: '' };
+  const candidate = value as Partial<ContractRecognitionMoneyValue>;
+  return {
+    amount: typeof candidate.amount === 'number' && Number.isFinite(candidate.amount)
+      ? candidate.amount
+      : null,
+    currency: typeof candidate.currency === 'string' ? candidate.currency.trim().toUpperCase() : '',
+  };
+};
+
+export const isContractRecognitionMoneyValid = (value: unknown) => {
+  const money = contractRecognitionMoneyValue(value);
+  return Boolean(money.currency) && money.amount !== null && money.amount > 0;
+};
+
+export const contractRecognitionMoneyValidationMessage = (value: unknown) => {
+  const money = contractRecognitionMoneyValue(value);
+  if (!money.currency && money.amount === null) return '';
+  if (!money.currency) return '请选择币种';
+  if (money.amount === null || money.amount <= 0) return '请输入大于 0 的金额';
+  return '';
+};
+
+export const editContractRecognitionMoney = (
+  field: ContractRecognitionField,
+  patch: Partial<ContractRecognitionMoneyValue>,
+): ContractRecognitionField => {
+  if (field.fieldKey !== 'projectTotalFees' || field.status === 'confirmed' || field.readOnly) return field;
+  const current = contractRecognitionMoneyValue(field.normalizedValue);
+  const normalizedValue: ContractRecognitionMoneyValue = {
+    amount: patch.amount === undefined ? current.amount : patch.amount,
+    currency: patch.currency === undefined ? current.currency : patch.currency.trim().toUpperCase(),
+  };
+  const rawValue = [
+    normalizedValue.currency,
+    normalizedValue.amount === null ? '' : String(normalizedValue.amount),
+  ].filter(Boolean).join(' ');
+  return {
+    ...field,
+    rawValue,
+    normalizedValue,
+    editedValue: rawValue,
+    confidence: 1,
+    status: isContractRecognitionMoneyValid(normalizedValue) ? 'detected' : 'missing',
+  };
+};
+
 export const normalizeDays = (raw: string) => {
   const match = raw.match(/\b(?:net\s*)?(\d{1,3})\s*(?:working\s+|business\s+)?days?\b/i)
     ?? raw.match(/(\d{1,3})\s*(?:个)?(?:工作日|天|日)/);
@@ -415,6 +468,10 @@ const normalizePaymentMethod = (raw: string) => {
 };
 
 const normalizeTransferFee = (raw: string) => {
+  const normalized = raw.trim().toUpperCase();
+  if (normalized === 'ADVERTISER' || raw.trim() === '我方承担') return 'ADVERTISER';
+  if (normalized === 'PUBLISHER' || raw.trim() === '对方承担') return 'PUBLISHER';
+  if (normalized === 'SHARED' || raw.trim() === '双方各自承担') return 'SHARED';
   if (/borne\s+by\s+(?:the\s+)?advertiser|advertiser\s+(?:shall\s+)?(?:bear|pay)|由(?:广告主|甲方|付款方)承担/i.test(raw)) return 'ADVERTISER';
   if (/borne\s+by\s+(?:the\s+)?publisher|publisher\s+(?:shall\s+)?(?:bear|pay)|由(?:收款方|发布方|乙方|达人)承担/i.test(raw)) return 'PUBLISHER';
   if (/shared|each party|双方(?:共同|各自)承担/i.test(raw)) return 'SHARED';
@@ -935,9 +992,20 @@ export const editRecognitionField = (
       : editedValue === 'UNSIGNED'
         ? '未签署'
         : ''
-    : editedValue;
-  const validValue = field.fieldKey !== 'contractExpiry'
-    || isContractExpiryRangeValid(normalizedValue);
+    : field.fieldKey === 'transferFee'
+      ? editedValue === 'ADVERTISER'
+        ? '我方承担'
+        : editedValue === 'PUBLISHER'
+          ? '对方承担'
+          : editedValue === 'SHARED'
+            ? '双方各自承担'
+            : ''
+      : editedValue;
+  const validValue = field.fieldKey === 'contractExpiry'
+    ? isContractExpiryRangeValid(normalizedValue)
+    : field.fieldKey === 'projectTotalFees'
+      ? isContractRecognitionMoneyValid(normalizedValue)
+      : true;
   return {
     ...field,
     rawValue,
@@ -956,6 +1024,7 @@ export const confirmRecognitionField = (
 ): ContractRecognitionField => (
   field.rawValue.trim()
     && (field.fieldKey !== 'contractExpiry' || isContractExpiryRangeValid(field.normalizedValue))
+    && (field.fieldKey !== 'projectTotalFees' || isContractRecognitionMoneyValid(field.normalizedValue))
     ? { ...field, status: 'confirmed', confidence: 1 }
     : field
 );
@@ -968,7 +1037,8 @@ export const canConfirmRecognitionFields = (
   return Boolean(field?.rawValue.trim())
     && field?.status !== 'missing'
     && field?.status !== 'conflict'
-    && (fieldKey !== 'contractExpiry' || isContractExpiryRangeValid(field?.normalizedValue));
+    && (fieldKey !== 'contractExpiry' || isContractExpiryRangeValid(field?.normalizedValue))
+    && (fieldKey !== 'projectTotalFees' || isContractRecognitionMoneyValid(field?.normalizedValue));
 });
 
 export const confirmRecognitionFields = (

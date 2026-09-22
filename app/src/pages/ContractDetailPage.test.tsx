@@ -19,6 +19,7 @@ import {
   contractPaymentFieldsFor,
   contractRecognitionKeysToConfirm,
   contractExpiryDisplayValue,
+  generatedContractPaymentFieldsFor,
   contractSignaturePaymentInformationFor,
   contractSignatureStatusLabel,
   contractSummaryFieldsFor,
@@ -102,6 +103,30 @@ describe('ContractDetailPage expiry presentation', () => {
     expect(contractSummaryFieldsFor('FRAMEWORK').some((field) => (
       field.key === 'socialPlatform' || field.key === 'channelLink'
     ))).toBe(false);
+  });
+
+  it('hides only the generated amount row when the generation snapshot has no valid amount', () => {
+    const fields = contractPaymentFieldsFor('INDEPENDENT');
+    const withoutAmount = {
+      generationSnapshot: { totalFee: '' } as ContractRecord['generationSnapshot'],
+    };
+    const withAmount = {
+      generationSnapshot: { totalFee: '3600' } as ContractRecord['generationSnapshot'],
+    };
+
+    expect(generatedContractPaymentFieldsFor(withoutAmount, fields)).toEqual([
+      { key: 'paymentMethod', label: '付款渠道' },
+      { key: 'transferFee', label: '手续费费用承担方' },
+    ]);
+    expect(generatedContractPaymentFieldsFor(withAmount, fields)).toEqual(fields);
+  });
+
+  it('uses structured controls for recognized money and transfer-fee fields', () => {
+    expect(contractDetailSource).toContain('ariaLabel="合同金额币种"');
+    expect(contractDetailSource).toContain('aria-label="合同金额"');
+    expect(contractDetailSource).toContain("{ value: 'ADVERTISER', label: '我方承担' }");
+    expect(contractDetailSource).toContain("{ value: 'PUBLISHER', label: '对方承担' }");
+    expect(contractDetailSource).toContain("{ value: 'SHARED', label: '双方各自承担' }");
   });
 
   it('renders one grouped recognition result as platform and channel-link controls', () => {
