@@ -8,7 +8,10 @@
 }
 
 .payment-confirmation-dialog .modal-content {
-  overflow-x: hidden;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
   background: #f7f8fa;
 }
 
@@ -21,6 +24,7 @@
 
 .payment-confirmation-intro {
   display: flex;
+  flex: 0 0 auto;
   align-items: flex-start;
   gap: 10px;
   border: 1px solid #dfe7f3;
@@ -48,6 +52,11 @@
 }
 
 .payment-confirmation-table-shell {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
   margin-top: 14px;
   border: 1px solid #e2e5ea;
   border-radius: 12px;
@@ -83,7 +92,7 @@
 
 .payment-confirmation-table th {
   position: sticky;
-  z-index: 1;
+  z-index: 2;
   top: 0;
   background: #f2f4f7;
   color: #5f6672;

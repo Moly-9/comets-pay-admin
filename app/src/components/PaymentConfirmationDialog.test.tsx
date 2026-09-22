@@ -91,8 +91,10 @@ describe('PaymentConfirmationDialog', () => {
     }, -1);
 
     const css = readFileSync(new URL('./PaymentConfirmationDialog.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/\.payment-confirmation-dialog \.modal-content \{[\s\S]*?display: flex;[\s\S]*?flex-direction: column;[\s\S]*?overflow: hidden;/);
     expect(css).toMatch(/\.payment-confirmation-dialog \.modal-footer \{[\s\S]*?display: flex;[\s\S]*?padding-block: 16px;/);
-    expect(css).toMatch(/\.payment-confirmation-table th \{[\s\S]*?position: sticky;[\s\S]*?top: 0;/);
+    expect(css).toMatch(/\.payment-confirmation-table-shell \{[\s\S]*?flex: 1 1 auto;[\s\S]*?overflow-y: auto;[\s\S]*?scrollbar-gutter: stable;/);
+    expect(css).toMatch(/\.payment-confirmation-table th \{[\s\S]*?position: sticky;[\s\S]*?z-index: 2;[\s\S]*?top: 0;/);
     expect(css).toMatch(/\.payment-confirmation-table th,[\s\S]*?\.payment-confirmation-table td \{[\s\S]*?text-align: center;/);
     expect(css).toMatch(/\.payment-confirmation-table th:first-child \{[\s\S]*?padding-left: 20px;/);
     expect(css).toMatch(/\.payment-confirmation-table td:last-child \{[\s\S]*?padding-right: 20px;/);
