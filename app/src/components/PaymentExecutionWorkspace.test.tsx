@@ -95,7 +95,7 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).toMatch(/class="button button-primary payment-execution-overview-submit-action"(?![^>]*disabled)/);
   });
 
-  it('shows five summary cards, the eleven-column payout table, approval steps, and actions after entering the payment list', () => {
+  it('shows five summary cards, the nine-column payout table, approval steps, and actions after entering the payment list', () => {
     const project = buildPaymentProjectRows({
       tab: 'payment',
       payouts: INITIAL_COMPLETE_REQUEST_RESOURCES.payouts,
@@ -142,7 +142,9 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).toContain('aria-label="校验结果"');
     expect(html).toContain('tabindex="-1"');
     expect(html).toContain('class="payment-execution-table"');
-    expect(html).toContain('<th>达人名称</th><th>收款账户</th><th>支付币种</th><th>收款方币种</th><th>请款金额</th><th>手续费承担方</th><th>渠道手续费</th><th>我方支付手续费</th><th>付款原因</th><th>交易附言</th><th>校验状态</th>');
+    expect(html).toContain('<th>达人名称</th><th>收款账户</th><th>支付币种</th><th>收款方币种</th><th>请款金额</th><th>手续费承担方</th><th>付款原因</th><th>交易附言</th><th>校验状态</th>');
+    expect(html).not.toContain('<th>渠道手续费</th>');
+    expect(html).not.toContain('<th>我方支付手续费</th>');
     expect(html).toContain(project.payouts[0].creator);
     expect(html).toContain(`${project.requestCode}-01`);
     expect(html).toContain(`>${project.payouts[0].currency}</span>`);
@@ -168,8 +170,10 @@ describe('PaymentExecutionWorkspace', () => {
     expect(html).toContain('>退回媒介修改</span>');
     expect(html).toContain('>测算手续费并打款</span>');
     expect(html).toMatch(/class="button button-primary payment-execution-submit-action"(?![^>]*disabled)/);
-    expect(html.match(/<td class="payment-execution-amount-cell" aria-label="待测算"><\/td>/g))
-      .toHaveLength(project.payouts.length * 2);
+    const styles = readFileSync(new URL('./PaymentExecutionWorkspace.css', import.meta.url), 'utf8');
+    expect(styles).toContain('min-width: 1360px;');
+    expect(styles).not.toContain('col.is-channel-fee');
+    expect(styles).not.toContain('col.is-payer-fee');
   });
 
   it('uses the same soft system surfaces in payment, returned, and execution summaries', () => {

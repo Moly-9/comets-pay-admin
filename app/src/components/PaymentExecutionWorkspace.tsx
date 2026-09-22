@@ -673,13 +673,11 @@ export function PaymentExecutionWorkspace({
                     <col className="is-receive-currency" />
                     <col className="is-amount" />
                     <col className="is-fee" />
-                    <col className="is-channel-fee" />
-                    <col className="is-payer-fee" />
                     <col className="is-reason" />
                     <col className="is-reference" />
                     <col className="is-validation" />
                   </colgroup>
-                  <thead><tr><th>达人名称</th><th>收款账户</th><th>支付币种</th><th>收款方币种</th><th>请款金额</th><th>手续费承担方</th><th>渠道手续费</th><th>我方支付手续费</th><th>付款原因</th><th>交易附言</th><th>校验状态</th></tr></thead>
+                  <thead><tr><th>达人名称</th><th>收款账户</th><th>支付币种</th><th>收款方币种</th><th>请款金额</th><th>手续费承担方</th><th>付款原因</th><th>交易附言</th><th>校验状态</th></tr></thead>
                   <tbody>
                     {executionRows.map(({
                       payout,
@@ -698,8 +696,6 @@ export function PaymentExecutionWorkspace({
                           <td><span className="payment-execution-currency">{receiveCurrency}</span></td>
                           <td className="payment-execution-amount-cell">{formatPayoutAmount(payout)}</td>
                           <td className="payment-execution-compact-cell" title={paymentFeeBearerDisplayName(feeBearer)}>{paymentFeeBearerDisplayName(feeBearer)}</td>
-                          <td className="payment-execution-amount-cell" aria-label="待测算" />
-                          <td className="payment-execution-amount-cell" aria-label="待测算" />
                           <td className="payment-execution-compact-cell" title={paymentReason}>{paymentReason}</td>
                           <td className="payment-execution-compact-cell" title={transactionReference}>{transactionReference}</td>
                           <td><span className={`payment-execution-table-status is-${informationValidated ? 'valid' : 'pending'}`}>{informationValidated ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}{informationValidated ? '已通过' : '待校验'}</span></td>
