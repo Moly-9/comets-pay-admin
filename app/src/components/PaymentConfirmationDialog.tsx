@@ -86,11 +86,11 @@ export function PaymentConfirmationDialog({
               <th scope="col">序号</th>
               <th scope="col">达人 / Invoice</th>
               <th scope="col">收款账户</th>
-              <th className="payment-confirmation-money-heading" scope="col">请款金额</th>
-              <th className="payment-confirmation-money-heading" scope="col">渠道手续费</th>
+              <th scope="col">请款金额</th>
+              <th scope="col">渠道手续费</th>
               <th scope="col">手续费承担方</th>
-              <th className="payment-confirmation-money-heading" scope="col">我方实际支付</th>
-              <th className="payment-confirmation-money-heading" scope="col">对方预计到账</th>
+              <th scope="col">我方实际支付</th>
+              <th scope="col">对方预计到账</th>
             </tr>
           </thead>
           <tbody>
