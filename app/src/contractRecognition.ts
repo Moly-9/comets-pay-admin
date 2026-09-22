@@ -564,7 +564,7 @@ const platformChannelCandidates = (documents: ParsedContractDocument[]) => combi
     handle: values.handle ?? '',
     channelUrl: values.channelUrl ?? '',
   }),
-  (values) => [values.platform, values.channelName || values.handle].filter(Boolean).join(' · '),
+  (values) => [values.platform, values.channelUrl].filter(Boolean).join(' · '),
   0.9,
 );
 
@@ -855,6 +855,41 @@ export const editContractExpiryRange = (
     editedValue: rawValue,
     confidence: 1,
     status: isContractExpiryRangeValid(normalizedValue) ? 'detected' : 'missing',
+  };
+};
+
+type PlatformChannelValue = {
+  platform?: string;
+  channelName?: string;
+  handle?: string;
+  channelUrl?: string;
+};
+
+export const editPlatformChannelRecognitionField = (
+  field: ContractRecognitionField,
+  patch: Partial<Pick<PlatformChannelValue, 'platform' | 'channelUrl'>>,
+): ContractRecognitionField => {
+  if (field.fieldKey !== 'platformChannel' || field.status === 'confirmed' || field.readOnly) return field;
+  const current = field.normalizedValue && typeof field.normalizedValue === 'object'
+    ? field.normalizedValue as PlatformChannelValue
+    : {};
+  const platformChanged = patch.platform !== undefined && patch.platform !== (current.platform ?? '');
+  const normalizedValue: PlatformChannelValue = {
+    ...current,
+    ...(platformChanged ? { channelName: '', handle: '' } : {}),
+    ...patch,
+  };
+  const rawValue = [normalizedValue.platform, normalizedValue.channelUrl]
+    .map((value) => value?.trim() ?? '')
+    .filter(Boolean)
+    .join(' · ');
+  return {
+    ...field,
+    rawValue,
+    normalizedValue,
+    editedValue: rawValue,
+    confidence: 1,
+    status: rawValue ? 'detected' : 'missing',
   };
 };
 

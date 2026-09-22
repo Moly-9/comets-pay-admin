@@ -5,6 +5,7 @@ import {
   confirmRecognitionFields,
   contractExpiryRangeValidationMessage,
   editContractExpiryRange,
+  editPlatformChannelRecognitionField,
   editRecognitionField,
   normalizeCampaignPeriod,
   normalizeContractRecognitionFields,
@@ -81,9 +82,52 @@ describe('contract field recognition', () => {
       handle: '',
       channelUrl: 'https://youtube.com/@LeaPlayFR',
     });
+    expect(results.find((item) => item.fieldKey === 'platformChannel')?.rawValue)
+      .toBe('YouTube · https://youtube.com/@LeaPlayFR');
     expect(results.find((item) => item.fieldKey === 'campaignPeriod')?.normalizedValue).toEqual({
       startDate: '2026-08-01',
       endDate: '2026-08-31',
+    });
+  });
+
+  it('edits social platform and channel URL independently in one recognition field', () => {
+    const io = documentFixture('channel-edit', 'IO', [
+      'Platform: YouTube',
+      'Channel Name: LeaPlay FR',
+      'Handle: @LeaPlayFR',
+      'Channel Link: https://youtube.com/@LeaPlayFR',
+    ]);
+    const recognized = field([io], 'platformChannel');
+    const changedPlatform = editPlatformChannelRecognitionField(recognized, { platform: 'CHZZK' });
+    const changedLink = editPlatformChannelRecognitionField(changedPlatform, {
+      channelUrl: 'https://chzzk.naver.com/example',
+    });
+
+    expect(changedPlatform.normalizedValue).toEqual({
+      platform: 'CHZZK',
+      channelName: '',
+      handle: '',
+      channelUrl: 'https://youtube.com/@LeaPlayFR',
+    });
+    expect(changedLink.normalizedValue).toEqual({
+      platform: 'CHZZK',
+      channelName: '',
+      handle: '',
+      channelUrl: 'https://chzzk.naver.com/example',
+    });
+    expect(changedLink.rawValue).toBe('CHZZK · https://chzzk.naver.com/example');
+  });
+
+  it('keeps a channel-link-only recognition result visible and optional', () => {
+    const io = documentFixture('channel-link-only', 'IO', [
+      'Channel Link: https://twitch.tv/example',
+    ]);
+    const recognized = field([io], 'platformChannel');
+
+    expect(recognized.rawValue).toBe('https://twitch.tv/example');
+    expect(recognized.normalizedValue).toMatchObject({
+      platform: '',
+      channelUrl: 'https://twitch.tv/example',
     });
   });
 

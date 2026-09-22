@@ -303,11 +303,9 @@ export function ContractBuilderPage({
   const [contractType, setContractType] = useState<NonNullable<ContractGenerationModel['contractType']>>(draftModel?.contractType ?? existingDraft?.contractType ?? 'INDEPENDENT');
   const [contractNumber] = useState(() => existingDraft?.id ?? createPrototypeCode('CON'));
   const [contractName, setContractName] = useState(draftModel?.contractName ?? existingDraft?.name ?? '');
-  const [selectedAdvertiserEntityId, setSelectedAdvertiserEntityId] = useState<string>(() => (
-    draftModel
-      ? matchedDraftAdvertiserEntity?.id ?? historicalAdvertiserEntityValue
-      : defaultAdvertiserEntity.id
-  ));
+  const selectedAdvertiserEntityId = draftModel
+    ? matchedDraftAdvertiserEntity?.id ?? historicalAdvertiserEntityValue
+    : defaultAdvertiserEntity.id;
   const [projectName, setProjectName] = useState(draftModel?.projectName ?? initialProject?.name ?? '');
   const [effectiveDate, setEffectiveDate] = useState(draftModel?.effectiveDate ?? '');
   const [campaignStart] = useState('');
@@ -379,22 +377,6 @@ export function ContractBuilderPage({
   const systemAdvertiser = selectedAdvertiserEntityId === historicalAdvertiserEntityValue
     ? historicalAdvertiserSnapshot
     : selectedAdvertiserEntity ?? defaultAdvertiserEntity;
-  const advertiserOptions = [
-    ...(selectedAdvertiserEntityId === historicalAdvertiserEntityValue && historicalAdvertiserSnapshot ? [{
-      value: historicalAdvertiserEntityValue,
-      label: `${historicalAdvertiserSnapshot.name} · 历史快照`,
-      description: historicalAdvertiserSnapshot.address,
-      badges: [{ label: '历史', tone: 'neutral' as const }],
-    }] : []),
-    ...contractAdvertiserSettings.entities.map((entity) => ({
-      value: entity.id,
-      label: entity.name,
-      description: entity.address,
-      badges: entity.id === contractAdvertiserSettings.defaultEntityId
-        ? [{ label: '默认', tone: 'success' as const }]
-        : undefined,
-    })),
-  ];
   const selectedSocialAccount = resolveCreatorSocialAccount(
     selectedCreator,
     creatorSocialAccountId,
@@ -1022,31 +1004,7 @@ export function ContractBuilderPage({
                 />
                 <small>{errors.contractName || '用于合同列表、详情和后续签署文件匹配'}</small>
               </label>
-              {advertiserMode === 'SYSTEM' ? (
-                <div
-                  className={`invoice-form-control full-width ${errors.advertiser || errors.advertiserAddress ? 'has-error' : ''}`}
-                  data-contract-field="signature"
-                  onFocus={() => setActiveField('signature')}
-                >
-                  <span>Advertiser *</span>
-                  <SelectField
-                    ariaLabel="合同 Advertiser 主体"
-                    variant="form"
-                    menuStrategy="fixed"
-                    value={selectedAdvertiserEntityId}
-                    options={advertiserOptions}
-                    onChange={(value) => {
-                      setSelectedAdvertiserEntityId(value);
-                      setErrors((current) => {
-                        const { advertiser: _advertiser, advertiserAddress: _advertiserAddress, ...rest } = current;
-                        return rest;
-                      });
-                      resetOutput();
-                    }}
-                  />
-                  <small>{errors.advertiser || errors.advertiserAddress || systemAdvertiser?.address}</small>
-                </div>
-              ) : advertiserMode === 'MANUAL' ? (
+              {advertiserMode === 'MANUAL' ? (
                 <>
                   <label className={errors.advertiser ? 'has-error' : ''} data-contract-field="signature" {...fieldProps('signature')}>
                     <span>Advertiser *</span>
